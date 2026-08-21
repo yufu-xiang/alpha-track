@@ -1830,7 +1830,9 @@ git commit -m "feat: 寫入前驗證閘門,壞資料不覆蓋好資料"
   - `parse_twse_nav(payload: list[dict]) -> list[NavRecord]`
   - `parse_yahoo_chart(payload: dict, code: str) -> list[PriceRecord]`
   - `parse_finmind_dividends(payload: dict) -> list[DividendRecord]`
+  - `parse_twse_etf_list(payload: list[dict]) -> list[EtfProfile]`
   - `fetch_json(url: str, *, retries: int = 3) -> object`
+  - `parse_roc_compact(s)`、`parse_roc_slash(s)`、`parse_ad_dot(s)` — 三種日期格式
 
 > **依賴 Task 1 的產出。** 下列欄位名稱是**待替換的樣板**。
 > 開始實作前,先讀 `docs/data-sources.md`,把每個 adapter 的欄位映射
@@ -1848,6 +1850,8 @@ from pathlib import Path
 import pytest
 
 from alpha_track.sources.twse import parse_twse_daily, parse_twse_profiles
+from alpha_track.sources.base import parse_ad_dot, parse_roc_compact, parse_roc_slash
+from alpha_track.sources.twse import parse_twse_etf_list
 from alpha_track.sources.yahoo import parse_yahoo_chart
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -1899,6 +1903,72 @@ def test_parse_twse_profiles_skips_rows_without_a_name():
     payload = [{"Code": "0050", "Name": "", "ClosingPrice": "195.50"},
                {"Code": "0056", "Name": "元大高股息", "ClosingPrice": "40.40"}]
     assert [p.code for p in parse_twse_profiles(payload, exchange="TWSE")] == ["0056"]
+
+
+def test_roc_compact_date_converts_from_minguo():
+    """openapi(TWSE 與 TPEx)一律民國年無分隔:1150820 → 2026-08-20。"""
+    assert parse_roc_compact("1150820") == date(2026, 8, 20)
+
+
+def test_roc_slash_date_tolerates_leading_space():
+    """TWSE 舊站回傳如 ' 92/01/02',含前導空格。"""
+    assert parse_roc_slash(" 92/01/02") == date(2003, 1, 2)
+
+
+def test_ad_dot_date_is_western_year_not_minguo():
+    """TWSE 舊站 ETF 清單用西元年加句點,與其他 TWSE 端點都不同 ——
+    誤當成民國年會得到 3914 年,是最容易靜默出錯的一種。"""
+    assert parse_ad_dot("2003.06.30") == date(2003, 6, 30)
+
+
+def test_date_parsers_return_none_on_garbage():
+    assert parse_roc_compact("--") is None
+    assert parse_roc_slash("") is None
+    assert parse_ad_dot("N/A") is None
+
+
+def test_parse_twse_etf_list_extracts_real_listing_date():
+    """掛牌日必須取自官方清單,不可用「最早有資料的日期」當代理值 ——
+    Yahoo 的 0050 歷史自 2009 起,實際掛牌日是 2003-06-30。"""
+    payload = [{"證券代號": "0050", "證券簡稱": "元大台灣50",
+                "上市日期": "2003.06.30", "發行人": "元大投信",
+                "標的指數": "臺灣50指數"}]
+    profiles = parse_twse_etf_list(payload)
+    assert profiles[0].listing_date == date(2003, 6, 30)
+    assert profiles[0].issuer == "元大投信"
+
+
+def test_parse_yahoo_chart_rejects_non_daily_granularity():
+    """Yahoo 對長歷史標的會把 interval=1d 靜默降頻成月線(HTTP 200 不報錯)。
+    月線當日線存進資料庫,波動度、MDD、Beta 全部會錯得很像真的。"""
+    payload = {
+        "chart": {"result": [{
+            "meta": {"dataGranularity": "1mo"},
+            "timestamp": [1755734400],
+            "indicators": {
+                "quote": [{"open": [100.0], "high": [102.0], "low": [99.0],
+                           "close": [101.0], "volume": [1000]}],
+                "adjclose": [{"adjclose": [95.0]}],
+            },
+        }]}
+    }
+    with pytest.raises(ValueError, match="粒度"):
+        parse_yahoo_chart(payload, code="0050")
+
+
+def test_parse_yahoo_chart_accepts_daily_granularity():
+    payload = {
+        "chart": {"result": [{
+            "meta": {"dataGranularity": "1d"},
+            "timestamp": [1755734400],
+            "indicators": {
+                "quote": [{"open": [100.0], "high": [102.0], "low": [99.0],
+                           "close": [101.0], "volume": [1000]}],
+                "adjclose": [{"adjclose": [95.0]}],
+            },
+        }]}
+    }
+    assert len(parse_yahoo_chart(payload, code="0050")) == 1
 
 
 def test_parse_yahoo_chart_prefers_adjclose_over_close():
@@ -1967,10 +2037,14 @@ Expected: FAIL — `ModuleNotFoundError`
 """資料源共用工具。
 
 網路層與解析層刻意分離:解析為純函式,可用 fixture 測試而不連網。
+
+日期格式有三種且外觀相似(見 docs/data-sources.md),故集中處理:
+民國年無分隔、民國年斜線、西元年句點。各 adapter 不得自行改寫。
 """
 from __future__ import annotations
 
 import time
+from datetime import date
 
 import httpx
 
@@ -2004,6 +2078,43 @@ def fetch_json(url: str, *, retries: int = 3, timeout: float = 30.0) -> object:
     raise RuntimeError(f"取得 {url} 失敗,已重試 {retries} 次") from last_exc
 
 
+def parse_roc_compact(value: object) -> date | None:
+    """民國年無分隔:'1150820' → 2026-08-20。openapi(TWSE 與 TPEx)皆此格式。"""
+    text = str(value or "").strip()
+    if len(text) not in (6, 7) or not text.isdigit():
+        return None
+    try:
+        return date(int(text[:-4]) + 1911, int(text[-4:-2]), int(text[-2:]))
+    except ValueError:
+        return None
+
+
+def parse_roc_slash(value: object) -> date | None:
+    """民國年斜線分隔:' 92/01/02' → 2003-01-02。TWSE 舊站格式,可能有前導空格。"""
+    parts = str(value or "").strip().split("/")
+    if len(parts) != 3:
+        return None
+    try:
+        return date(int(parts[0]) + 1911, int(parts[1]), int(parts[2]))
+    except ValueError:
+        return None
+
+
+def parse_ad_dot(value: object) -> date | None:
+    """**西元年**句點分隔:'2003.06.30' → 2003-06-30。
+
+    TWSE 舊站 ETF 清單專用。注意它與其他 TWSE 端點不同,是西元年不是民國年 ——
+    誤當民國年會得到 3914 年,而且不會拋錯,是最容易靜默出錯的一種格式。
+    """
+    parts = str(value or "").strip().split(".")
+    if len(parts) != 3:
+        return None
+    try:
+        return date(int(parts[0]), int(parts[1]), int(parts[2]))
+    except ValueError:
+        return None
+
+
 def to_float(value: object) -> float | None:
     """把 API 回傳的字串數字轉為 float。無法轉換時回傳 None,不回傳 0。"""
     if value is None:
@@ -2030,7 +2141,7 @@ from __future__ import annotations
 from datetime import date
 
 from ..models import EtfProfile, NavRecord, PriceRecord
-from .base import to_float
+from .base import parse_ad_dot, to_float
 
 
 def parse_twse_daily(payload: list[dict], trade_date: date) -> list[PriceRecord]:
@@ -2069,8 +2180,37 @@ def parse_twse_profiles(payload: list[dict], exchange: str) -> list[EtfProfile]:
     return profiles
 
 
+def parse_twse_etf_list(payload: list[dict]) -> list[EtfProfile]:
+    """解析上市 ETF 靜態清單(掛牌日、發行人、追蹤指數)。
+
+    掛牌日必須取自這裡,不可用「最早有價格資料的日期」當代理值:
+    Yahoo 的 0050 歷史自 2009 起,實際掛牌日是 2003-06-30,兩者差 5 年半。
+    注意本端點的日期是**西元年**句點格式,與其他 TWSE 端點的民國年不同。
+    實際欄位名依 docs/data-sources.md。
+    """
+    profiles: list[EtfProfile] = []
+    for item in payload:
+        code = str(item.get("證券代號", "")).strip()
+        name = str(item.get("證券簡稱", "")).strip()
+        if not code or not name:
+            continue
+        profiles.append(EtfProfile(
+            code=code, name=name,
+            listing_date=parse_ad_dot(item.get("上市日期")),
+            exchange="TWSE",
+            issuer=str(item.get("發行人", "")).strip() or None,
+            tracking_index=str(item.get("標的指數", "")).strip() or None,
+        ))
+    return profiles
+
+
 def parse_twse_nav(payload: list[dict], trade_date: date) -> list[NavRecord]:
-    """解析 ETF 淨值。淨值或市價缺失的列略過 —— 折溢價算不出來就不寫。"""
+    """解析 ETF 淨值。淨值或市價缺失的列略過 —— 折溢價算不出來就不寫。
+
+    註:Task 1 的勘查未找到任何官方免費的集中式 ETF 淨值 API。
+    本函式與 navs 資料表保留備用,但階段 1 不會有資料寫入,
+    折溢價一律輸出 null(見 ledger R12)。找到來源後只需改這一個 adapter。
+    """
     rows: list[NavRecord] = []
     for item in payload:
         code = str(item.get("Code", "")).strip()
@@ -2107,6 +2247,11 @@ def parse_yahoo_chart(payload: dict, code: str) -> list[PriceRecord]:
 
     優先取 adjclose(還原權值價)。來源未提供時退回 close,
     此時報酬會是價格報酬而非含息報酬 —— 呼叫端須記錄此情況。
+
+    粒度檢查不可省略:Yahoo 對長歷史標的會把 interval=1d 靜默降頻為月線,
+    HTTP 200 且不報錯,只有 meta.dataGranularity 會變。月線被當成日線存入,
+    波動度、最大回撤、Beta 全部會錯,而且錯得非常像真的。
+    寧可拋例外中斷,也不要讓錯誤資料進資料庫。
     """
     chart = payload.get("chart") or {}
     results = chart.get("result")
@@ -2114,6 +2259,12 @@ def parse_yahoo_chart(payload: dict, code: str) -> list[PriceRecord]:
         return []
 
     result = results[0]
+    granularity = (result.get("meta") or {}).get("dataGranularity")
+    if granularity is not None and granularity != "1d":
+        raise ValueError(
+            f"{code} 的回應粒度為 {granularity},非日線。"
+            f"請改用 period1/period2 明確指定區間,不要用 range=max。"
+        )
     timestamps = result.get("timestamp") or []
     indicators = result.get("indicators") or {}
     quotes = (indicators.get("quote") or [{}])[0]
@@ -2188,7 +2339,7 @@ def parse_finmind_dividends(payload: dict) -> list[DividendRecord]:
 - [ ] **Step 7: 執行測試確認通過**
 
 Run: `cd pipeline && pytest tests/test_sources.py -v`
-Expected: 9 passed
+Expected: 16 passed
 
 - [ ] **Step 8: 以真實 fixture 補一輪測試**
 
@@ -2226,8 +2377,8 @@ git commit -m "feat: TWSE/Yahoo/FinMind adapter,解析與網路層分離"
 - Produces:
   - `EtfMetrics` dataclass:`code`、`returns: dict[str, float | None]`、
     `annualized: dict[str, float | None]`、`volatility`、`mdd`、`sharpe`、`beta`、
-    `premium_discount`
-  - `compute_etf_metrics(prices, base_date, risk_free, bench_closes, navs) -> EtfMetrics`
+    `premium_discount`、`data_start: date | None`
+  - `compute_etf_metrics(prices, base_date, risk_free, bench_closes, navs, listing_date) -> EtfMetrics`
     (`bench_closes: Mapping[date, float]` — 大盤指數收盤價,依日期對齊;空 dict 代表無基準資料)
 
 - [ ] **Step 1: 寫失敗測試**
@@ -2255,7 +2406,7 @@ def test_returns_none_for_periods_longer_than_history():
     prices = series(date(2026, 8, 1), [100.0] * 21)
     base = prices[-1].date
     m = compute_etf_metrics(prices, base, risk_free=0.015,
-                            bench_closes={}, navs=[])
+                            bench_closes={}, navs=[], listing_date=None)
     assert m.returns["Y10"] is None
     assert m.returns["Y1"] is None
     assert m.returns["INCEPTION"] == pytest.approx(0.0)
@@ -2265,7 +2416,7 @@ def test_computes_inception_return_over_full_history():
     prices = series(date(2026, 1, 1), [100.0] + [0.0] * 0 + [110.0])
     base = prices[-1].date
     m = compute_etf_metrics(prices, base, risk_free=0.015,
-                            bench_closes={}, navs=[])
+                            bench_closes={}, navs=[], listing_date=None)
     assert m.returns["INCEPTION"] == pytest.approx(0.10)
 
 
@@ -2273,7 +2424,7 @@ def test_d1_return_uses_previous_trading_day():
     prices = series(date(2026, 8, 1), [100.0, 100.0, 105.0])
     base = prices[-1].date
     m = compute_etf_metrics(prices, base, risk_free=0.015,
-                            bench_closes={}, navs=[])
+                            bench_closes={}, navs=[], listing_date=None)
     assert m.returns["D1"] == pytest.approx(0.05)
 
 
@@ -2283,7 +2434,7 @@ def test_annualized_only_populated_for_long_periods():
     prices = series(date(2022, 1, 1), values)
     base = prices[-1].date
     m = compute_etf_metrics(prices, base, risk_free=0.015,
-                            bench_closes={}, navs=[])
+                            bench_closes={}, navs=[], listing_date=None)
     assert m.annualized["M3"] is None
     assert m.annualized["Y1"] is None
     assert m.annualized["Y3"] is not None
@@ -2294,7 +2445,7 @@ def test_risk_metrics_none_when_sample_too_short():
     prices = series(date(2026, 8, 1), [100.0] * 20)
     base = prices[-1].date
     m = compute_etf_metrics(prices, base, risk_free=0.015,
-                            bench_closes={}, navs=[])
+                            bench_closes={}, navs=[], listing_date=None)
     assert m.volatility is None
     assert m.mdd is None
 
@@ -2303,7 +2454,7 @@ def test_constant_price_gives_zero_volatility_and_none_sharpe():
     prices = series(date(2025, 1, 1), [100.0] * 300)
     base = prices[-1].date
     m = compute_etf_metrics(prices, base, risk_free=0.015,
-                            bench_closes={}, navs=[])
+                            bench_closes={}, navs=[], listing_date=None)
     assert m.volatility == pytest.approx(0.0)
     assert m.sharpe is None, "波動為零時 Sharpe 無定義"
 
@@ -2314,15 +2465,42 @@ def test_premium_discount_taken_from_latest_nav():
     navs = [NavRecord(code="0056", date=base, nav=40.0,
                       market_price=40.4, fund_size=None)]
     m = compute_etf_metrics(prices, base, risk_free=0.015,
-                            bench_closes={}, navs=navs)
+                            bench_closes={}, navs=navs, listing_date=None)
     assert m.premium_discount == pytest.approx(0.01)
 
 
 def test_premium_discount_is_none_without_nav_data():
     prices = series(date(2026, 8, 1), [40.4] * 21, code="0056")
     m = compute_etf_metrics(prices, prices[-1].date, risk_free=0.015,
-                            bench_closes={}, navs=[])
+                            bench_closes={}, navs=[], listing_date=None)
     assert m.premium_discount is None
+
+
+def test_inception_is_null_when_history_does_not_reach_listing_date():
+    """Yahoo 的 0050 歷史自 2009 起,實際掛牌日 2003-06-30。
+    把 2009 起算的報酬標成「成立以來」是個安靜的錯誤數字。"""
+    prices = series(date(2009, 1, 2), [100.0 + i * 0.05 for i in range(300)])
+    m = compute_etf_metrics(prices, prices[-1].date, risk_free=0.015,
+                            bench_closes={}, navs=[],
+                            listing_date=date(2003, 6, 30))
+    assert m.returns["INCEPTION"] is None
+    assert m.data_start == date(2009, 1, 2)
+
+
+def test_inception_is_computed_when_history_reaches_listing_date():
+    prices = series(date(2023, 6, 9), [100.0 + i * 0.05 for i in range(300)])
+    m = compute_etf_metrics(prices, prices[-1].date, risk_free=0.015,
+                            bench_closes={}, navs=[],
+                            listing_date=date(2023, 6, 9))
+    assert m.returns["INCEPTION"] is not None
+
+
+def test_inception_is_computed_when_listing_date_is_unknown():
+    """掛牌日不明時不能因此放棄 INCEPTION —— 那會讓多數新 ETF 整欄空白。"""
+    prices = series(date(2023, 6, 9), [100.0] * 100)
+    m = compute_etf_metrics(prices, prices[-1].date, risk_free=0.015,
+                            bench_closes={}, navs=[], listing_date=None)
+    assert m.returns["INCEPTION"] == pytest.approx(0.0)
 
 
 def test_beta_computed_when_benchmark_aligns_on_the_same_dates():
@@ -2331,7 +2509,7 @@ def test_beta_computed_when_benchmark_aligns_on_the_same_dates():
     prices = series(date(2025, 1, 1), values)
     bench = {p.date: p.adj_close for p in prices}  # 與標的完全同步
     m = compute_etf_metrics(prices, prices[-1].date, risk_free=0.015,
-                            bench_closes=bench, navs=[])
+                            bench_closes=bench, navs=[], listing_date=None)
     assert m.beta == pytest.approx(1.0)
 
 
@@ -2339,7 +2517,7 @@ def test_beta_is_none_when_benchmark_data_absent():
     values = [100.0 + i * 0.1 for i in range(400)]
     prices = series(date(2025, 1, 1), values)
     m = compute_etf_metrics(prices, prices[-1].date, risk_free=0.015,
-                            bench_closes={}, navs=[])
+                            bench_closes={}, navs=[], listing_date=None)
     assert m.beta is None
 
 
@@ -2350,7 +2528,7 @@ def test_beta_ignores_benchmark_dates_the_etf_does_not_have():
     bench = {p.date: p.adj_close for p in prices}
     bench[date(2030, 1, 1)] = 999.0  # 標的沒有的日期
     m = compute_etf_metrics(prices, prices[-1].date, risk_free=0.015,
-                            bench_closes=bench, navs=[])
+                            bench_closes=bench, navs=[], listing_date=None)
     assert m.beta is not None
 
 
@@ -2358,13 +2536,13 @@ def test_all_none_when_no_price_dated_on_or_before_base_date():
     """守住 max() 對空序列拋 ValueError 的情況 —— 單一壞代號不得中斷整批匯出。"""
     prices = series(date(2026, 9, 1), [100.0] * 5)
     m = compute_etf_metrics(prices, date(2026, 8, 21), risk_free=0.015,
-                            bench_closes={}, navs=[])
+                            bench_closes={}, navs=[], listing_date=None)
     assert all(v is None for v in m.returns.values())
 
 
 def test_empty_price_history_yields_all_none():
     m = compute_etf_metrics([], date(2026, 8, 21), risk_free=0.015,
-                            bench_closes={}, navs=[])
+                            bench_closes={}, navs=[], listing_date=None)
     assert all(v is None for v in m.returns.values())
     assert m.volatility is None
 ```
@@ -2382,7 +2560,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 
 from .metrics.returns import cagr, total_return, years_between
 from .metrics.risk import (
@@ -2401,6 +2579,10 @@ MIN_DAYS_FOR_RISK = 60
 MIN_DAYS_FOR_SHARPE = 250
 """規格 §4.4:Sharpe 與 Beta 需至少一年樣本。"""
 
+INCEPTION_TOLERANCE_DAYS = 30
+"""最早資料日期與掛牌日相差在此天數內,才認可「成立以來」報酬。
+免費資料源的起始日常與掛牌日差幾個交易日,不必因此整欄作廢。"""
+
 
 @dataclass
 class EtfMetrics:
@@ -2412,6 +2594,8 @@ class EtfMetrics:
     sharpe: float | None = None
     beta: float | None = None
     premium_discount: float | None = None
+    data_start: date | None = None
+    """最早持有價格資料的日期。與掛牌日不同時,前端據此說明實際涵蓋範圍。"""
 
 
 def compute_etf_metrics(
@@ -2420,6 +2604,7 @@ def compute_etf_metrics(
     risk_free: float,
     bench_closes: Mapping[date, float],
     navs: Sequence[NavRecord],
+    listing_date: date | None,
 ) -> EtfMetrics:
     """計算單一 ETF 的所有指標。資料不足的項目一律為 None。
 
@@ -2445,8 +2630,19 @@ def compute_etf_metrics(
         # 不讓 max() 對空序列拋例外而中斷整批匯出。
         return m
     end = by_date[max(own_days)]
+    m.data_start = min(own_days)
+
+    # 歷史沒有回溯到掛牌日時,「成立以來」這個標籤就是錯的。
+    # Yahoo 的 0050 只到 2009,掛牌日是 2003-06-30 —— 用 2009 起算的數字
+    # 冒充成立以來報酬,是規格 §4.3 明令禁止的那種安靜錯誤。
+    inception_is_trustworthy = (
+        listing_date is None
+        or m.data_start <= listing_date + timedelta(days=INCEPTION_TOLERANCE_DAYS)
+    )
 
     for period in Period:
+        if period is Period.INCEPTION and not inception_is_trustworthy:
+            continue  # 已預設為 None
         start_day = period_start(base_date, period, own_days)
         if start_day is None or start_day not in by_date:
             m.returns[period.value] = None
@@ -2491,7 +2687,7 @@ def compute_etf_metrics(
 - [ ] **Step 4: 執行測試確認通過**
 
 Run: `cd pipeline && pytest tests/test_compute.py -v`
-Expected: 13 passed
+Expected: 16 passed
 
 - [ ] **Step 5: Commit**
 
@@ -2554,7 +2750,7 @@ def test_rankings_uses_exact_contract_field_names():
     etf = out["etfs"][0]
     assert set(etf.keys()) == {
         "code", "name", "category", "region", "is_leveraged", "is_inverse",
-        "close", "listing_date", "returns", "annualized", "risk",
+        "close", "listing_date", "data_start", "returns", "annualized", "risk",
         "premium_discount",
     }
     assert set(etf["risk"].keys()) == {"volatility", "mdd", "sharpe", "beta"}
@@ -2571,6 +2767,16 @@ def test_dates_serialize_as_iso_strings():
     out = build_rankings(date(2026, 8, 21), [(profile(), metrics(), 195.5)])
     assert out["data_date"] == "2026-08-21"
     assert out["etfs"][0]["listing_date"] == "2003-06-30"
+
+
+def test_data_start_reports_actual_coverage_separately_from_listing_date():
+    """0050 掛牌於 2003 但免費資料源只到 2009。兩個日期都要輸出,
+    前端才能誠實說明「這欄空白是因為資料只到 2009」。"""
+    m = metrics()
+    m.data_start = date(2009, 1, 2)
+    out = build_rankings(date(2026, 8, 21), [(profile(), m, 195.5)])
+    assert out["etfs"][0]["listing_date"] == "2003-06-30"
+    assert out["etfs"][0]["data_start"] == "2009-01-02"
 
 
 def test_missing_listing_date_serializes_as_null():
@@ -2659,6 +2865,9 @@ def build_rankings(
                 "is_inverse": p.is_inverse,
                 "close": close,
                 "listing_date": p.listing_date.isoformat() if p.listing_date else None,
+                # 實際持有資料的起點。與掛牌日不同時代表免費資料源涵蓋不足,
+                # 前端據此說明,而不是讓使用者以為那一欄本來就沒有數字。
+                "data_start": m.data_start.isoformat() if m.data_start else None,
                 "returns": m.returns,
                 "annualized": m.annualized,
                 "risk": {
@@ -2707,7 +2916,7 @@ def write_json(path: Path, data: object) -> None:
 - [ ] **Step 4: 執行測試確認通過**
 
 Run: `cd pipeline && pytest tests/test_export.py -v`
-Expected: 8 passed
+Expected: 9 passed
 
 - [ ] **Step 5: 記錄契約到文件**
 
@@ -2854,8 +3063,9 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import yaml
@@ -3182,7 +3392,7 @@ def test_backfill_fetches_history_only_for_codes_that_lack_it(tmp_path: Path):
 
     settings = Settings(risk_free_rate=0.015, output_dir=str(tmp_path / "out"),
                         db_path=str(db_path), stale_warning_days=3)
-    run_backfill(settings, fetch_history=fake_history)
+    run_backfill(settings, fetch_history=fake_history, fetch_benchmark=None)
 
     assert requested == ["0050"], "歷史已足夠的代號不該重抓"
     with Database(db_path) as db:
@@ -3208,7 +3418,7 @@ def test_backfill_survives_one_code_failing(tmp_path: Path):
 
     settings = Settings(risk_free_rate=0.015, output_dir=str(tmp_path / "out"),
                         db_path=str(db_path), stale_warning_days=3)
-    run_backfill(settings, fetch_history=flaky)
+    run_backfill(settings, fetch_history=flaky, fetch_benchmark=None)
 
     with Database(db_path) as db:
         assert len(db.get_prices("0056")) == 400, "另一檔仍應完成回補"
@@ -3276,10 +3486,43 @@ def fetch_yahoo_history(code: str) -> list[PriceRecord]:
     return []
 
 
+FetchBenchmark = Callable[[date, date], list[tuple[date, float]]]
+
+
+def fetch_taiex_tr_history(start: date, end: date) -> list[tuple[date, float]]:
+    """自 TWSE 舊站逐月取得加權報酬指數。
+
+    OpenAPI 版的報酬指數只有近期滾動視窗,無法回補歷史;舊站端點一次給一個月,
+    十年約需 120 次呼叫。間隔 ≥1 秒,一次補完之後即為增量。
+    端點與欄位依 docs/data-sources.md。
+    """
+    from .sources.base import fetch_json, parse_roc_slash, to_float
+
+    rows: list[tuple[date, float]] = []
+    cursor = date(start.year, start.month, 1)
+    while cursor <= end:
+        try:
+            payload = fetch_json(TAIEX_TR_MONTHLY_URL.format(
+                date=cursor.strftime("%Y%m%d")))
+            for item in (payload.get("data") or []):
+                d = parse_roc_slash(item[0])
+                close = to_float(item[1])
+                if d is not None and close is not None:
+                    rows.append((d, close))
+        except Exception as exc:
+            print(f"[warn] 報酬指數 {cursor:%Y-%m} 取得失敗:{exc}", file=sys.stderr)
+        time.sleep(1.0)
+        cursor = (cursor + timedelta(days=32)).replace(day=1)
+    return rows
+
+
 def run_backfill(
-    settings: Settings, *, fetch_history: FetchHistory = fetch_yahoo_history
+    settings: Settings,
+    *,
+    fetch_history: FetchHistory = fetch_yahoo_history,
+    fetch_benchmark: FetchBenchmark | None = fetch_taiex_tr_history,
 ) -> None:
-    """為缺歷史的代號回補完整還原股價。
+    """為缺歷史的代號回補完整還原股價,並補齊大盤報酬指數。
 
     每個代號獨立 try:單一代號失敗不得中斷整批(規格 §8.1)。
     """
@@ -3295,6 +3538,15 @@ def run_backfill(
             if rows:
                 db.upsert_prices(rows)
                 print(f"[info] {code} 回補 {len(rows)} 筆")
+
+        # 大盤報酬指數:Beta 與超額報酬的基準。缺了不影響其他指標。
+        if fetch_benchmark is not None and len(db.get_benchmark(BENCHMARK_NAME)) < 250:
+            try:
+                bench = fetch_benchmark(date.today() - timedelta(days=3660), date.today())
+                db.upsert_benchmark(BENCHMARK_NAME, bench)
+                print(f"[info] 報酬指數回補 {len(bench)} 筆")
+            except Exception as exc:
+                print(f"[warn] 報酬指數回補失敗:{exc}", file=sys.stderr)
 ```
 
 在 `run_update` 中,寫入當日資料之後、匯出之前插入自動回補:
@@ -3307,7 +3559,7 @@ def run_backfill(
 
     # 新掛牌或首次執行的代號只有一天資料,先回補再計算,
     # 否則所有多期間報酬都會是 null。
-    run_backfill(settings, fetch_history=fetch_history)
+    run_backfill(settings, fetch_history=fetch_history, fetch_benchmark=None)
 ```
 
 並把 `run_update` 的簽名改為:
@@ -3369,7 +3621,9 @@ Expected: 9 passed
 TWSE_DAILY_URL = "<自 data-sources.md 填入>"
 TWSE_NAV_URL = "<自 data-sources.md 填入>"
 FINMIND_DIVIDEND_URL = "<自 data-sources.md 填入>"
-YAHOO_CHART_URL = "<自 data-sources.md 填入,以 {symbol} 作為代號佔位符>"
+YAHOO_CHART_URL = "<自 data-sources.md 填入;必須用 period1/period2,不可用 range=max>"
+TWSE_ETF_LIST_URL = "<自 data-sources.md 填入 — 上市 ETF 靜態清單,含掛牌日>"
+TAIEX_TR_MONTHLY_URL = "<自 data-sources.md 填入,以 {date} 作為 YYYYMMDD 佔位符>"
 ```
 
 若某個來源在 Task 1 被判定為不可用,把對應那一組自 `fetch_all_sources`
