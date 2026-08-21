@@ -2341,10 +2341,12 @@ export function App() {
       />
 
       <footer>
+        {/* 組成單一字串:拆成多個 JSX 節點會讓 getByText 的正則比對不到,
+            而且螢幕閱讀器也會把它讀成斷開的片段。 */}
         <p>
-          報酬皆為含息總報酬 · 夏普值使用無風險利率{' '}
-          {formatPercent(result.meta.risk_free_rate).replace('+', '')} ·{' '}
-          「—」代表該期間資料不足
+          {`報酬皆為含息總報酬 · 夏普值使用無風險利率 ${
+            formatPercent(result.meta.risk_free_rate).replace('+', '')
+          } · 「—」代表該期間資料不足`}
         </p>
       </footer>
     </main>
