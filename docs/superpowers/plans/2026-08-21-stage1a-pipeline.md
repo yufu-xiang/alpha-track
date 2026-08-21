@@ -1629,7 +1629,7 @@ class Database:
 - [ ] **Step 4: 執行測試確認通過**
 
 Run: `cd pipeline && pytest tests/test_storage.py -v`
-Expected: 18 passed
+Expected: 17 passed
 
 - [ ] **Step 5: Commit**
 
