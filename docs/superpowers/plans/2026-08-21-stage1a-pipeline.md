@@ -1063,12 +1063,34 @@ def test_load_category_map_reads_yaml(tmp_path: Path):
     assert m["0050"]["category"] == "市值型"
 
 
-def test_load_category_map_coerces_keys_to_string(tmp_path: Path):
-    """YAML 會把 0050 解析成整數 50,必須還原為字串代號。"""
+def test_load_category_map_keeps_codes_as_written(tmp_path: Path):
+    """YAML 1.1 會對前導零的代號做八進位解析,且行為極不一致:
+        0050   → int 40      (八進位 0o50)
+        0056   → int 46      (八進位 0o56)
+        0058   → str '0058'  (含 8,不是合法八進位,反而保持字串)
+        006208 → str '006208'
+    同一份檔案三種行為,會讓分類表靜默錯亂到別的代號上。
+    解法是完全關閉型別解析(BaseLoader),讓代號逐字保留。
+    """
+    f = tmp_path / "cats.yaml"
+    f.write_text(
+        "0050:\n  category: 市值型\n"
+        "0056:\n  category: 高股息\n"
+        "0058:\n  category: 產業型\n"
+        "006208:\n  category: 市值型\n"
+        "00679B:\n  category: 債券型\n",
+        encoding="utf-8",
+    )
+    m = load_category_map(f)
+    assert set(m) == {"0050", "0056", "0058", "006208", "00679B"}
+    assert m["0050"]["category"] == "市值型"
+
+
+def test_load_category_map_never_produces_a_numeric_key(tmp_path: Path):
+    """守住回歸:任何一個鍵變成數字,就代表型別解析又被打開了。"""
     f = tmp_path / "cats.yaml"
     f.write_text("0050:\n  category: 市值型\n", encoding="utf-8")
-    m = load_category_map(f)
-    assert "0050" in m
+    assert all(isinstance(k, str) for k in load_category_map(f))
 
 
 def test_classification_is_a_dataclass_with_expected_fields():
@@ -1115,14 +1137,16 @@ class Classification:
 def load_category_map(path: Path) -> dict[str, dict]:
     """讀取人工分類表。
 
-    YAML 會把 0050 這種前導零數字解析成整數,必須還原成四到六位數字串。
+    使用 BaseLoader 而非 safe_load:YAML 1.1 會對前導零的代號做八進位解析,
+    而且行為不一致 —— 0050 變成 int 40、0056 變成 int 46,但 0058 因為含 8
+    不是合法八進位字元反而保持字串。用 safe_load 再回頭補零救不回來
+    (40 補成 "0040" 是別檔 ETF),整份分類表會靜默錯亂。
+
+    BaseLoader 完全關閉型別解析,所有純量一律是字串,代號逐字保留。
+    本檔的值也全是字串,不需要型別解析。
     """
-    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    result: dict[str, dict] = {}
-    for key, value in raw.items():
-        code = str(key) if isinstance(key, str) else f"{int(key):04d}"
-        result[code] = value or {}
-    return result
+    raw = yaml.load(path.read_text(encoding="utf-8"), Loader=yaml.BaseLoader) or {}
+    return {str(key): (value or {}) for key, value in raw.items()}
 
 
 def classify(code: str, category_map: dict[str, dict]) -> Classification:
@@ -1173,7 +1197,7 @@ def classify(code: str, category_map: dict[str, dict]) -> Classification:
 - [ ] **Step 5: 執行測試確認通過**
 
 Run: `cd pipeline && pytest tests/test_categories.py -v`
-Expected: 9 passed
+Expected: 10 passed
 
 - [ ] **Step 6: Commit**
 
