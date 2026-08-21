@@ -2,7 +2,9 @@
 
 > 本文件記錄實際呼叫結果,是 pipeline adapter 的欄位映射依據。
 > 最後驗證日期:2026-08-21
-> 產生方式:`python scripts/survey_sources.py`(部分端點另以獨立指令驗證,見各節說明),
+> 產生方式:`python scripts/survey_sources.py`(所有 `CANDIDATES` 內的端點皆可由此腳本重跑覆核;
+> 唯一例外是 TWSE MIS 的 ETF 淨值揭露頁面,該項以瀏覽器載入頁面並追蹤 Network 請求驗證,
+> 不是 httpx 呼叫、也不在 `CANDIDATES` 中,已在「不可用端點」表內明確標註),
 > 原始回應存於 `pipeline/tests/fixtures/*.json`。
 
 ## 可用端點
@@ -89,7 +91,8 @@
   | Change | str | `"+0.38"` | **有正負號**(與 TWSE STOCK_DAY_ALL 不同,TWSE 正值無符號、TPEx 正值有 `+`) |
   | TradingShares | str | `"24166000"` | 無千分位逗號 |
   | TransactionAmount / TransactionNumber | str | 見上 | |
-  | LatestBidPrice / LatesAskPrice | str | `"26.36"` | 注意 `LatesAskPrice` 少一個 t,是官方原始拼字,非筆誤 |
+  | LatestBidPrice | str | `"26.36"` | 最後買價(00679B 樣本) |
+  | LatesAskPrice | str | `"26.37"` | 最後賣價;注意 `LatesAskPrice` 少一個 t,是官方原始拼字,非筆誤 |
   | Capitals | str | `"6251692000"` | 發行股數 |
   | NextLimitUp / NextLimitDown | str | `"9999.95"` / `"0.01"` | |
 - 注意事項:同樣是**當日快照**,無日期參數,無法回補歷史。
@@ -136,7 +139,7 @@
 - 方法: GET,**免費層可用,無需 token**
 - 回應結構: `dict`,`{"msg":"success","status":200,"data":[...]}`,`data` 為 `list[dict]`
 - Fixture: `pipeline/tests/fixtures/finmind_dividend.json`
-- 欄位(節錄):`date`(str,西元 `"2015-11-01"`)、`stock_id`、`year`(str,民國年如 `"104"`)、`CashEarningsDistribution`(float,現金股利)、`CashExDividendTradingDate`(str,除息交易日)、`CashDividendPaymentDate`(str,發放日)等約 19 個欄位,數值型欄位皆為 **float(非字串)**。
+- 欄位(節錄):`date`(str,西元 `"2015-11-01"`)、`stock_id`、`year`(str,民國年如 `"104"`)、`CashEarningsDistribution`(float,現金股利)、`CashExDividendTradingDate`(str,除息交易日)、`CashDividendPaymentDate`(str,發放日)等,實測 fixture 單筆記錄共 22 個欄位,數值型欄位皆為 **float(非字串)**。
 - 注意事項:回應層級 `status`/`msg` 與 HTTP status 分離,需同時檢查兩者。
 
 ### FinMind — 原始收盤價(TaiwanStockPrice)— 免費層可回溯至上市日
@@ -158,9 +161,9 @@
 
 | 端點 | 失敗原因 / 排除理由 | 驗證日期 |
 |---|---|---|
-| ETF 每日淨值與折溢價(遍尋 TWSE openapi、TPEx openapi) | 兩份 swagger 索引(143 / 225 條路徑)逐條檢查,**沒有任何路徑同時具備「ETF」與「淨值」語意**;TPEx `tpex_opfund_latest`(開放式基金當日行情)雖有 `PreNAV`/`EstimatedNAV` 欄位,但實測只回傳 3 筆「上櫃受益憑證」(如 `T1001Y` 富邦FB),屬於興櫃受益憑證,非一般 ETF,且 `EstimatedNAV` 欄位曾實測回傳一個 URL 字串而非數字,資料品質不可靠,判定不適用 | 2026-08-21 |
-| ETF 淨值揭露頁面(TWSE MIS)`mis.twse.com.tw/stock/various-areas/etf-price/indicator-disclosure-etf`、`.../value-disclosure-etf` | 以瀏覽器實際載入頁面並追蹤 Network 請求,兩頁背後實際呼叫的是同一份即時報價快照 `mis.twse.com.tw/stock/data/all_etf.txt`(依發行人分組,`refURL` 指向各投信自家的「預估淨值」頁面,如 `https://www.jkoam.com/etf/predict`);此為**盤中即時報價**,非官方 EOD 淨值封存資料,且沒有統一欄位格式(淨值揭露實際委由各投信自行網站呈現) | 2026-08-21 |
-| `https://www.sitca.org.tw/ROC/Industry/IN2328.aspx`(投信投顧公會,猜測路徑) | HTTP 200 但回傳「網頁不存在」的自訂 404 頁面;僅為初步嘗試,**未進一步找出投信投顧公會正確的 ETF 淨值查詢路徑**,列為待確認項而非確認不可得 | 2026-08-21 |
+| ETF 每日淨值與折溢價(遍尋 TWSE openapi、TPEx openapi) | 兩份 swagger 索引(143 / 225 條路徑)逐條檢查,**沒有任何路徑同時具備「ETF」與「淨值」語意**;TPEx `tpex_opfund_latest`(開放式基金當日行情)雖有 `PreNAV`/`EstimatedNAV` 欄位,但實測只回傳 3 筆「上櫃受益憑證」(如 `T1001Y` 富邦FB),屬於興櫃受益憑證,非一般 ETF,且 `EstimatedNAV` 欄位實測回傳一個 URL 字串(`https://www.fubon.com/asset-management/Home/EmergingStockAdvert`)而非數字,資料品質不可靠,判定不適用。已加入 `scripts/survey_sources.py` 的 `CANDIDATES`(名稱 `tpex_opfund_latest`),原始回應存於 `pipeline/tests/fixtures/tpex_opfund_latest.json`,可重跑覆核 | 2026-08-21 |
+| ETF 淨值揭露頁面(TWSE MIS)`mis.twse.com.tw/stock/various-areas/etf-price/indicator-disclosure-etf`、`.../value-disclosure-etf` | 以瀏覽器實際載入頁面並追蹤 Network 請求,兩頁背後實際呼叫的是同一份即時報價快照 `mis.twse.com.tw/stock/data/all_etf.txt`(依發行人分組,`refURL` 指向各投信自家的「預估淨值」頁面,如 `https://www.jkoam.com/etf/predict`);此為**盤中即時報價**,非官方 EOD 淨值封存資料,且沒有統一欄位格式(淨值揭露實際委由各投信自行網站呈現)。**此列以瀏覽器 Network 追蹤驗證,非 httpx 呼叫,不在 `CANDIDATES` 清單中,也沒有 fixture 檔**——只能靠重新用瀏覽器載入頁面重現,已在此明確標註 | 2026-08-21 |
+| `https://www.sitca.org.tw/ROC/Industry/IN2328.aspx`(投信投顧公會,猜測路徑) | HTTP 200 但回傳「網頁不存在」的自訂 404 頁面;僅為初步嘗試,**未進一步找出投信投顧公會正確的 ETF 淨值查詢路徑**,列為待確認項而非確認不可得。已加入 `CANDIDATES`(名稱 `sitca_in2328_probe`),原始 HTML 回應存於 `pipeline/tests/fixtures/sitca_in2328_probe.json`(內容其實是 HTML,非 JSON;`probe()` 對非 200 以外的 JSON parse 失敗會在存檔後才拋例外,所以檔案仍完整保留原始 bytes) | 2026-08-21 |
 | TPEx 報酬指數逐月歷史查詢端點 | 未找到 TWSE `rwd/zh/TAIEX/MFI94U` 對應的 TPEx 舊站別名;僅測試了 TPEx openapi 版本(`tpex_reward_index`,只有 14 天滾動),**未窮盡搜尋**,列為待確認項 | 2026-08-21 |
 | `twse_etf_report`(`ETFReport/ETFRank`) | 端點本身可用(HTTP 200,20 筆),但內容是「定期定額交易戶數統計排行月報表」(ETF 與其成分股的定期定額開戶數排行),與收盤價/淨值/報酬指數皆無關,判定對本專案四類需求皆不適用 | 2026-08-21 |
 

@@ -29,6 +29,13 @@ CANDIDATES = [
         "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes",
     ),
     ("tpex_reward_index", "https://www.tpex.org.tw/openapi/v1/tpex_reward_index"),
+    # 排除項:曾在 TPEx swagger 索引看到有 PreNAV/EstimatedNAV 欄位、疑似可作為 ETF
+    # 淨值來源的端點,實測後為「上櫃受益憑證」(如富邦FB),非一般 ETF,且資料品質不可靠
+    # (EstimatedNAV 曾回傳 URL 字串而非數字)。保留在 CANDIDATES 供他人重現此排除理由。
+    ("tpex_opfund_latest", "https://www.tpex.org.tw/openapi/v1/tpex_opfund_latest"),
+    # 排除項:嘗試尋找投信投顧公會(SITCA)ETF 淨值查詢頁面的猜測路徑,回應是自訂
+    # 404 頁(HTTP 200,text/html)。保留在 CANDIDATES 供他人重現/接續搜尋正確路徑。
+    ("sitca_in2328_probe", "https://www.sitca.org.tw/ROC/Industry/IN2328.aspx"),
     # --- 額外發現:TWSE 靜態 ETF 清單(非 openapi,rwd 舊站,經瀏覽器 Network 追蹤而非猜測)---
     ("twse_etf_list", "https://www.twse.com.tw/rwd/zh/ETF/list"),
     # --- TWSE 舊站「報酬指數」歷史查詢端點:接受 date 參數,一次回傳「當月」資料。
