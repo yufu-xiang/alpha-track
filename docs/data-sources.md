@@ -97,6 +97,17 @@
   | Capitals | str | `"6251692000"` | 發行股數 |
   | NextLimitUp / NextLimitDown | str | `"9999.95"` / `"0.01"` | |
 - 注意事項:
+  - **TLS 陷阱(2026-08-23 實測)——`www.tpex.org.tw` 的憑證鏈不符 RFC 5280。**
+    該站憑證缺少 Subject Key Identifier 擴充。Python 3.13+ / OpenSSL 3.5+ 的
+    `ssl.create_default_context()` 預設開啟 `VERIFY_X509_STRICT`,會直接以
+    `certificate verify failed: Missing Subject Key Identifier` 拒絕連線 ——
+    **與 UA、限流、header 都無關**,換三種 User-Agent 結果相同。
+    TWSE、Yahoo、FinMind 均無此問題。
+    處置:`sources/base.py` 的 `ssl_context_for()` 只對這一個網域清掉
+    `VERIFY_X509_STRICT`,**憑證鏈與主機名照常驗證**(`check_hostname=True`、
+    `verify_mode=CERT_REQUIRED`)。放寬的是憑證「格式」要求,不是「真偽」驗證。
+    網域清單逐一列舉、不做萬用比對;要放行新網域是改那份清單,不是改成
+    `verify=False`。
   - 同樣是**當日快照**,無日期參數,無法回補歷史。
   - **無成交的列**以 `Close="----"`(四個連字號)、`Change="---"`(三個)表示,實測 1011 筆中有 21 筆(如 `2035` 唐榮、`2064` 晉椿)。adapter 必須略過而非寫入零價。
   - 實測本端點的 1011 筆中,代號以 `00` 開頭者共 **117 筆**,即上櫃 ETF;同日 TWSE `STOCK_DAY_ALL` 為 233 筆。兩者相加 350 檔,**少接上櫃這一路等於漏掉三分之一的標的**,且漏掉的幾乎全是債券型(規格 §3.2 的「結尾 B」分類)。

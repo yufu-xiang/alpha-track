@@ -7,12 +7,37 @@
 """
 from __future__ import annotations
 
+import ssl
 import time
 from datetime import date
+from urllib.parse import urlsplit
 
+import certifi
 import httpx
 
 USER_AGENT = "alpha-track/0.1 (personal ETF tracker)"
+
+RFC5280_NONCONFORMING_HOSTS = frozenset({"www.tpex.org.tw"})
+"""憑證鏈不符 RFC 5280 格式要求、需要放寬 VERIFY_X509_STRICT 的網域。
+
+實測 2026-08-23:`www.tpex.org.tw` 的憑證鏈缺少 Subject Key Identifier 擴充。
+Python 3.13+ / OpenSSL 3.5+ 的預設 context 開啟 VERIFY_X509_STRICT,會以
+`certificate verify failed: Missing Subject Key Identifier` 直接拒絕連線 ——
+於是 117 檔上櫃 ETF 在新版執行環境完全抓不到。
+
+**放寬的是憑證「格式」要求,不是「真偽」驗證。** 憑證鏈與主機名一律照驗
+(check_hostname=True、verify_mode=CERT_REQUIRED),被關掉的只是 RFC 5280
+對 CA 憑證的一項欄位規定。這條界線不要再往下讓 —— 需要的是修這份清單,
+不是改成 verify=False。清單保持逐一列舉,不做萬用比對。
+"""
+
+
+def ssl_context_for(url: str) -> ssl.SSLContext:
+    """依網域決定 TLS 設定。預設最嚴,只對清單內的網域放寬格式檢查。"""
+    context = ssl.create_default_context(cafile=certifi.where())
+    if urlsplit(url).hostname in RFC5280_NONCONFORMING_HOSTS:
+        context.verify_flags &= ~ssl.VERIFY_X509_STRICT
+    return context
 
 
 def fetch_json(url: str, *, retries: int = 3, timeout: float = 30.0) -> object:
@@ -27,7 +52,8 @@ def fetch_json(url: str, *, retries: int = 3, timeout: float = 30.0) -> object:
         try:
             resp = httpx.get(url, timeout=timeout,
                              headers={"User-Agent": USER_AGENT},
-                             follow_redirects=True)
+                             follow_redirects=True,
+                             verify=ssl_context_for(url))
             if resp.status_code == 429:
                 time.sleep(delay * 4)
                 delay *= 2

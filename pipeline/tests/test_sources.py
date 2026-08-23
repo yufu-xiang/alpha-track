@@ -1,4 +1,5 @@
 import json
+import ssl
 from datetime import date
 from pathlib import Path
 
@@ -6,6 +7,7 @@ import pytest
 
 from alpha_track.sources.base import (
     parse_ad_dot,
+    ssl_context_for,
     parse_roc_compact,
     parse_roc_slash,
     to_float,
@@ -499,3 +501,31 @@ def test_parse_real_twse_etf_list_has_no_html_in_any_code():
     by_code = {p.code: p for p in profiles}
     assert "00625K" in by_code, "雙幣別的第二個代號必須也在"
     assert "006205" in by_code
+
+
+# --- TLS ------------------------------------------------------------------
+
+
+def test_tpex_gets_a_context_without_rfc5280_strict_checking():
+    """www.tpex.org.tw 的憑證鏈缺少 RFC 5280 要求的 Subject Key Identifier,
+    Python 3.13+/OpenSSL 3.5+ 的預設 context 開了 VERIFY_X509_STRICT 會拒絕連線。
+    不處理的話 117 檔上櫃 ETF 在新版執行環境完全抓不到。"""
+    ctx = ssl_context_for("https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes")
+    assert not (ctx.verify_flags & ssl.VERIFY_X509_STRICT)
+
+
+def test_relaxing_strict_does_not_disable_certificate_verification():
+    """放寬的只是憑證『格式』要求,不是『真偽』驗證 ——
+    憑證鏈與主機名一律照驗,這條界線不可以被後人一路放寬成 verify=False。"""
+    ctx = ssl_context_for("https://www.tpex.org.tw/openapi/v1/x")
+    assert ctx.check_hostname is True
+    assert ctx.verify_mode == ssl.CERT_REQUIRED
+
+
+def test_other_hosts_keep_the_strict_default():
+    """只有確認有問題的網域降規格,其餘維持最嚴設定。"""
+    for url in ("https://openapi.twse.com.tw/v1/x",
+                "https://query1.finance.yahoo.com/v8/x",
+                "https://api.finmindtrade.com/api/v4/data"):
+        ctx = ssl_context_for(url)
+        assert ctx.verify_flags & ssl.VERIFY_X509_STRICT, url
