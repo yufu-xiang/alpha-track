@@ -381,13 +381,10 @@ def test_parse_real_tpex_profiles_fixture():
 def test_parse_real_yahoo_daily_fixture():
     rows = parse_yahoo_chart(load("yahoo_0050_full_daily_period1_period2.json"),
                              code="0050")
-    assert len(rows) > 4000, "實測 4322 筆逐日資料"
-    assert rows[0].date == date(2009, 1, 2), "Yahoo 的 0050 歷史自 2009 起"
+    assert len(rows) > 3000
     assert rows[0].adj_close < rows[0].close, "舊日期的還原價應低於原始收盤價"
     assert all(r.close > 0 for r in rows)
-    assert len(rows) < len(
-        load("yahoo_0050_full_daily_period1_period2.json")
-        ["chart"]["result"][0]["timestamp"]), "停牌日的 null 應被略過"
+    assert rows[-1].date == date(2026, 8, 21)
 
 
 def test_parse_real_yahoo_downgraded_fixture_is_rejected():
@@ -418,3 +415,56 @@ def test_parse_real_finmind_paid_tier_rejection_is_not_silently_empty():
     當成「這檔沒配過息」會讓還原價的交叉驗證靜默失效。"""
     with pytest.raises(ValueError):
         parse_finmind_dividends(load("finmind_price_adj_free_tier_check.json"))
+
+
+# --- 未調整的分割 ----------------------------------------------------------
+
+
+def test_parse_yahoo_chart_drops_history_before_an_unadjusted_split():
+    """台股單日漲跌幅上限 10%(槓桿型 20%)。四分之一的跳空不是行情,
+    是來源沒有回溯調整的分割 —— 而 payload 的 events 裡沒有 splits 可供偵測。"""
+    payload = {
+        "chart": {"result": [{
+            "meta": {"dataGranularity": "1d"},
+            "timestamp": [1230858000 + 86400 * i for i in range(6)],
+            "indicators": {
+                "quote": [{"open": [100.0] * 3 + [25.0] * 3,
+                           "high": [100.0] * 3 + [25.0] * 3,
+                           "low": [100.0] * 3 + [25.0] * 3,
+                           "close": [100.0] * 3 + [25.0] * 3,
+                           "volume": [1000] * 3 + [4000] * 3}],
+            },
+        }]}
+    }
+    rows = parse_yahoo_chart(payload, code="0050")
+    assert len(rows) == 3, "只保留分割後那一段"
+    assert all(r.close == 25.0 for r in rows)
+
+
+def test_parse_yahoo_chart_keeps_history_across_a_legitimate_large_move():
+    """20% 是槓桿型 ETF 的單日上限,是合法行情,不可誤判為分割而丟掉歷史。"""
+    payload = {
+        "chart": {"result": [{
+            "meta": {"dataGranularity": "1d"},
+            "timestamp": [1230858000 + 86400 * i for i in range(4)],
+            "indicators": {
+                "quote": [{"open": [100.0, 100.0, 80.0, 80.0],
+                           "high": [100.0, 100.0, 80.0, 80.0],
+                           "low": [100.0, 100.0, 80.0, 80.0],
+                           "close": [100.0, 100.0, 80.0, 80.0],
+                           "volume": [1000] * 4}],
+            },
+        }]}
+    }
+    assert len(parse_yahoo_chart(payload, code="00631L")) == 4
+
+
+def test_parse_real_yahoo_fixture_drops_the_unadjusted_2014_split():
+    """0050 於 2014-01-02 執行 1:4 分割(價格比 0.2494、成交股數 ×4.96、
+    成交金額連續),Yahoo 未回溯調整,adjclose 兩側的 close/adj 比值同為
+    1.5785,證明只含配息調整。跨越該日算出的 MDD 是 -77%,是假的。"""
+    rows = parse_yahoo_chart(load("yahoo_0050_full_daily_period1_period2.json"),
+                             code="0050")
+    assert rows[0].date == date(2014, 1, 2), "起點應落在分割後"
+    moves = [b.adj_close / a.adj_close - 1.0 for a, b in zip(rows, rows[1:])]
+    assert max(abs(m) for m in moves) < 0.35, "保留的區段不得再有尺度斷裂"
