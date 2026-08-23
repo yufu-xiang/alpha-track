@@ -190,9 +190,21 @@ describe('契約型別', () => {
   it('fixture 的每一列都具備契約規定的全部欄位', () => {
     const row: EtfRow = fixtureRankings.etfs[0]!
     expect(Object.keys(row).sort()).toEqual([
-      'annualized', 'category', 'close', 'code', 'is_inverse', 'is_leveraged',
-      'listing_date', 'name', 'premium_discount', 'region', 'returns', 'risk',
+      'annualized', 'category', 'close', 'code', 'data_start', 'is_inverse',
+      'is_leveraged', 'listing_date', 'name', 'premium_discount', 'region',
+      'returns', 'risk',
     ])
+  })
+
+  it('data_start 與 listing_date 是兩件事,不可混用', () => {
+    // 0050 掛牌於 2003,但免費資料源實際只回溯到 2014(見 1a 的 ledger R24:
+    // Yahoo 的 2014-01-02 有一次未調整的 1:4 分割,之前的區段被捨棄)。
+    // 「成立以來」因此是 null —— UI 必須用 data_start 說明這欄為何空白,
+    // 否則使用者只會看到一個沒有理由的破折號。
+    const old = fixtureRankings.etfs.find((e) => e.code === '0050')!
+    expect(old.listing_date).toBe('2003-06-30')
+    expect(old.data_start).toBe('2014-01-02')
+    expect(old.returns.INCEPTION).toBeNull()
   })
 
   it('fixture 以 null 表示資料不足,而非 0', () => {
@@ -270,6 +282,12 @@ export interface EtfRow {
   is_inverse: boolean
   close: number
   listing_date: string | null
+  /**
+   * 實際持有價格資料的起點。與 listing_date 不同時,代表免費資料源涵蓋不足
+   * (Yahoo 的歷史深度、或未調整分割導致舊區段被捨棄)。
+   * 「成立以來」為 null 時,UI 用這個日期說明原因,而不是留一個沒有理由的破折號。
+   */
+  data_start: string | null
   returns: Record<PeriodCode, number | null>
   annualized: Record<PeriodCode, number | null>
   risk: RiskMetrics
@@ -302,7 +320,8 @@ export interface MetaData {
 ```ts
 /**
  * 測試與開發用資料。刻意涵蓋各種邊界:
- * 老牌 ETF(十年資料齊全)、新掛牌(長期為 null)、槓桿、反向、未分類。
+ * 老牌 ETF(十年資料齊全)、新掛牌(長期為 null)、槓桿、反向、未分類,
+ * 以及 data_start 晚於 listing_date 而使「成立以來」為 null 的情況(0050)。
  */
 import type { MetaData, PeriodCode, RankingsData } from '../types'
 
@@ -321,13 +340,15 @@ export const fixtureRankings: RankingsData = {
       code: '0050', name: '元大台灣50', category: '市值型', region: '台灣',
       is_leveraged: false, is_inverse: false, close: 195.5,
       listing_date: '2003-06-30',
+      data_start: '2014-01-02',
       returns: periods({
         D1: 0.0052, W1: 0.0131, M1: 0.0287, M3: 0.0654, M6: 0.1102,
         YTD: 0.1455, Y1: 0.1834, Y3: 0.4512, Y5: 0.9821, Y10: 2.4103,
-        INCEPTION: 6.8210,
+        // INCEPTION 為 null:資料只回溯到 data_start(2014),
+        // 標成「成立以來」會是個安靜的錯誤數字。
       }),
       annualized: periods({
-        Y3: 0.1321, Y5: 0.1468, Y10: 0.1312, INCEPTION: 0.0921,
+        Y3: 0.1321, Y5: 0.1468, Y10: 0.1312,
       }),
       risk: { volatility: 0.1833, mdd: -0.3421, sharpe: 0.9187, beta: 1.0210 },
       premium_discount: 0.0012,
@@ -336,6 +357,7 @@ export const fixtureRankings: RankingsData = {
       code: '0056', name: '元大高股息', category: '高股息', region: '台灣',
       is_leveraged: false, is_inverse: false, close: 40.4,
       listing_date: '2007-12-26',
+      data_start: '2009-01-05',
       returns: periods({
         D1: -0.0021, W1: 0.0064, M1: 0.0155, M3: 0.0312, M6: 0.0688,
         YTD: 0.0921, Y1: 0.1245, Y3: 0.3102, Y5: 0.6544, Y10: 1.4021,
@@ -351,6 +373,7 @@ export const fixtureRankings: RankingsData = {
       code: '00929', name: '復華台灣科技優息', category: '高股息', region: '台灣',
       is_leveraged: false, is_inverse: false, close: 18.9,
       listing_date: '2023-06-09',
+      data_start: '2023-06-09',
       returns: periods({
         D1: 0.0106, W1: 0.0201, M1: 0.0402, M3: 0.0811, M6: 0.1233,
         YTD: 0.1544, Y1: 0.2011, Y3: 0.3877, INCEPTION: 0.4102,
@@ -363,6 +386,7 @@ export const fixtureRankings: RankingsData = {
       code: '00679B', name: '元大美債20年', category: '債券型', region: null,
       is_leveraged: false, is_inverse: false, close: 29.8,
       listing_date: '2017-01-11',
+      data_start: '2017-01-11',
       returns: periods({
         D1: 0.0034, W1: -0.0088, M1: -0.0121, M3: 0.0044, M6: -0.0233,
         YTD: -0.0155, Y1: 0.0322, Y3: -0.1544, Y5: -0.2811,
@@ -376,6 +400,7 @@ export const fixtureRankings: RankingsData = {
       code: '00631L', name: '元大台灣50正2', category: '槓桿型', region: null,
       is_leveraged: true, is_inverse: false, close: 210.5,
       listing_date: '2014-10-31',
+      data_start: '2014-10-31',
       returns: periods({
         D1: 0.0103, W1: 0.0266, M1: 0.0577, M3: 0.1322, M6: 0.2255,
         YTD: 0.2988, Y1: 0.3822, Y3: 0.9877, Y5: 2.4011, Y10: 8.1044,
@@ -391,6 +416,7 @@ export const fixtureRankings: RankingsData = {
       code: '00632R', name: '元大台灣50反1', category: '反向型', region: null,
       is_leveraged: false, is_inverse: true, close: 4.12,
       listing_date: '2014-10-31',
+      data_start: '2014-10-31',
       returns: periods({
         D1: -0.0051, W1: -0.0129, M1: -0.0281, M3: -0.0644, M6: -0.1088,
         YTD: -0.1422, Y1: -0.1811, Y3: -0.4022, Y5: -0.6544, Y10: -0.8211,
@@ -406,6 +432,7 @@ export const fixtureRankings: RankingsData = {
       code: '00999', name: '未知新標的', category: '未分類', region: null,
       is_leveraged: false, is_inverse: false, close: 15.02,
       listing_date: '2026-07-15',
+      data_start: '2026-07-15',
       returns: periods({ D1: 0.0013, W1: 0.0044, M1: 0.0102, INCEPTION: 0.0013 }),
       annualized: periods({ INCEPTION: null }),
       risk: { volatility: null, mdd: null, sharpe: null, beta: null },
