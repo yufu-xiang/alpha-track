@@ -1841,6 +1841,7 @@ git commit -m "feat: 寫入前驗證閘門,壞資料不覆蓋好資料"
 - Create: `pipeline/src/alpha_track/sources/__init__.py`
 - Create: `pipeline/src/alpha_track/sources/base.py`
 - Create: `pipeline/src/alpha_track/sources/twse.py`
+- Create: `pipeline/src/alpha_track/sources/tpex.py`
 - Create: `pipeline/src/alpha_track/sources/yahoo.py`
 - Create: `pipeline/src/alpha_track/sources/finmind.py`
 - Test: `pipeline/tests/test_sources.py`
@@ -1849,18 +1850,36 @@ git commit -m "feat: 寫入前驗證閘門,壞資料不覆蓋好資料"
 - Consumes: `PriceRecord`、`NavRecord`、`DividendRecord`、`EtfProfile` (Task 2);
   `docs/data-sources.md` (Task 1)
 - Produces:
-  - `parse_twse_daily(payload: list[dict]) -> list[PriceRecord]`
+  - `parse_twse_daily(payload: list[dict], trade_date: date) -> list[PriceRecord]`
   - `parse_twse_profiles(payload: list[dict], exchange: str) -> list[EtfProfile]`
-  - `parse_twse_nav(payload: list[dict]) -> list[NavRecord]`
+  - `parse_twse_nav(payload: list[dict], trade_date: date) -> list[NavRecord]`
+  - `parse_twse_etf_list(payload: dict) -> list[EtfProfile]` — 吃 `{fields, data}` 二維結構
+  - `parse_twse_total_return_legacy(payload: dict) -> list[tuple[date, float]]`
+  - `parse_tpex_daily(payload: list[dict], trade_date: date) -> list[PriceRecord]`
+  - `parse_tpex_profiles(payload: list[dict]) -> list[EtfProfile]`
   - `parse_yahoo_chart(payload: dict, code: str) -> list[PriceRecord]`
   - `parse_finmind_dividends(payload: dict) -> list[DividendRecord]`
-  - `parse_twse_etf_list(payload: list[dict]) -> list[EtfProfile]`
   - `fetch_json(url: str, *, retries: int = 3) -> object`
   - `parse_roc_compact(s)`、`parse_roc_slash(s)`、`parse_ad_dot(s)` — 三種日期格式
 
-> **依賴 Task 1 的產出。** 下列欄位名稱是**待替換的樣板**。
+> **依賴 Task 1 的產出。** 下列欄位名稱原為**待替換的樣板**。
 > 開始實作前,先讀 `docs/data-sources.md`,把每個 adapter 的欄位映射
 > 換成實測記錄的真實欄位名。測試 fixture 使用 Task 1 存下的真實回應。
+
+> **本節已依 Task 1 的 fixture 逐項核對並修正(ledger R19–R23)。** 五處落差:
+> 1. **R19** — 交易日改取自 payload 該列自己的 `Date`(民國年無分隔),
+>    傳入的 `trade_date` 只是缺欄位時的退路。兩個端點都是「最新交易日快照」
+>    且無日期參數,Task 12 傳的是 `date.today()`,週末或延遲出檔時會把前一
+>    交易日的價格標上今天,憑空造出交易日並污染期間起點。
+> 2. **R20** — 新增 `sources/tpex.py`。規格 §3.1 明列上櫃來源、§3.2 有債券型
+>    分類,而原 Task 9 完全沒有 TPEx adapter,117 檔上櫃 ETF 會整批缺席。
+> 3. **R21** — `parse_twse_etf_list` 的真實回應是 `{stat, fields, data}`,
+>    `data` 為二維字串陣列,**不是** `list[dict]` 中文鍵。樣板寫法對真實回應
+>    永遠取不到值,掛牌日會靜默全數落回代理值。
+> 4. **R22** — 新增 `parse_twse_total_return_legacy`,讀 `data` 前先檢查
+>    `stat == "OK"`。超出範圍時是 HTTP 200 + `stat` 帶錯誤訊息且無 `data`。
+> 5. **R23** — `to_float` 把整串連字號視為缺值。TPEx 無成交用 `'----'`
+>    (四個),`Change` 用 `'---'`,樣板的字面清單沒涵蓋。
 
 - [ ] **Step 1: 寫失敗測試**
 
@@ -1873,9 +1892,14 @@ from pathlib import Path
 
 import pytest
 
-from alpha_track.sources.twse import parse_twse_daily, parse_twse_profiles
 from alpha_track.sources.base import parse_ad_dot, parse_roc_compact, parse_roc_slash
-from alpha_track.sources.twse import parse_twse_etf_list
+from alpha_track.sources.tpex import parse_tpex_daily, parse_tpex_profiles
+from alpha_track.sources.twse import (
+    parse_twse_daily,
+    parse_twse_etf_list,
+    parse_twse_profiles,
+    parse_twse_total_return_legacy,
+)
 from alpha_track.sources.yahoo import parse_yahoo_chart
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -1953,13 +1977,99 @@ def test_date_parsers_return_none_on_garbage():
 
 def test_parse_twse_etf_list_extracts_real_listing_date():
     """掛牌日必須取自官方清單,不可用「最早有資料的日期」當代理值 ——
-    Yahoo 的 0050 歷史自 2009 起,實際掛牌日是 2003-06-30。"""
-    payload = [{"證券代號": "0050", "證券簡稱": "元大台灣50",
-                "上市日期": "2003.06.30", "發行人": "元大投信",
-                "標的指數": "臺灣50指數"}]
+    Yahoo 的 0050 歷史自 2009 起,實際掛牌日是 2003-06-30。
+
+    回應是 fields + 二維 data,不是 list[dict](R21)。"""
+    payload = {
+        "stat": "OK",
+        "fields": ["上市日期", "證券代號", "證券簡稱", "發行人", "標的指數"],
+        "data": [["2003.06.30", "0050", "元大台灣50", "元大投信", "臺灣50指數"]],
+    }
     profiles = parse_twse_etf_list(payload)
     assert profiles[0].listing_date == date(2003, 6, 30)
     assert profiles[0].issuer == "元大投信"
+
+
+def test_parse_twse_etf_list_maps_by_field_name_not_position():
+    """欄位順序若變動,依名稱對位仍正確;依位置取值則會靜默錯亂。"""
+    payload = {
+        "stat": "OK",
+        "fields": ["證券代號", "上市日期", "證券簡稱", "發行人", "標的指數"],
+        "data": [["0050", "2003.06.30", "元大台灣50", "元大投信", "臺灣50指數"]],
+    }
+    profiles = parse_twse_etf_list(payload)
+    assert profiles[0].code == "0050"
+    assert profiles[0].listing_date == date(2003, 6, 30)
+
+
+def test_parse_twse_etf_list_on_list_payload_returns_empty():
+    """樣板曾假設 list[dict];真收到那種形狀時回空,不可拋例外。"""
+    assert parse_twse_etf_list([{"證券代號": "0050"}]) == []
+
+
+def test_parse_twse_total_return_legacy_strips_thousands_separator():
+    """舊站含千分位逗號,openapi 版沒有 —— 混用時最容易漏掉這個轉換。"""
+    payload = {
+        "stat": "OK",
+        "fields": ["日\u3000期", "發行量加權股價報酬指數"],
+        "data": [[" 92/01/02", "4,524.92"], ["92/01/03", "4,600.00"]],
+    }
+    rows = parse_twse_total_return_legacy(payload)
+    assert rows == [(date(2003, 1, 2), 4524.92), (date(2003, 1, 3), 4600.0)]
+
+
+def test_parse_twse_total_return_legacy_rejects_error_response():
+    """超出範圍是 HTTP 200 + stat 帶錯誤訊息且無 data ——
+    不檢查 stat 就會把失敗當成「這個月沒有資料」,回補靜默補成空的。"""
+    payload = {"stat": "查詢日期小於92年1月，請重新查詢!", "total": 0}
+    with pytest.raises(ValueError, match="查詢日期"):
+        parse_twse_total_return_legacy(payload)
+
+
+def test_parse_tpex_daily_uses_tpex_field_names():
+    """上櫃的代號與名稱欄名與上市完全不同,照抄 TWSE 的欄名會全數解析不到。"""
+    payload = [{"Date": "1150820", "SecuritiesCompanyCode": "00679B",
+                "CompanyName": "元大美債20年", "Close": "26.36", "Open": "26.24",
+                "High": "26.38", "Low": "26.24", "TradingShares": "24166000"}]
+    rows = parse_tpex_daily(payload, trade_date=date(2026, 8, 21))
+    assert rows[0].code == "00679B"
+    assert rows[0].close == 26.36
+    assert rows[0].volume == 24166000
+
+
+def test_parse_tpex_daily_skips_the_four_dash_no_trade_marker():
+    """上櫃無成交是 '----'(四個連字號),不是 TWSE 文件假設的 '--'。"""
+    payload = [{"Date": "1150820", "SecuritiesCompanyCode": "2035",
+                "CompanyName": "唐榮", "Close": "----", "Open": "----",
+                "High": "----", "Low": "----", "TradingShares": "0"}]
+    assert parse_tpex_daily(payload, trade_date=date(2026, 8, 21)) == []
+
+
+def test_parse_tpex_profiles_marks_exchange_as_tpex():
+    """上市/上櫃決定 Yahoo 後綴(.TW / .TWO),標錯會讓回補整檔 404。"""
+    payload = [{"SecuritiesCompanyCode": "00679B", "CompanyName": "元大美債20年",
+                "Close": "26.36"}]
+    profiles = parse_tpex_profiles(payload)
+    assert profiles[0].exchange == "TPEX"
+
+
+def test_parse_daily_prefers_the_date_in_the_payload():
+    """端點是「最新交易日快照」且無日期參數。週末執行時 date.today() 會把
+    前一交易日的價格標上今天,憑空造出一個交易日(R19)。"""
+    payload = [{"Date": "1150820", "Code": "0050", "Name": "元大台灣50",
+                "OpeningPrice": "194.00", "HighestPrice": "196.00",
+                "LowestPrice": "193.50", "ClosingPrice": "195.50",
+                "TradeVolume": "1000"}]
+    rows = parse_twse_daily(payload, trade_date=date(2026, 8, 23))
+    assert rows[0].date == date(2026, 8, 20), "應採用 payload 的 1150820"
+
+
+def test_parse_daily_falls_back_to_trade_date_when_payload_has_none():
+    payload = [{"Code": "0050", "Name": "元大台灣50", "OpeningPrice": "194.00",
+                "HighestPrice": "196.00", "LowestPrice": "193.50",
+                "ClosingPrice": "195.50", "TradeVolume": "1000"}]
+    rows = parse_twse_daily(payload, trade_date=date(2026, 8, 21))
+    assert rows[0].date == date(2026, 8, 21)
 
 
 def test_parse_yahoo_chart_rejects_non_daily_granularity():
@@ -2140,13 +2250,17 @@ def parse_ad_dot(value: object) -> date | None:
 
 
 def to_float(value: object) -> float | None:
-    """把 API 回傳的字串數字轉為 float。無法轉換時回傳 None,不回傳 0。"""
+    """把 API 回傳的字串數字轉為 float。無法轉換時回傳 None,不回傳 0。
+
+    「無成交」的標記形式因端點而異且沒有文件:TPEx 實測用 `'----'`(四個連字號),
+    `Change` 欄用 `'---'`(三個)。與其逐一列舉,一律把「整串都是連字號」視為缺值。
+    """
     if value is None:
         return None
     if isinstance(value, (int, float)):
         return float(value)
     text = str(value).strip().replace(",", "")
-    if text in ("", "--", "-", "N/A", "null"):
+    if text in ("", "N/A", "null") or set(text) == {"-"}:
         return None
     try:
         return float(text)
@@ -2165,23 +2279,29 @@ from __future__ import annotations
 from datetime import date
 
 from ..models import EtfProfile, NavRecord, PriceRecord
-from .base import parse_ad_dot, to_float
+from .base import parse_ad_dot, parse_roc_compact, parse_roc_slash, to_float
 
 
 def parse_twse_daily(payload: list[dict], trade_date: date) -> list[PriceRecord]:
-    """解析每日收盤行情。無成交或欄位缺失的列一律略過。"""
+    """解析每日收盤行情。無成交或欄位缺失的列一律略過。
+
+    日期取自每一列自己的 `Date`(民國年無分隔),`trade_date` 僅為缺欄位時的退路:
+    本端點是「最新交易日快照」且不吃日期參數,呼叫端傳的是 `date.today()`,
+    週末、假日或交易所延遲出檔時會把前一交易日的價格標上今天(R19)。
+    """
     rows: list[PriceRecord] = []
     for item in payload:
         code = str(item.get("Code", "")).strip()
         close = to_float(item.get("ClosingPrice"))
         if not code or close is None or close <= 0:
             continue
+        row_date = parse_roc_compact(item.get("Date")) or trade_date
         open_ = to_float(item.get("OpeningPrice")) or close
         high = to_float(item.get("HighestPrice")) or close
         low = to_float(item.get("LowestPrice")) or close
         volume = to_float(item.get("TradeVolume")) or 0.0
         rows.append(PriceRecord(
-            code=code, date=trade_date, open=open_, high=high, low=low,
+            code=code, date=row_date, open=open_, high=high, low=low,
             close=close, volume=int(volume), adj_close=close,
         ))
     return rows
@@ -2191,7 +2311,8 @@ def parse_twse_profiles(payload: list[dict], exchange: str) -> list[EtfProfile]:
     """自每日行情擷取代號與名稱。
 
     TWSE 的每日行情已含 Name 欄位,不取用的話排行榜的「名稱」欄只能顯示代號。
-    掛牌日 TWSE 每日行情不提供,留 None,由呼叫端以最早有資料的日期作為代理值。
+    掛牌日本端點不提供,留 None —— 由 `parse_twse_etf_list` 補上真實掛牌日(R14),
+    不要用「最早有資料的日期」當代理值。
     """
     profiles: list[EtfProfile] = []
     for item in payload:
@@ -2204,28 +2325,68 @@ def parse_twse_profiles(payload: list[dict], exchange: str) -> list[EtfProfile]:
     return profiles
 
 
-def parse_twse_etf_list(payload: list[dict]) -> list[EtfProfile]:
+def _rows_by_field(payload: object) -> list[dict[str, str]]:
+    """把舊站的 `{fields: [...], data: [[...]]}` 轉成依欄名索引的 dict。
+
+    依**名稱**對位而非位置:欄位順序變動時位置取值會靜默錯亂,
+    而名稱取不到值會乾淨地變成空字串,由呼叫端的必填檢查擋下。
+    """
+    if not isinstance(payload, dict):
+        return []
+    fields = [str(f).strip() for f in (payload.get("fields") or [])]
+    return [dict(zip(fields, [str(c) for c in row]))
+            for row in (payload.get("data") or [])]
+
+
+def parse_twse_etf_list(payload: dict) -> list[EtfProfile]:
     """解析上市 ETF 靜態清單(掛牌日、發行人、追蹤指數)。
 
     掛牌日必須取自這裡,不可用「最早有價格資料的日期」當代理值:
     Yahoo 的 0050 歷史自 2009 起,實際掛牌日是 2003-06-30,兩者差 5 年半。
     注意本端點的日期是**西元年**句點格式,與其他 TWSE 端點的民國年不同。
-    實際欄位名依 docs/data-sources.md。
+
+    回應是 `{stat, fields, data}`,`data` 為二維字串陣列 —— 不是 list[dict](R21)。
     """
     profiles: list[EtfProfile] = []
-    for item in payload:
-        code = str(item.get("證券代號", "")).strip()
-        name = str(item.get("證券簡稱", "")).strip()
+    for item in _rows_by_field(payload):
+        code = item.get("證券代號", "").strip()
+        name = item.get("證券簡稱", "").strip()
         if not code or not name:
             continue
         profiles.append(EtfProfile(
             code=code, name=name,
             listing_date=parse_ad_dot(item.get("上市日期")),
             exchange="TWSE",
-            issuer=str(item.get("發行人", "")).strip() or None,
-            tracking_index=str(item.get("標的指數", "")).strip() or None,
+            issuer=item.get("發行人", "").strip() or None,
+            tracking_index=item.get("標的指數", "").strip() or None,
         ))
     return profiles
+
+
+def parse_twse_total_return_legacy(payload: dict) -> list[tuple[date, float]]:
+    """解析舊站逐月加權報酬指數(Beta 與超額報酬的基準,ledger R15)。
+
+    先檢查 `stat`:超出範圍時回應是 HTTP 200 加
+    `{"stat": "查詢日期小於92年1月，請重新查詢!", "total": 0}`,既無 data 也無 fields。
+    不擋下來的話,回補會把「查詢失敗」當成「這個月沒有交易日」,
+    十年基準靜默補成空的,Beta 全數為 null 而沒有任何錯誤訊息。
+
+    日期是民國年斜線格式且可能有前導空格;指數值**含千分位逗號**,
+    與 openapi 版不同(見 docs/data-sources.md 第 7 點)。
+    """
+    stat = str((payload or {}).get("stat", "")).strip()
+    if stat != "OK":
+        raise ValueError(f"TWSE 舊站報酬指數查詢未成功:{stat or '回應缺少 stat'}")
+
+    rows: list[tuple[date, float]] = []
+    for item in _rows_by_field(payload):
+        raw_date = next((v for k, v in item.items() if k.replace("\u3000", "") == "日期"), None)
+        raw_value = next((v for k, v in item.items() if "報酬指數" in k), None)
+        parsed = parse_roc_slash(raw_date)
+        value = to_float(raw_value)
+        if parsed is not None and value is not None:
+            rows.append((parsed, value))
+    return rows
 
 
 def parse_twse_nav(payload: list[dict], trade_date: date) -> list[NavRecord]:
@@ -2246,6 +2407,71 @@ def parse_twse_nav(payload: list[dict], trade_date: date) -> list[NavRecord]:
                               market_price=market,
                               fund_size=to_float(item.get("FundSize"))))
     return rows
+```
+
+- [ ] **Step 4b: 實作 tpex.py**(R20)
+
+上櫃端點的欄位名與上市**完全不同**,不是加個前綴而已:代號是
+`SecuritiesCompanyCode`、名稱是 `CompanyName`、價格是 `Close`/`Open`/`High`/`Low`、
+成交股數是 `TradingShares`。照抄 TWSE 的欄名會靜默解析出零筆。
+
+```python
+"""TPEx OpenAPI adapter(上櫃 ETF)。端點與欄位名依 docs/data-sources.md。
+
+規格 §3.1 把上櫃列為獨立來源是有原因的:債券型 ETF(代號結尾 B,如 00679B)
+幾乎全在上櫃,TWSE 的端點查不到。實測單日 1011 檔上櫃證券中含 117 檔 ETF。
+
+用 `tpex_mainboard_quotes` 而非 `tpex_mainboard_daily_close_quotes`:
+兩者的 ETF 代碼集合相同,但後者含大量債券代碼,體積大 10 倍(4.15MB / 10634 筆)。
+"""
+from __future__ import annotations
+
+from datetime import date
+
+from ..models import EtfProfile, PriceRecord
+from .base import parse_roc_compact, to_float
+
+EXCHANGE = "TPEX"
+
+
+def parse_tpex_daily(payload: list[dict], trade_date: date) -> list[PriceRecord]:
+    """解析上櫃收盤行情。無成交的列以 `'----'` 表示,一律略過而非寫入零價。
+
+    日期取自該列自己的 `Date`,理由同 `parse_twse_daily`(R19)。
+    """
+    rows: list[PriceRecord] = []
+    for item in payload:
+        code = str(item.get("SecuritiesCompanyCode", "")).strip()
+        close = to_float(item.get("Close"))
+        if not code or close is None or close <= 0:
+            continue
+        row_date = parse_roc_compact(item.get("Date")) or trade_date
+        volume = to_float(item.get("TradingShares")) or 0.0
+        rows.append(PriceRecord(
+            code=code, date=row_date,
+            open=to_float(item.get("Open")) or close,
+            high=to_float(item.get("High")) or close,
+            low=to_float(item.get("Low")) or close,
+            close=close, volume=int(volume), adj_close=close,
+        ))
+    return rows
+
+
+def parse_tpex_profiles(payload: list[dict]) -> list[EtfProfile]:
+    """自上櫃行情擷取代號與名稱。
+
+    `exchange` 標為 TPEX 不只是分類欄位 —— 回補時決定 Yahoo 用 `.TWO` 還是 `.TW`
+    後綴,標錯會讓整檔回補乾淨地 404(見 docs/data-sources.md 第 8 點)。
+    """
+    profiles: list[EtfProfile] = []
+    for item in payload:
+        code = str(item.get("SecuritiesCompanyCode", "")).strip()
+        name = str(item.get("CompanyName", "")).strip()
+        if not code or not name:
+            continue
+        profiles.append(EtfProfile(code=code, name=name,
+                                   listing_date=None, exchange=EXCHANGE))
+    return profiles
 ```
 
 - [ ] **Step 5: 實作 yahoo.py**
@@ -2363,12 +2589,16 @@ def parse_finmind_dividends(payload: dict) -> list[DividendRecord]:
 - [ ] **Step 7: 執行測試確認通過**
 
 Run: `cd pipeline && pytest tests/test_sources.py -v`
-Expected: 16 passed
+Expected: 26 passed(原 16 個,加上 R19–R23 帶進來的 10 個)
 
 - [ ] **Step 8: 以真實 fixture 補一輪測試**
 
-用 Task 1 存下的 `tests/fixtures/*.json` 各寫一個測試,
-確認解析函式吃得下真實回應且回傳非空:
+用 Task 1 存下的 `tests/fixtures/*.json` 各寫一個測試。手寫的樣板 payload
+只證明程式能解析我以為的形狀;吃真 fixture 才證明它能解析交易所真正回傳的形狀 ——
+R21 那個錯誤(假設 list[dict])在樣板測試下是全綠的。
+
+每個真實來源至少一個:TWSE 每日行情、TWSE ETF 清單、TWSE 舊站報酬指數
+(成功與超出範圍兩種)、TPEx 行情、Yahoo 逐日與被降頻的月線、FinMind 配息。
 
 ```python
 def test_parse_real_twse_fixture():
@@ -2376,7 +2606,13 @@ def test_parse_real_twse_fixture():
     rows = parse_twse_daily(payload, trade_date=date(2026, 8, 21))
     assert len(rows) > 100, "真實回應應包含大量標的"
     assert all(r.close > 0 for r in rows)
+    assert {r.date for r in rows} == {date(2026, 8, 20)}, "日期應來自 payload"
 ```
+
+**降頻那一項要用真 fixture 測。** `yahoo_0050_range_max_interval_1d.json`
+是實際被降頻的回應(`dataGranularity="1mo"`,213 筆),
+`yahoo_0050_full_daily_period1_period2.json` 是正確的逐日回應(4322 筆)——
+兩者都存在,粒度檢查是否真的擋得住可以直接驗,不必靠手寫 payload 想像。
 
 Run: `cd pipeline && pytest tests/test_sources.py -v`
 Expected: 全數通過
@@ -2384,8 +2620,9 @@ Expected: 全數通過
 - [ ] **Step 9: Commit**
 
 ```bash
-git add pipeline/src/alpha_track/sources/ pipeline/tests/test_sources.py
-git commit -m "feat: TWSE/Yahoo/FinMind adapter,解析與網路層分離"
+git add pipeline/src/alpha_track/sources/ pipeline/tests/test_sources.py \
+        docs/data-sources.md docs/superpowers/plans/2026-08-21-stage1a-pipeline.md
+git commit -m "feat: TWSE/TPEx/Yahoo/FinMind adapter,解析與網路層分離"
 ```
 
 ---
@@ -2969,6 +3206,18 @@ git commit -m "feat: JSON 匯出與前後端契約文件"
 - Produces: `python -m alpha_track.cli update|export|backfill` 指令;
   `web/public/data/` 下的 JSON 檔
 
+> **本節在 Task 9 完成後需一併修正(ledger R19–R23),下列程式碼尚未反映:**
+> - `fetch_all_sources` 要加上 TPEx 那一組(`parse_tpex_daily`/`parse_tpex_profiles`),
+>   否則 117 檔上櫃 ETF 全部缺席、債券型分類永遠是空的(R20)。
+> - `fetch_all_sources` 要抓 `TWSE_ETF_LIST_URL` 並以 `parse_twse_etf_list` 取得
+>   真實掛牌日;`run_export` 中「以最早有資料的日期作為代理值」那段要移除(R14/R21)。
+> - `fetch_taiex_tr_history` 改呼叫 `parse_twse_total_return_legacy`,
+>   不要自行 `item[0]`/`item[1]` 取值 —— 那條路徑沒有測試,而超出範圍是
+>   HTTP 200 帶 `stat` 錯誤訊息,漏檢查會把回補靜默補成空的(R22)。
+> - `fetch_yahoo_history` 應依 `etfs.exchange` 決定 `.TW` / `.TWO`,
+>   而不是兩個後綴都盲試 —— 盲試會讓每一檔上櫃 ETF 都先吃一次 404。
+> - `parse_twse_daily` 現在自 payload 取日期,`today` 只是退路(R19)。
+>
 > **回補是必要的,不是選配。** TWSE 每日行情一次只給當天一筆。
 > 若不向 Yahoo 取歷史,資料庫永遠只有一天的資料,所有多期間報酬都會是
 > null,排行榜會是一整片「—」。`backfill` 指令與 `update` 中的自動回補
