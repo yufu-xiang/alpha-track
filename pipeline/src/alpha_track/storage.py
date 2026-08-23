@@ -144,13 +144,22 @@ class Database:
                                  is_leveraged, is_inverse)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(code) DO UPDATE SET
-                 name=excluded.name, listing_date=excluded.listing_date,
-                 exchange=excluded.exchange, category=excluded.category,
-                 region=excluded.region, issuer=excluded.issuer,
-                 tracking_index=excluded.tracking_index,
-                 expense_ratio=excluded.expense_ratio,
+                 name=excluded.name,
+                 exchange=excluded.exchange,
                  is_leveraged=excluded.is_leveraged,
-                 is_inverse=excluded.is_inverse""",
+                 is_inverse=excluded.is_inverse,
+                 -- 以下欄位由不同來源分別供應:每日行情給名稱但不給掛牌日,
+                 -- ETF 靜態清單反之。無條件覆寫會讓後寫入的那一份把對方的
+                 -- 欄位抹成 NULL —— 而且是從第二天起才發生,第一天完全正常。
+                 -- COALESCE 讓「這個來源不知道」不等於「把它清掉」。
+                 listing_date=COALESCE(excluded.listing_date, etfs.listing_date),
+                 category=COALESCE(excluded.category, etfs.category),
+                 region=COALESCE(excluded.region, etfs.region),
+                 issuer=COALESCE(excluded.issuer, etfs.issuer),
+                 tracking_index=COALESCE(excluded.tracking_index,
+                                         etfs.tracking_index),
+                 expense_ratio=COALESCE(excluded.expense_ratio,
+                                        etfs.expense_ratio)""",
             rows,
         )
         self.conn.commit()

@@ -135,3 +135,39 @@ def test_benchmark_roundtrip_is_idempotent(db):
 
 def test_get_benchmark_returns_empty_map_when_absent(db):
     assert db.get_benchmark("TAIEX_TR") == {}
+
+
+def test_partial_profile_does_not_erase_fields_it_does_not_know(tmp_path):
+    """TWSE 每日行情供應名稱但不供應掛牌日;ETF 靜態清單反之。
+    後寫入的那一份若無條件覆寫,真實掛牌日會被抹成 NULL,
+    而且是從第二天起才發生 —— 第一天看起來完全正常。"""
+    with Database(tmp_path / "t.db") as db:
+        db.init_schema()
+        # 先寫入靜態清單:有掛牌日、發行人、追蹤指數
+        db.upsert_profiles([EtfProfile(
+            code="0050", name="元大台灣50", listing_date=date(2003, 6, 30),
+            exchange="TWSE", issuer="元大投信", tracking_index="臺灣50指數")])
+        # 再寫入每日行情:只有名稱,其餘為 None
+        db.upsert_profiles([EtfProfile(
+            code="0050", name="元大台灣50", listing_date=None, exchange="TWSE")])
+
+        stored = db.get_profiles()["0050"]
+        assert stored.listing_date == date(2003, 6, 30), "掛牌日不得被抹掉"
+        assert stored.issuer == "元大投信"
+        assert stored.tracking_index == "臺灣50指數"
+
+
+def test_profile_update_still_overwrites_with_a_real_new_value(tmp_path):
+    """保護 None 不代表凍結欄位 —— 有實際新值時仍應更新。"""
+    with Database(tmp_path / "t.db") as db:
+        db.init_schema()
+        db.upsert_profiles([EtfProfile(code="0050", name="舊名稱",
+                                       listing_date=date(2003, 6, 30),
+                                       exchange="TWSE", issuer="舊發行人")])
+        db.upsert_profiles([EtfProfile(code="0050", name="元大台灣50",
+                                       listing_date=date(2003, 7, 1),
+                                       exchange="TWSE", issuer="元大投信")])
+        stored = db.get_profiles()["0050"]
+        assert stored.name == "元大台灣50"
+        assert stored.listing_date == date(2003, 7, 1)
+        assert stored.issuer == "元大投信"
