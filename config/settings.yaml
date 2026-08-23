@@ -1,0 +1,12 @@
+# 無風險利率,用於 Sharpe 計算(規格 §4.5a)
+# 前端會在 Sharpe 欄位旁顯示此數值,使結果可被檢驗
+risk_free_rate: 0.015
+
+# 匯出目標目錄(相對於專案根目錄)
+output_dir: web/public/data
+
+# 資料庫位置
+db_path: data/alpha_track.db
+
+# 超過此天數未更新,前端顯示顯著警告(規格 §8.2)
+stale_warning_days: 3

@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import re
 from datetime import date
 
 from ..models import EtfProfile, NavRecord, PriceRecord
@@ -82,18 +83,34 @@ def parse_twse_etf_list(payload: dict) -> list[EtfProfile]:
     """
     profiles: list[EtfProfile] = []
     for item in _rows_by_field(payload):
-        code = item.get("證券代號", "").strip()
-        name = item.get("證券簡稱", "").strip()
-        if not code or not name:
-            continue
-        profiles.append(EtfProfile(
-            code=code, name=name,
-            listing_date=parse_ad_dot(item.get("上市日期")),
-            exchange="TWSE",
-            issuer=item.get("發行人", "").strip() or None,
-            tracking_index=item.get("標的指數", "").strip() or None,
-        ))
+        listing_date = parse_ad_dot(item.get("上市日期"))
+        issuer = item.get("發行人", "").strip() or None
+        tracking_index = item.get("標的指數", "").strip() or None
+        codes = _split_dual_currency(item.get("證券代號", ""))
+        names = _split_dual_currency(item.get("證券簡稱", ""))
+        for i, code in enumerate(codes):
+            name = names[i] if i < len(names) else ""
+            if not code or not name:
+                continue
+            profiles.append(EtfProfile(
+                code=code, name=name, listing_date=listing_date,
+                exchange="TWSE", issuer=issuer, tracking_index=tracking_index,
+            ))
     return profiles
+
+
+def _split_dual_currency(cell: str) -> list[str]:
+    """拆開雙幣別 ETF 的儲存格,並去掉標註幣別的括號。
+
+    官方清單把雙幣別 ETF 的兩個代號塞在**同一格**,以 HTML 換行連接:
+    `'006205(新臺幣)<br>00625K(人民幣)'`、
+    `'富邦上証(新臺幣)<br>富邦上証+R(人民幣)'`。實測 232 列中有 7 列如此。
+
+    不拆的話這 14 個代號的掛牌日全部取不到(它們在行情裡是獨立的兩檔),
+    同時還會產生一個帶著 HTML、永遠對不上任何行情的假代號。
+    """
+    parts = re.split(r"<br\s*/?>", cell, flags=re.IGNORECASE)
+    return [re.sub(r"[(（].*?[)）]", "", part).strip() for part in parts]
 
 
 def parse_twse_total_return_legacy(payload: dict) -> list[tuple[date, float]]:

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from alpha_track.categories import Classification, classify, load_category_map
+from alpha_track.categories import Classification, classify, load_category_map, is_etf_code
 
 CATEGORY_MAP = {
     "0050": {"name": "元大台灣50", "category": "市值型", "region": "台灣"},
@@ -94,3 +94,16 @@ def test_classification_is_a_dataclass_with_expected_fields():
     c = Classification(category="市值型", region="台灣",
                        is_leveraged=False, is_inverse=False)
     assert c.category == "市值型"
+
+
+def test_etf_codes_are_recognised_by_their_prefix():
+    """每日行情端點回傳的是全部上市櫃證券,不是只有 ETF。
+    沒有這道篩選,排行榜上會出現 2000 多檔個股。"""
+    for code in ("0050", "0056", "006208", "00679B", "00631L", "00400A"):
+        assert is_etf_code(code), code
+
+
+def test_non_etf_securities_are_excluded():
+    """01xxxT 是 REIT、020xxx 是 ETN、四碼數字是個股 —— 都不是 ETF。"""
+    for code in ("2330", "1101", "01001T", "020000", "02001L", ""):
+        assert not is_etf_code(code), code

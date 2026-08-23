@@ -16,6 +16,23 @@ import yaml
 
 UNCLASSIFIED = "未分類"
 
+ETF_CODE_PREFIX = "00"
+"""台股 ETF 的代號一律以 00 開頭(0050、006208、00679B、00400A)。
+
+這道篩選是必要的,不是保險:每日行情端點回傳的是**全部**上市櫃證券
+—— 實測 TWSE 1376 筆、TPEx 1011 筆,其中 ETF 只有 233 + 117 檔。
+不篩就會把兩千多檔個股寫進資料庫並排進排行榜,而且它們全部是「未分類」。
+
+同一個代號空間裡的鄰居都不是 ETF,已由實測樣本確認:
+01xxxT 是不動產投資信託(如 01001T)、020xxx 是 ETN(如 020000、02001L)、
+純四碼數字是個股(如 2330)。
+"""
+
+
+def is_etf_code(code: str) -> bool:
+    """是否為 ETF 代號。見 ETF_CODE_PREFIX 的說明。"""
+    return code.startswith(ETF_CODE_PREFIX)
+
 
 @dataclass(frozen=True)
 class Classification:

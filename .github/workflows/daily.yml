@@ -1,0 +1,53 @@
+name: 每日資料更新
+
+on:
+  schedule:
+    # 台北時間 18:00(UTC 10:00),收盤後兩小時,留給交易所結算時間
+    - cron: "0 10 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  # 兩個 run 同時寫同一個 SQLite 檔與同一個 branch 只會互相踩踏。
+  group: daily-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # 沒有 ./ 的話 pip 會把 pipeline 當成 PyPI 上的套件名而不是本地路徑
+      - name: 安裝相依套件
+        run: pip install -e "./pipeline[dev]"
+
+      - name: 執行測試
+        run: cd pipeline && pytest -q
+
+      # 快取鍵必須穩定才會命中。含 run_id 的鍵每次都不同,等於永遠沒有快取,
+      # 歷史資料庫會每天重建。快取遺失是可自癒的 —— update 會偵測缺歷史並回補。
+      - name: 還原資料庫快取
+        uses: actions/cache@v4
+        with:
+          path: data/alpha_track.db
+          key: alpha-track-db-v1
+
+      - name: 更新資料
+        run: python -m alpha_track.cli update
+        env:
+          PYTHONPATH: pipeline/src
+
+      - name: 提交更新的 JSON
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add web/public/data/
+          git diff --staged --quiet || git commit -m "chore: 每日資料更新 $(date +%F)"
+          git push

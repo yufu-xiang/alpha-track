@@ -3211,7 +3211,15 @@ git commit -m "feat: JSON 匯出與前後端契約文件"
 - Produces: `python -m alpha_track.cli update|export|backfill` 指令;
   `web/public/data/` 下的 JSON 檔
 
-> **本節在 Task 9 完成後需一併修正(ledger R19–R23),下列程式碼尚未反映:**
+> **本節的程式碼區塊是修正前的版本,實作已依下列各點調整(見 cli.py 與 ledger):**
+> 另有兩項在端到端驗證時才發現的缺陷,也已修正:
+> - **R27** — `update` 必須先篩掉非 ETF。兩個每日行情端點回傳的是**全部**
+>   上市櫃證券(實測 1376 + 1011 筆),ETF 只有 233 + 117 檔。未篩時
+>   排行榜上有 2350 檔、其中 2191 檔是個股且全部「未分類」。
+> - **R28** — `run_update` 必須也更新大盤基準。原本傳 `fetch_benchmark=None`,
+>   而排程只跑 `update`,於是 `benchmarks` 表永遠是空的、Beta 永遠 null,
+>   R2 等於沒做。改為增量:自既有最後一筆的隔天續抓,空表時才回補十年。
+>
 > - `fetch_all_sources` 要加上 TPEx 那一組(`parse_tpex_daily`/`parse_tpex_profiles`),
 >   否則 117 檔上櫃 ETF 全部缺席、債券型分類永遠是空的(R20)。
 > - `fetch_all_sources` 要抓 `TWSE_ETF_LIST_URL` 並以 `parse_twse_etf_list` 取得

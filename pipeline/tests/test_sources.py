@@ -468,3 +468,34 @@ def test_parse_real_yahoo_fixture_drops_the_unadjusted_2014_split():
     assert rows[0].date == date(2014, 1, 2), "起點應落在分割後"
     moves = [b.adj_close / a.adj_close - 1.0 for a, b in zip(rows, rows[1:])]
     assert max(abs(m) for m in moves) < 0.35, "保留的區段不得再有尺度斷裂"
+
+
+def test_parse_twse_etf_list_splits_dual_currency_rows():
+    """雙幣別 ETF 在官方清單裡是**一格兩碼**,而且用 HTML 換行連接:
+    '006205(新臺幣)<br>00625K(人民幣)'。不拆開的話這些代號的掛牌日全部取不到,
+    而且會產生一個永遠對不上任何行情的假代號。"""
+    payload = {
+        "stat": "OK",
+        "fields": ["上市日期", "證券代號", "證券簡稱", "發行人", "標的指數"],
+        "data": [["2011.09.29",
+                  "006205(新臺幣)<br>00625K(人民幣)",
+                  "富邦上証(新臺幣)<br>富邦上証+R(人民幣)",
+                  "富邦投信", "上證180指數"]],
+    }
+    profiles = parse_twse_etf_list(payload)
+    by_code = {p.code: p for p in profiles}
+    assert set(by_code) == {"006205", "00625K"}
+    assert by_code["006205"].name == "富邦上証"
+    assert by_code["00625K"].name == "富邦上証+R"
+    assert by_code["006205"].listing_date == date(2011, 9, 29)
+    assert by_code["00625K"].listing_date == date(2011, 9, 29)
+
+
+def test_parse_real_twse_etf_list_has_no_html_in_any_code():
+    """真 fixture 有 7 列是雙幣別。任何一個代號帶著 HTML 都對不上行情。"""
+    profiles = parse_twse_etf_list(load("twse_etf_list.json"))
+    assert all("<" not in p.code and "(" not in p.code for p in profiles), \
+        [p.code for p in profiles if "<" in p.code or "(" in p.code]
+    by_code = {p.code: p for p in profiles}
+    assert "00625K" in by_code, "雙幣別的第二個代號必須也在"
+    assert "006205" in by_code
