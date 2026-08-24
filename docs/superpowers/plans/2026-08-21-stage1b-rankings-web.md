@@ -808,8 +808,9 @@ export function savePrefs(prefs: Prefs): void {
 
 - [ ] **Step 5: 執行測試確認通過**
 
-Run: `cd web && npm test -- lib`
-Expected: 18 passed
+Run: `cd web && npm test -- format prefs`
+Expected: 17 passed(程式碼區塊實為 10 + 7 個測試函式;
+原本寫 18 是計數錯誤,且 `-- lib` 會一併選到同目錄的 sorting.test.ts)
 
 - [ ] **Step 6: Commit**
 
