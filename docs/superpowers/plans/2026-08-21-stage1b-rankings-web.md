@@ -1961,10 +1961,15 @@ describe('applyFilters', () => {
   })
 })
 
+// 注意:本節原本的實作用 `localeCompare(b, 'zh-Hant')`,實測得到的是筆畫序
+// ['反向型','市值型','未分類','高股息','債券型','槓桿型'],與本測試原本期望的
+// code point 序完全不同 —— 實作與測試互相矛盾。兩種機器排序對中文讀者都沒有
+// 意義,且 localeCompare 還相依於執行環境的 ICU 資料。已改為依規格的分類順序
+// 寫死(見 filtering.ts 的 CATEGORY_ORDER),未分類與未知分類墊底。
 describe('collectCategories', () => {
-  it('收集出現過的分類並去重排序', () => {
+  it('依規格的分類順序排列,未分類與未知分類墊底', () => {
     expect(collectCategories(ROWS)).toEqual([
-      '債券型', '反向型', '市值型', '未分類', '槓桿型', '高股息',
+      '市值型', '高股息', '債券型', '槓桿型', '反向型', '未分類',
     ])
   })
 })
@@ -2149,7 +2154,9 @@ export function Filters({
 - [ ] **Step 5: 執行測試確認通過**
 
 Run: `cd web && npm test -- filtering Filters`
-Expected: 17 passed
+Expected: 25 passed(原 17 個,加上實作時補的邊界:槓桿篩選優先於分類篩選、
+搜尋不看分類、不修改傳入陣列、分類去重與空分類、未知分類墊底、
+已選分類的 aria-pressed、無分類時不渲染空按鈕列)
 
 - [ ] **Step 6: Commit**
 
