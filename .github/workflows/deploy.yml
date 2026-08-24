@@ -1,0 +1,61 @@
+name: 部署網站
+
+on:
+  push:
+    branches: [main]
+    paths:
+      # web/** 同時涵蓋原始碼與 web/public/data/ 下的 JSON。
+      # 後者是 daily.yml 每日提交的資料檔 —— 這條路徑是每日更新能反映到
+      # 線上站台的唯一連結。縮小這個 paths 過濾會讓網站停在最後一次
+      # 程式碼變更的資料,而且不會有任何錯誤訊息。
+      - 'web/**'
+      - '.github/workflows/deploy.yml'
+
+  # **這一段不是備援,是每日資料能上線的唯一途徑。**
+  # daily.yml 用預設的 GITHUB_TOKEN 推送資料檔,而 GitHub 刻意不讓
+  # GITHUB_TOKEN 造成的 push 觸發其他 workflow(防止遞迴)。也就是說
+  # 上面那個 paths 過濾對每日更新**不會生效** —— 少了 workflow_run,
+  # 網站會永遠停在最後一次人工程式碼變更時的資料,而且不會有任何錯誤訊息。
+  workflow_run:
+    workflows: ["每日資料更新"]
+    types: [completed]
+
+  workflow_dispatch:
+
+concurrency:
+  # 資料更新與程式碼變更可能前後腳推上來,兩個部署同時跑會互相覆蓋。
+  group: deploy-web
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # 資料更新失敗時不要拿舊產物去覆蓋線上站台。
+    # 非 workflow_run 觸發(push / 手動)沒有 conclusion 可看,一律放行。
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: 安裝相依套件
+        run: cd web && npm ci
+
+      - name: 執行測試
+        run: cd web && npm test
+
+      - name: 建置
+        run: cd web && npm run build
+
+      - name: 部署至 Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy web/dist --project-name=alpha-track

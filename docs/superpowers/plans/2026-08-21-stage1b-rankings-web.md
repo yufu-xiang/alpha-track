@@ -2868,6 +2868,18 @@ Run: `cd web && npm run preview`
 
 - [ ] **Step 4: 建立部署 workflow**
 
+> **計畫原本的 workflow 有一個會靜默失效的環節。** 只用
+> `on.push.paths: ['web/**']` 接每日資料更新是不夠的:1a 的 `daily.yml`
+> 用預設的 `GITHUB_TOKEN` 推送 `web/public/data/*.json`,而 GitHub 刻意
+> **不讓 `GITHUB_TOKEN` 造成的 push 觸發其他 workflow**(防止遞迴)。
+> 結果是網站永遠停在最後一次人工程式碼變更時的資料,且沒有任何錯誤訊息。
+> 需另加 `workflow_run` 觸發(以 daily.yml 的 `name` 對應),並在 job 上
+> 加條件避免資料更新失敗時仍拿舊產物覆蓋線上站台。
+>
+> `vite.config.ts` 的「Modify」原文未說明改什麼。實際要做的是把 `base`
+> 明寫出來並註明:改成子路徑部署時這一行必須跟著改,否則 JSON 會被抓成
+> `/data/rankings.json` 而不是 `/<子路徑>/data/rankings.json`。
+
 `.github/workflows/deploy.yml`:
 
 ```yaml
