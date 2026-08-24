@@ -126,7 +126,7 @@ web/
     "noUncheckedIndexedAccess": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["vitest/globals", "@testing-library/jest-dom"]
+    "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"]
   },
   "include": ["src"]
 }
@@ -1406,19 +1406,24 @@ describe('RankingTable', () => {
     expect(within(row).getAllByRole('cell').at(-1)).toHaveTextContent('—')
   })
 
+  // 注意:fixture 中**三**檔沒有十年資料(00929、00679B、00999),不是兩檔 ——
+  // 00679B 的 returns 只到 Y5。硬寫 slice(-2) 會失敗。改由資料推導,
+  // 動 fixture 時測試才不會莫名變紅。
+  //   function codesWithoutData(p) {
+  //     return ROWS.filter((r) => r.returns[p] === null).map((r) => r.code).sort()
+  //   }
   it('依 Y10 降冪時,資料不足者排在最末', () => {
     renderTable({ sortBy: 'Y10' })
-    const codes = bodyRowCodes()
-    // 00929 與 00999 皆無十年資料
-    expect(codes.slice(-2).sort()).toEqual(['00929', '00999'])
+    const missing = codesWithoutData('Y10')
+    expect(bodyRowCodes().slice(-missing.length).sort()).toEqual(missing)
   })
 
   it('依 Y10 升冪時,資料不足者仍排在最末', async () => {
     const user = userEvent.setup()
     renderTable({ sortBy: 'Y10' })
     await user.click(screen.getByRole('columnheader', { name: /十年/ }))
-    const codes = bodyRowCodes()
-    expect(codes.slice(-2).sort()).toEqual(['00929', '00999'])
+    const missing = codesWithoutData('Y10')
+    expect(bodyRowCodes().slice(-missing.length).sort()).toEqual(missing)
   })
 
   it('點擊欄位標頭會通知外部排序變更', async () => {
@@ -1429,9 +1434,11 @@ describe('RankingTable', () => {
     expect(onSortChange).toHaveBeenCalledWith('D1')
   })
 
+  // aria-label 是「夏普值(Sharpe Ratio)說明」(詞條名含括號),
+  // 故 /夏普值說明/ 對不上,要用 /夏普值.*說明/。
   it('風險欄位標頭附帶指標說明按鈕', () => {
     renderTable({ visibleColumns: [], showRisk: true })
-    expect(screen.getByRole('button', { name: /夏普值說明/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /夏普值.*說明/ })).toBeInTheDocument()
   })
 
   it('空資料時顯示提示而非空白表格', () => {
@@ -1626,7 +1633,8 @@ export function RankingTable({
 - [ ] **Step 4: 執行測試確認通過**
 
 Run: `cd web && npm test -- RankingTable`
-Expected: 10 passed
+Expected: 13 passed(原 10 個,加上實作時發現的三個:說明鈕不得順帶排序、
+外部改變 sortBy 要重新排序、sortBy 指向未顯示欄位時不排序)
 
 - [ ] **Step 5: Commit**
 

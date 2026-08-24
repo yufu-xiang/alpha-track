@@ -24,7 +24,12 @@ export function MetricInfo({ termId }: Props) {
         className="metric-info__trigger"
         aria-label={`${entry.term}說明`}
         aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
+        onClick={(e) => {
+          // 這顆鈕長在可排序的表頭裡。不擋住冒泡的話,想讀一下說明
+          // 就會順手把整張表翻掉,而使用者不會意識到是自己按出來的。
+          e.stopPropagation()
+          setOpen((v) => !v)
+        }}
       >
         ⓘ
       </button>
