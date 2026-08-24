@@ -529,3 +529,59 @@ def test_other_hosts_keep_the_strict_default():
                 "https://api.finmindtrade.com/api/v4/data"):
         ctx = ssl_context_for(url)
         assert ctx.verify_flags & ssl.VERIFY_X509_STRICT, url
+
+
+def _chart(closes: list[float], volumes: list[int] | None = None) -> dict:
+    n = len(closes)
+    return {"chart": {"result": [{
+        "meta": {"dataGranularity": "1d"},
+        "timestamp": [1230858000 + 86400 * i for i in range(n)],
+        "indicators": {"quote": [{
+            "open": closes, "high": closes, "low": closes, "close": closes,
+            "volume": volumes or [1000] * n,
+        }]},
+    }]}}
+
+
+def test_truncates_only_when_the_ratio_matches_a_plausible_split():
+    """1:4 是乾淨的分割倍率,截斷。"""
+    rows = parse_yahoo_chart(_chart([100.0] * 3 + [25.0] * 3), code="0050")
+    assert len(rows) == 3
+    assert all(r.close == 25.0 for r in rows)
+
+
+def test_truncates_on_a_reverse_split():
+    """反向與槓桿型 ETF 淨值太低時會做反分割,倍率同樣乾淨(實測 ×4、×5、×6、×7)。"""
+    rows = parse_yahoo_chart(_chart([10.0] * 3 + [40.0] * 3), code="00673R")
+    assert len(rows) == 3
+    assert all(r.close == 40.0 for r in rows)
+
+
+def test_keeps_history_when_a_big_move_is_not_a_plausible_split_ratio():
+    """實測 00715L(布蘭特原油正2)在 2026-03-09 跳空 +62.3%,但成交金額
+    ×2.56(分割該持平)、隔日就跌回 44.8(分割不會回頭),而且全序列有
+    五天超過 35% —— 原油槓桿 ETF 不受漲跌幅限制,本來就會這樣動。
+
+    1.62 不接近任何整數比,不該當成分割。誤判的代價是丟掉八年歷史,
+    而那會表現為「Y3/Y5/Y10 是 null」,與「這檔太新」完全無法區分。"""
+    rows = parse_yahoo_chart(_chart([38.0] * 3 + [61.6, 44.8, 39.1]), code="00715L")
+    assert len(rows) == 6, "非分割的劇烈波動必須保留完整歷史"
+
+
+def test_keeps_history_for_a_wild_but_non_integer_ratio():
+    """1.44 倍(實測 00633L)同樣對不上任何分割比。"""
+    rows = parse_yahoo_chart(_chart([100.0] * 3 + [144.0] * 3), code="00633L")
+    assert len(rows) == 6
+
+
+def test_absurd_ratio_is_not_treated_as_a_split_either():
+    """實測 00631L 掛牌初期有 21.74 倍的跳空 —— 沒有這種分割,
+    那是來源的早期壞資料。仍然保留,由警告交給人判斷。"""
+    rows = parse_yahoo_chart(_chart([2000.0] * 3 + [92.0] * 3), code="00631L")
+    assert len(rows) == 6
+
+
+def test_split_detection_tolerates_a_market_move_on_the_same_day():
+    """分割當天大盤也在動。1:4 分割搭配 -5% 的行情是 4.21 倍,仍應判為分割。"""
+    rows = parse_yahoo_chart(_chart([100.0] * 3 + [23.75] * 3), code="0050")
+    assert len(rows) == 3

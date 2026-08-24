@@ -16,11 +16,26 @@ logger = logging.getLogger(__name__)
 TAIPEI = ZoneInfo("Asia/Taipei")
 
 MAX_PLAUSIBLE_DAILY_MOVE = 0.35
-"""超過此幅度的單日變動視為來源未調整的分割,不是行情。
+"""單日變動超過此幅度就**值得懷疑**,但不足以斷定是分割。
 
-台股上市證券單日漲跌幅上限 10%;槓桿型 ETF 20%;追蹤海外指數者雖不受限,
-實務上也從未有單日 35% 的紀錄。分割的倍率(2、4、10)遠在此門檻之外,
-因此不需要猜倍率是多少,只要認出「這不可能是行情」就夠了。
+台股上市證券單日漲跌幅上限 10%、槓桿型 20%。追蹤海外指數或商品期貨者
+不受限,實測 00715L(布蘭特原油正2)在 2020 年油價崩盤期間有多天超過
+40%,2026-03-09 更達 +62%。所以這個門檻只用來挑出候選,是否截斷要看倍率。
+"""
+
+SPLIT_RATIOS = tuple(range(2, 11))
+"""可信的分割倍率。實測 347 檔的回補中出現過 1:2、1:3、1:4、1:7,
+以及反分割 ×4、×5、×6、×7 —— 全部是乾淨的整數比。"""
+
+SPLIT_RATIO_TOLERANCE = 0.10
+"""倍率與整數比的容許誤差。
+
+留 10% 是因為分割當天大盤也在動:1:4 分割搭配 -5% 的行情是 4.21 倍。
+實測這個寬度剛好把 13 筆真分割全數納入,並把四筆對不上的排除在外
+(21.74、2.19、1.62、1.44)。
+
+代價是 3:2 這類非整數分割會被漏掉。台股 ETF 未見此種比例;
+真的出現時會由下方的警告露出來,而不是靜默地照單全收。
 """
 
 
@@ -78,6 +93,18 @@ def parse_yahoo_chart(payload: dict, code: str) -> list[PriceRecord]:
     return _drop_history_before_unadjusted_split(rows, code)
 
 
+def _looks_like_split(ratio: float) -> int | None:
+    """倍率若接近某個可信的分割比就回傳該比例,否則回傳 None。
+
+    ratio 一律以「大於 1」的形式傳入(正分割取倒數),因此正分割與
+    反分割共用同一組判定。
+    """
+    for n in SPLIT_RATIOS:
+        if abs(ratio - n) / n <= SPLIT_RATIO_TOLERANCE:
+            return n
+    return None
+
+
 def _drop_history_before_unadjusted_split(
     rows: list[PriceRecord], code: str
 ) -> list[PriceRecord]:
@@ -100,14 +127,32 @@ def _drop_history_before_unadjusted_split(
         prev = rows[i - 1].adj_close
         if prev <= 0:
             continue
-        if abs(rows[i].adj_close / prev - 1.0) > MAX_PLAUSIBLE_DAILY_MOVE:
+        change = rows[i].adj_close / prev - 1.0
+        if abs(change) <= MAX_PLAUSIBLE_DAILY_MOVE:
+            continue
+
+        gap = rows[i].adj_close / prev
+        ratio = gap if gap > 1 else 1 / gap
+        split = _looks_like_split(ratio)
+        if split is None:
+            # 對不上任何分割比。可能是不受漲跌幅限制的商品/海外槓桿 ETF
+            # 真的這樣動(實測 00715L 全序列有五天超過 35%),也可能是
+            # 來源的壞資料。兩者都不該靠猜來截斷 —— 誤砍的代價是丟掉
+            # 數年歷史,而那會表現為「長期報酬是 null」,與「這檔太新」
+            # 完全無法區分。保留資料,把事情說出來讓人去看。
             logger.warning(
-                "%s 在 %s 有 %.1f%% 的單日跳空,判定為來源未調整的分割;"
-                "捨棄該日之前的 %d 筆歷史,起點改為 %s",
-                code, rows[i].date, (rows[i].adj_close / prev - 1.0) * 100,
-                i, rows[i].date,
+                "%s 在 %s 有 %.1f%% 的單日跳空,但 %.2f 倍對不上任何分割比,"
+                "保留完整歷史。請確認是真實行情還是來源壞資料。",
+                code, rows[i].date, change * 100, ratio,
             )
-            return rows[i:]
+            continue
+
+        logger.warning(
+            "%s 在 %s 有 %.1f%% 的單日跳空,倍率 %.2f 判定為未調整的 1:%d 分割;"
+            "捨棄該日之前的 %d 筆歷史,起點改為 %s",
+            code, rows[i].date, change * 100, ratio, split, i, rows[i].date,
+        )
+        return rows[i:]
     return rows
 
 
