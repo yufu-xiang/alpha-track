@@ -10,6 +10,7 @@ venv/
 node_modules/
 dist/
 .vite/
+*.tsbuildinfo
 
 # 資料(由 pipeline 產生,不進版控)
 data/raw/
