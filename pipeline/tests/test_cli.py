@@ -443,3 +443,46 @@ def test_benchmark_backfill_goes_back_ten_years_when_empty(tmp_path: Path):
 
     start, end = asked[0]
     assert (end - start).days >= 3650, "空的基準表要補滿十年"
+
+
+def test_backfill_paces_requests_between_codes(tmp_path: Path, monkeypatch):
+    """首次執行要回補三百多個代號。連發不加間隔很可能被 Yahoo 暫時封鎖,
+    而失敗形式是「部分代號悄悄補不到」—— 資料看起來有,只是少了一截。
+    docs/data-sources.md 對此已有明確警告(未驗證安全上限)。"""
+    from alpha_track import cli
+
+    db_path = tmp_path / "t.db"
+    with Database(db_path) as db:
+        db.init_schema()
+        for code in ("0050", "0056", "00878"):
+            db.upsert_prices([price_at(code, date(2026, 8, 21))])
+
+    slept: list[float] = []
+    monkeypatch.setattr(cli.time, "sleep", lambda s: slept.append(s))
+
+    run_backfill(settings_for(tmp_path, db_path),
+                 fetch_history=lambda code, exchange: [],
+                 fetch_benchmark=None)
+
+    # 三個代號之間有兩個間隔;第一個不必等
+    assert len(slept) == 2
+    assert all(s >= cli.YAHOO_REQUEST_INTERVAL for s in slept)
+
+
+def test_backfill_does_not_sleep_when_there_is_nothing_to_backfill(tmp_path: Path, monkeypatch):
+    """每日執行時多半沒有代號需要回補,不該白等。"""
+    from alpha_track import cli
+
+    db_path = tmp_path / "t.db"
+    with Database(db_path) as db:
+        db.init_schema()
+        db.upsert_prices([price_at("0050", date(2026, 8, 1) + timedelta(days=i))
+                          for i in range(80)])
+
+    slept: list[float] = []
+    monkeypatch.setattr(cli.time, "sleep", lambda s: slept.append(s))
+
+    run_backfill(settings_for(tmp_path, db_path),
+                 fetch_history=lambda code, exchange: [],
+                 fetch_benchmark=None)
+    assert slept == []

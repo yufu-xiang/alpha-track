@@ -68,6 +68,14 @@ BENCHMARK_REQUEST_INTERVAL = 1.0
 """逐月回補基準的請求間隔(秒)。勘查實測未遇限流,但十年是 120 次呼叫,
 不加間隔就是在測試對方的耐性。"""
 
+YAHOO_REQUEST_INTERVAL = 0.5
+"""逐檔回補歷史的請求間隔(秒)。
+
+首次執行要補三百多個代號。Yahoo 是非官方來源,docs/data-sources.md 明載
+「未刻意壓測速率上限」「大量標的批次回補時仍應加入間隔,避免被暫時封鎖」。
+連發被擋的失敗形式特別難察覺:不是整批失敗,而是後半段代號悄悄補不到,
+資料看起來有、只是少了一截,而每一檔都有 try 保護不會中斷整批。"""
+
 
 @dataclass
 class Settings:
@@ -258,7 +266,12 @@ def run_backfill(
     with Database(Path(settings.db_path)) as db:
         db.init_schema()
         profiles = db.get_profiles()
-        for code in db.codes_without_history(MIN_HISTORY_ROWS):
+        targets = db.codes_without_history(MIN_HISTORY_ROWS)
+        for i, code in enumerate(targets):
+            # 逐檔之間留間隔。第一檔不必等 —— 每日執行時通常沒有代號
+            # 需要回補,不該白白多花半秒。
+            if i > 0:
+                time.sleep(YAHOO_REQUEST_INTERVAL)
             profile = profiles.get(code)
             exchange = profile.exchange if profile else "TWSE"
             try:
