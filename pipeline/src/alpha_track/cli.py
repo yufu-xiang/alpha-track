@@ -21,7 +21,7 @@ from pathlib import Path
 
 import yaml
 
-from .categories import classify, is_etf_code, load_category_map
+from .categories import UNCLASSIFIED, classify, is_etf_code, load_category_map
 from .compute import compute_etf_metrics
 from .export import build_meta, build_rankings, write_json
 from .models import DividendRecord, EtfProfile, NavRecord, PriceRecord
@@ -99,10 +99,15 @@ def run_export(
     settings: Settings,
     *,
     is_stale: bool,
-    unclassified: list[str],
     anomalies: list[tuple[str, str]],
 ) -> None:
-    """自資料庫計算指標並匯出 JSON。不連網,可獨立重跑。"""
+    """自資料庫計算指標並匯出 JSON。不連網,可獨立重跑。
+
+    未分類清單由本函式自行統計,不由呼叫端傳入:它本來就對每一檔呼叫
+    classify(),而由呼叫端傳的話,export 與 backfill 這兩個指令都會誠實地
+    回報「零檔未分類」—— 畫面上整片都是「未分類」,狀態列卻寫「全部正常」。
+    自己算也比只看當日批次更完整。
+    """
     out_dir = Path(settings.output_dir)
     category_map = load_category_map(ROOT / "config" / "etf_categories.yaml")
 
@@ -120,11 +125,14 @@ def run_export(
         stored = db.get_profiles()
         bench_closes = db.get_benchmark(BENCHMARK_NAME)
         rows = []
+        unclassified: list[str] = []
         for code in db.all_codes():
             prices = db.get_prices(code)
             if not prices:
                 continue
             cls = classify(code, category_map)
+            if cls.category == UNCLASSIFIED:
+                unclassified.append(code)
             base = stored.get(code)
             profile = EtfProfile(
                 code=code,
@@ -150,7 +158,7 @@ def run_export(
         write_json(out_dir / "rankings.json", build_rankings(base_date, rows))
         write_json(out_dir / "meta.json", build_meta(
             data_date=base_date, etf_count=len(rows),
-            unclassified=unclassified, anomalies=anomalies,
+            unclassified=sorted(unclassified), anomalies=anomalies,
             is_stale=is_stale, risk_free_rate=settings.risk_free_rate,
         ))
 
@@ -342,7 +350,7 @@ def run_update(
 
         if result.batch_rejected:
             logger.error("整批拒絕:%s", result.batch_reason)
-            run_export(settings, is_stale=True, unclassified=[],
+            run_export(settings, is_stale=True,
                        anomalies=[("*", result.batch_reason or "驗證未通過")])
             return
 
@@ -357,13 +365,7 @@ def run_update(
     run_backfill(settings, fetch_history=fetch_history,
                  fetch_benchmark=fetch_benchmark)
 
-    category_map = load_category_map(ROOT / "config" / "etf_categories.yaml")
-    unclassified = [
-        c for c in {r.code for r in result.accepted}
-        if classify(c, category_map).category == "未分類"
-    ]
-    run_export(settings, is_stale=False, unclassified=sorted(unclassified),
-               anomalies=result.flagged)
+    run_export(settings, is_stale=False, anomalies=result.flagged)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -379,10 +381,10 @@ def main(argv: list[str] | None = None) -> int:
     settings = load_settings(Path(args.config))
 
     if args.command == "export":
-        run_export(settings, is_stale=False, unclassified=[], anomalies=[])
+        run_export(settings, is_stale=False, anomalies=[])
     elif args.command == "backfill":
         run_backfill(settings)
-        run_export(settings, is_stale=False, unclassified=[], anomalies=[])
+        run_export(settings, is_stale=False, anomalies=[])
     else:
         run_update(settings)
     return 0

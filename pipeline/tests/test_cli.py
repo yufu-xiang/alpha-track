@@ -64,8 +64,7 @@ def test_run_export_writes_both_json_files(tmp_path: Path):
                           price_at("0050", date(2026, 8, 21), 195.5)])
 
     out = tmp_path / "out"
-    run_export(settings_for(tmp_path, db_path), is_stale=False,
-               unclassified=[], anomalies=[])
+    run_export(settings_for(tmp_path, db_path), is_stale=False, anomalies=[])
 
     assert (out / "rankings.json").exists()
     assert (out / "meta.json").exists()
@@ -87,8 +86,7 @@ def test_run_export_uses_the_real_listing_date_not_a_proxy(tmp_path: Path):
                                    100.0 + i * 0.05) for i in range(300)])
 
     out = tmp_path / "out"
-    run_export(settings_for(tmp_path, db_path), is_stale=False,
-               unclassified=[], anomalies=[])
+    run_export(settings_for(tmp_path, db_path), is_stale=False, anomalies=[])
     row = json.loads((out / "rankings.json").read_text("utf-8"))["etfs"][0]
     assert row["listing_date"] == "2003-06-30"
     assert row["data_start"] == "2014-01-02"
@@ -102,8 +100,7 @@ def test_run_export_on_empty_database_still_writes_meta(tmp_path: Path):
         db.init_schema()
 
     out = tmp_path / "out"
-    run_export(settings_for(tmp_path, db_path), is_stale=True,
-               unclassified=[], anomalies=[])
+    run_export(settings_for(tmp_path, db_path), is_stale=True, anomalies=[])
 
     assert (out / "meta.json").exists()
     meta = json.loads((out / "meta.json").read_text("utf-8"))
@@ -123,8 +120,7 @@ def test_run_export_passes_the_benchmark_through_for_beta(tmp_path: Path):
                             [(d, 1000.0 + i * 1.0) for i, d in enumerate(days)])
 
     out = tmp_path / "out"
-    run_export(settings_for(tmp_path, db_path), is_stale=False,
-               unclassified=[], anomalies=[])
+    run_export(settings_for(tmp_path, db_path), is_stale=False, anomalies=[])
     row = json.loads((out / "rankings.json").read_text("utf-8"))["etfs"][0]
     assert row["risk"]["beta"] is not None
 
@@ -486,3 +482,33 @@ def test_backfill_does_not_sleep_when_there_is_nothing_to_backfill(tmp_path: Pat
                  fetch_history=lambda code, exchange: [],
                  fetch_benchmark=None)
     assert slept == []
+
+
+def test_export_reports_unclassified_codes_itself(tmp_path: Path):
+    """未分類清單是維護者補 etf_categories.yaml 的唯一提示。
+    由呼叫端傳入的話,export 與 backfill 這兩個指令都會誠實地回報「零檔未分類」
+    —— 而畫面上明明整片都是「未分類」,狀態列卻寫「全部正常」。"""
+    db_path = tmp_path / "t.db"
+    with Database(db_path) as db:
+        db.init_schema()
+        db.upsert_prices([price_at("0050", date(2026, 8, 21), 195.5),
+                          price_at("00999", date(2026, 8, 21), 15.0)])
+
+    out = tmp_path / "out"
+    run_export(settings_for(tmp_path, db_path), is_stale=False, anomalies=[])
+
+    meta = json.loads((out / "meta.json").read_text("utf-8"))
+    assert meta["unclassified"] == ["00999"], "0050 在分類表內,00999 不在"
+
+
+def test_export_unclassified_is_sorted_and_deduplicated(tmp_path: Path):
+    db_path = tmp_path / "t.db"
+    with Database(db_path) as db:
+        db.init_schema()
+        for code in ("00997", "00999", "00998"):
+            db.upsert_prices([price_at(code, date(2026, 8, 21))])
+
+    out = tmp_path / "out"
+    run_export(settings_for(tmp_path, db_path), is_stale=False, anomalies=[])
+    meta = json.loads((out / "meta.json").read_text("utf-8"))
+    assert meta["unclassified"] == ["00997", "00998", "00999"]
