@@ -904,9 +904,14 @@ import { describe, expect, it } from 'vitest'
 import { fixtureMeta } from '../data/fixture'
 import { HealthBar } from './HealthBar'
 
+// 注意:`fixtureMeta` 帶著 `unclassified: ['00999']`,直接拿來測「全部正常」
+// 會顯示「1 檔未分類」而失敗。測試要自己建構所測的狀態:
+//   const healthy = { ...fixtureMeta, unclassified: [], anomalies: [] }
+// 下列各例一律以 healthy 為基底。
+
 describe('HealthBar', () => {
   it('一切正常時顯示更新日期與正常字樣', () => {
-    render(<HealthBar meta={fixtureMeta} now={new Date('2026-08-21T20:00:00+08:00')} />)
+    render(<HealthBar meta={healthy} now={new Date('2026-08-21T20:00:00+08:00')} />)
     expect(screen.getByText(/2026\/08\/21/)).toBeInTheDocument()
     expect(screen.getByText(/全部正常/)).toBeInTheDocument()
   })
@@ -1060,7 +1065,8 @@ export function HealthBar({ meta, now = new Date() }: Props) {
 - [ ] **Step 5: 執行測試確認通過**
 
 Run: `cd web && npm test -- loader HealthBar`
-Expected: 12 passed
+Expected: 12 passed(實作時另加 2 個:載入半殘不得渲染空表、
+未分類與價格異常不觸發 alert,故實際為 14)
 
 - [ ] **Step 6: Commit**
 
