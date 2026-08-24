@@ -126,7 +126,7 @@ web/
     "noUncheckedIndexedAccess": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"]
+    "types": ["node", "vite/client", "vitest/globals", "@testing-library/jest-dom"]
   },
   "include": ["src"]
 }
@@ -2805,7 +2805,9 @@ footer { margin-top: 1.5rem; font-size: 0.8125rem; color: var(--fg-muted); }
 - [ ] **Step 4: 執行測試確認通過**
 
 Run: `cd web && npm test -- styles`
-Expected: 6 passed
+Expected: 10 passed(原 6 個,加上:表格容器需有 max-height 否則 sticky 表頭
+失效、凍結欄位移與寬度須共用同一變數、宣告的漲跌色必須真的被用到、
+漲紅跌綠符合台股慣例)
 
 - [ ] **Step 5: 人工檢查**
 
@@ -2816,6 +2818,18 @@ Run: `cd web && npm run dev`
 2. 縮小視窗至手機寬度,代號與名稱欄凍結、其餘可橫捲,**body 本身不橫捲**
 3. 切換系統深色模式,配色正確反轉
 4. 點擊 ⓘ 顯示指標說明
+
+> **這一步不是形式。** 2026-08-24 的實測抓到三個測試全綠但畫面壞掉的問題:
+> - `--gain` / `--loss` 只宣告未使用,報酬完全沒有顏色。CSS 測試查得到變數
+>   存在,查不到有沒有人用它 —— 要由元件吐出對應 class 才算數。
+> - `.table-wrap` 只設 `overflow-x: auto` 時,`overflow-y` 會一併變成 `auto`,
+>   使它成為捲動容器而擋掉 `thead` 的 sticky。要給 `max-height` 表頭才會黏住。
+> - **指標說明彈窗被 `.table-wrap` 的 overflow 裁掉**,「怎麼算」那段從中間
+>   切斷。就地 absolute 定位在有 overflow 的祖先裡必然如此,要用 portal
+>   送到 body 並以 fixed 定位。
+>
+> 若環境無法縮放視窗(本次即是),可在 `public/` 放一個用 iframe 以固定寬度
+> 載入 `/` 的暫存頁面來檢查窄版,檢查完刪除。
 
 - [ ] **Step 6: Commit**
 

@@ -97,6 +97,17 @@ describe('RankingTable', () => {
     expect(onSortChange).not.toHaveBeenCalled()
   })
 
+  it('說明彈窗不得渲染在表格容器內 —— 那個容器的 overflow 會把它裁掉', async () => {
+    // 實測:就地 absolute 定位時,說明文字會從中間被切斷。
+    // 說明看不完整等於這個功能不存在,而這件事只有真的打開瀏覽器才看得到,
+    // 所以在這裡把「必須在容器外」這個結構條件釘住。
+    const user = userEvent.setup()
+    const { container } = renderTable({ visibleColumns: [], showRisk: true })
+    await user.click(screen.getByRole('button', { name: /夏普值.*說明/ }))
+    const dialog = screen.getByRole('dialog')
+    expect(container.querySelector('.table-wrap')!.contains(dialog)).toBe(false)
+  })
+
   it('外部改變 sortBy 時,表格要跟著重新排序', () => {
     // 期間分頁切換時 App 會改 sortBy。只用 useState 初始值的話,
     // 這個 prop 變了表格卻不動,使用者會看到「換了分頁但榜單沒變」。
@@ -124,6 +135,37 @@ describe('RankingTable', () => {
   it('空資料時顯示提示而非空白表格', () => {
     renderTable({ rows: [] })
     expect(screen.getByText(/沒有符合條件的 ETF/)).toBeInTheDocument()
+  })
+
+  it('正報酬標成 gain、負報酬標成 loss,資料不足兩者皆無', () => {
+    // 樣式表只驗得到 CSS 文字裡有 var(--gain);真正決定畫面上有沒有顏色的
+    // 是這裡有沒有吐出對應的 class。少了它,CSS 測試全綠而畫面一片灰。
+    renderTable({ visibleColumns: ['D1', 'Y10'] })
+    const table = within(screen.getByRole('table'))
+    const rowOf = (code: string) =>
+      table.getAllByRole('row').find((r) => within(r).queryByText(code))!
+
+    expect(within(rowOf('0050')).getByText('+0.52%')).toHaveClass('gain')
+    expect(within(rowOf('0056')).getByText('-0.21%')).toHaveClass('loss')
+
+    const missing = within(rowOf('00999')).getAllByRole('cell').at(-1)!
+    expect(missing).toHaveTextContent('—')
+    expect(missing.querySelector('.gain, .loss')).toBeNull()
+  })
+
+  it('零報酬不著色 —— 沒漲沒跌不是漲也不是跌', () => {
+    const flat = ROWS.map((r) => ({ ...r, returns: { ...r.returns, D1: 0 } }))
+    renderTable({ rows: flat, visibleColumns: ['D1'] })
+    const cell = within(screen.getByRole('table')).getAllByRole('row')[1]!
+    expect(within(cell).getByText('0.00%').className).toBe('')
+  })
+
+  it('風險欄位不著色 —— 最大回撤恆為負、波動度高也不代表糟', () => {
+    renderTable({ visibleColumns: [], showRisk: true })
+    const row = within(screen.getByRole('table'))
+      .getAllByRole('row')
+      .find((r) => within(r).queryByText('0050'))!
+    expect(within(row).getByText('-34.21%').className).toBe('')
   })
 
   it('報酬以百分比呈現並帶正負號', () => {

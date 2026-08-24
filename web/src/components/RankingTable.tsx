@@ -22,6 +22,19 @@ import { MetricInfo } from './MetricInfo'
 
 const helper = createColumnHelper<EtfRow>()
 
+/**
+ * 報酬儲存格。依正負套上 gain / loss,交給樣式表決定顏色。
+ *
+ * 只用在報酬欄。最大回撤恆為負、波動度越高也不代表越糟,
+ * 替風險指標上紅綠只會誤導 —— 那些欄位維持中性色。
+ * 顏色之外一律保留 +/− 符號(formatPercent 的行為),
+ * 不讓色盲使用者只能靠顏色判讀。
+ */
+function ReturnCell({ value }: { value: number | null }) {
+  const tone = value === null || value === 0 ? '' : value > 0 ? 'gain' : 'loss'
+  return <span className={tone}>{formatPercent(value)}</span>
+}
+
 interface Props {
   rows: EtfRow[]
   visibleColumns: PeriodCode[]
@@ -72,7 +85,7 @@ export function RankingTable({
       helper.accessor((row) => toSortable(row.returns[p]), {
         id: p,
         header: PERIOD_LABELS[p],
-        cell: (c) => formatPercent(c.getValue() ?? null),
+        cell: (c) => <ReturnCell value={c.getValue() ?? null} />,
         sortUndefined: 'last',
       }),
     )

@@ -41,6 +41,15 @@ describe('MetricInfo', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
+  it('按 Escape 可關閉', async () => {
+    const user = userEvent.setup()
+    render(<MetricInfo termId="sharpe" />)
+    await user.click(screen.getByRole('button', { name: /說明/ }))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
   it('觸發鈕以 aria-expanded 反映開闔狀態', async () => {
     const user = userEvent.setup()
     render(<MetricInfo termId="beta" />)

@@ -1,0 +1,284 @@
+/* 台股 ETF 績效排行 —— 樣式表
+ *
+ * 響應式策略(規格 §5.4):窄螢幕凍結代號與名稱欄、其餘橫向捲動。
+ * 刻意不拆成卡片:排行榜的價值就在並排比較,卡片化會摧毀這個價值。
+ */
+
+:root {
+  --bg: #ffffff;
+  --surface: #f7f8fa;
+  --fg: #1a1d21;
+  --fg-muted: #6b7280;
+  --border: #e5e7eb;
+  --accent: #2563eb;
+  /* 台股慣例:漲紅跌綠,與歐美相反。這裡跟隨在地慣例,
+     並且一律搭配 +/− 符號,不讓色盲使用者只能靠顏色判讀。 */
+  --gain: #c2410c;
+  --loss: #15803d;
+  --warn-bg: #fef3c7;
+  --warn-fg: #92400e;
+  --radius: 6px;
+  /* 窄螢幕凍結第一欄的寬度。第二欄的 left 位移直接引用這個變數,
+     兩者各寫各的魔術數字就會疊在一起。 */
+  --sticky-code-w: 76px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1115;
+    --surface: #1a1d23;
+    --fg: #e5e7eb;
+    --fg-muted: #9ca3af;
+    --border: #2d323b;
+    --accent: #60a5fa;
+    --gain: #fb923c;
+    --loss: #4ade80;
+    --warn-bg: #422006;
+    --warn-fg: #fcd34d;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, "Noto Sans TC", sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.app { max-width: 1400px; margin: 0 auto; padding: 1rem; }
+
+h1 { font-size: 1.5rem; margin: 0 0 0.5rem; }
+
+/* 健康狀態列 —— 規格 §5.5 */
+.health-bar {
+  font-size: 0.875rem;
+  color: var(--fg-muted);
+  padding: 0.5rem 0.75rem;
+  background: var(--surface);
+  border-radius: var(--radius);
+}
+
+.health-bar--warning {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  font-weight: 600;
+}
+
+/* 期間按鈕列 */
+.period-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin: 1rem 0;
+}
+
+.period-tabs button {
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.period-tabs button[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* 控制列 */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.filters { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.filters__chips { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+
+.filters__chips button {
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+  font-size: 0.8125rem;
+}
+
+.filters__chips button[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.filters input[type="search"] {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.filters__toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8125rem;
+  color: var(--fg-muted);
+}
+
+/* 欄位自選 */
+.column-picker { position: relative; }
+
+.column-picker > button {
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.column-picker__menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  min-width: 180px;
+  padding: 0.5rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+}
+
+.column-picker__menu label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+/* 表格 —— 橫向捲動,不使 body 橫捲
+ *
+ * max-height 不是裝飾:overflow-x: auto 會讓 overflow-y 一併變成 auto,
+ * .table-wrap 因此成為捲動容器,擋掉 thead 相對於視窗的 sticky。
+ * 給它高度上限,表頭才會黏在容器頂端 —— 350 檔的表格滑到一半看不到
+ * 欄名,等於整張表沒法讀。
+ */
+.table-wrap {
+  overflow-x: auto;
+  max-height: calc(100vh - 16rem);
+  min-height: 12rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+
+th, td {
+  padding: 0.5rem 0.75rem;
+  text-align: right;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+
+th:nth-child(1), td:nth-child(1),
+th:nth-child(2), td:nth-child(2),
+th:nth-child(3), td:nth-child(3) { text-align: left; }
+
+thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 0.8125rem;
+  color: var(--fg-muted);
+}
+
+tbody tr:hover { background: var(--surface); }
+
+/* 漲跌著色。搭配 formatPercent 一律輸出的 +/− 符號 ——
+   不讓色盲使用者只能靠顏色判讀(規格 §5.4)。
+   只套用在報酬欄:最大回撤恆為負、波動度越高也不代表越糟,
+   替它們上紅綠只會誤導。 */
+td .gain { color: var(--gain); }
+td .loss { color: var(--loss); }
+
+/* 窄螢幕:凍結代號與名稱欄 */
+@media (max-width: 768px) {
+  th:nth-child(1), td:nth-child(1) {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    width: var(--sticky-code-w);
+    min-width: var(--sticky-code-w);
+    background: var(--bg);
+  }
+  th:nth-child(2), td:nth-child(2) {
+    position: sticky;
+    left: var(--sticky-code-w);
+    z-index: 1;
+    background: var(--bg);
+  }
+  thead th:nth-child(1), thead th:nth-child(2) { z-index: 3; background: var(--surface); }
+  th, td { padding: 0.4rem 0.5rem; font-size: 0.8125rem; }
+}
+
+/* 指標說明 */
+.metric-info { position: relative; display: inline-block; }
+
+.metric-info__trigger {
+  border: none;
+  background: none;
+  color: var(--fg-muted);
+  cursor: pointer;
+  padding: 0 0.15rem;
+  font-size: 0.875rem;
+}
+
+/* fixed 而非 absolute,且由 portal 掛在 body 底下:
+   觸發鈕在 .table-wrap 裡,那個容器的 overflow 會把絕對定位的子元素裁掉。
+   座標由 MetricInfo 依觸發鈕的位置算出並夾在視窗內。 */
+.metric-info__popover {
+  position: fixed;
+  z-index: 30;
+  width: min(320px, calc(100vw - 16px));
+  max-height: min(60vh, 32rem);
+  overflow-y: auto;
+  padding: 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.16);
+  text-align: left;
+  white-space: normal;
+  font-weight: 400;
+  color: var(--fg);
+}
+
+.metric-info__popover h4 { margin: 0 0 0.5rem; font-size: 0.9375rem; }
+.metric-info__popover dt {
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  margin-top: 0.5rem;
+}
+.metric-info__popover dd { margin: 0.15rem 0 0; font-size: 0.8125rem; }
+
+.empty-state, .error { padding: 2rem; text-align: center; color: var(--fg-muted); }
+.error { color: var(--warn-fg); background: var(--warn-bg); border-radius: var(--radius); }
+
+footer { margin-top: 1.5rem; font-size: 0.8125rem; color: var(--fg-muted); }
