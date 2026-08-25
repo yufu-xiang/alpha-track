@@ -41,10 +41,12 @@ interface Props {
   sortBy: PeriodCode | null
   onSortChange: (period: PeriodCode) => void
   showRisk?: boolean
+  showExcess?: boolean
 }
 
 export function RankingTable({
   rows, visibleColumns, sortBy, onSortChange, showRisk = false,
+  showExcess = false,
 }: Props) {
   const [sorting, setSorting] = useState<SortingState>(
     sortBy ? [{ id: sortBy, desc: true }] : [],
@@ -90,6 +92,21 @@ export function RankingTable({
       }),
     )
 
+    // 超額報酬只顯示「當前選取期間」的那一個:十一個期間各加一欄會爆版,
+    // 而使用者一次也只關心正在看的那一期(規格 §4.5b)。
+    const excessCols = showExcess && sortBy
+      ? [
+          helper.accessor((row) => toSortable(row.excess[sortBy]), {
+            id: 'excess',
+            header: () => (
+              <span>超額報酬({PERIOD_LABELS[sortBy]}) <MetricInfo termId="excess" /></span>
+            ),
+            cell: (c) => <ReturnCell value={c.getValue() ?? null} />,
+            sortUndefined: 'last',
+          }),
+        ]
+      : []
+
     const riskCols = showRisk
       ? [
           helper.accessor((row) => toSortable(row.risk.volatility), {
@@ -119,8 +136,8 @@ export function RankingTable({
         ]
       : []
 
-    return [...base, ...periodCols, ...riskCols]
-  }, [visibleColumns, showRisk])
+    return [...base, ...periodCols, ...excessCols, ...riskCols]
+  }, [visibleColumns, showRisk, showExcess, sortBy])
 
   const table = useReactTable({
     data: rows,

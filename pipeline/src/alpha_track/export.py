@@ -46,6 +46,9 @@ def build_rankings(
                 # 不該連帶改到已經組好的輸出。
                 "returns": dict(m.returns),
                 "annualized": dict(m.annualized),
+                # 相對加權報酬指數的超額報酬(規格 §4.5b)。
+                # 大盤資料涵蓋不到的期間為 null,不拿別的期間頂替。
+                "excess": dict(m.excess),
                 "risk": {
                     "volatility": m.volatility,
                     "mdd": m.mdd,

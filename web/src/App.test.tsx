@@ -50,7 +50,9 @@ describe('App', () => {
   it('預設顯示規格指定的五個期間欄位', async () => {
     await renderLoaded()
     for (const label of ['當日', '一月', '三月', '一年', '三年']) {
-      expect(screen.getByRole('columnheader', { name: new RegExp(label) }))
+      // 錨定完整字串:超額報酬欄的表頭是「超額報酬(一年)」,
+      // 用不錨定的 /一年/ 會同時命中兩欄而查詢失敗。
+      expect(screen.getByRole('columnheader', { name: new RegExp(`^${label}$`) }))
         .toBeInTheDocument()
     }
     expect(screen.queryByRole('columnheader', { name: /^十年/ })).not.toBeInTheDocument()
@@ -134,5 +136,20 @@ describe('App', () => {
   it('顯示無風險利率,使夏普值可被檢驗', async () => {
     await renderLoaded()
     expect(screen.getByText(/無風險利率 1\.50%/)).toBeInTheDocument()
+  })
+})
+
+describe('App 超額報酬', () => {
+  it('表格含當前期間的超額報酬欄', async () => {
+    await renderLoaded()
+    expect(screen.getByRole('columnheader', { name: /超額.*一年/ })).toBeInTheDocument()
+  })
+
+  it('切換期間分頁時超額報酬欄跟著換', async () => {
+    const user = userEvent.setup()
+    await renderLoaded()
+    await user.click(within(tabs()).getByRole('button', { name: '三年' }))
+    await waitFor(() =>
+      expect(screen.getByRole('columnheader', { name: /超額.*三年/ })).toBeInTheDocument())
   })
 })

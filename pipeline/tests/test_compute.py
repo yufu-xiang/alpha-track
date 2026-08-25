@@ -199,3 +199,89 @@ def test_empty_price_history_yields_all_none():
                             bench_closes={}, navs=[], listing_date=None)
     assert all(v is None for v in m.returns.values())
     assert m.volatility is None
+
+
+def bench_from(prices, factor: float = 1.0, on=None):
+    """由價格序列生一條同交易日的基準線;factor 控制基準漲幅相對標的的比例。"""
+    days = on if on is not None else [p.date for p in prices]
+    base = 1000.0
+    out, first = {}, prices[0].adj_close
+    for p in prices:
+        if p.date in days:
+            out[p.date] = base * (1 + (p.adj_close / first - 1) * factor)
+    return out
+
+
+def test_excess_equals_the_full_return_when_the_market_is_flat():
+    """規格 §4.5b:改提供相對加權報酬指數的超額報酬 ——
+    「這檔有沒有贏大盤」才是使用者真正在問的問題。
+    大盤不動時,超額報酬就等於標的自己的報酬。"""
+    prices = series(date(2025, 1, 1), [100.0 + i * 0.05 for i in range(400)])
+    flat = {p.date: 1000.0 for p in prices}
+    m = compute_etf_metrics(prices, prices[-1].date, risk_free=0.015,
+                            bench_closes=flat, navs=[], listing_date=None)
+    assert m.excess["Y1"] == pytest.approx(m.returns["Y1"])
+
+
+def test_excess_is_zero_when_the_etf_tracks_the_market_exactly():
+    """完全複製大盤時超額為零 —— 這是定義的另一個端點。"""
+    prices = series(date(2025, 1, 1), [100.0 + i * 0.05 for i in range(400)])
+    same = {p.date: p.adj_close * 10 for p in prices}
+    m = compute_etf_metrics(prices, prices[-1].date, risk_free=0.015,
+                            bench_closes=same, navs=[], listing_date=None)
+    assert m.excess["Y1"] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_excess_is_negative_when_the_etf_loses_to_the_market():
+    prices = series(date(2025, 1, 1), [100.0 + i * 0.05 for i in range(400)])
+    m = compute_etf_metrics(prices, prices[-1].date, risk_free=0.015,
+                            bench_closes=bench_from(prices, 2.0), navs=[],
+                            listing_date=None)
+    assert m.excess["Y1"] < 0
+
+
+def test_excess_has_the_same_keys_as_returns():
+    """前端可直接索引,不必先檢查鍵是否存在 —— 與 returns/annualized 一致。"""
+    prices = series(date(2025, 1, 1), [100.0] * 400)
+    m = compute_etf_metrics(prices, prices[-1].date, risk_free=0.015,
+                            bench_closes=bench_from(prices), navs=[], listing_date=None)
+    assert set(m.excess) == set(m.returns)
+
+
+def test_excess_is_all_none_without_benchmark_data():
+    prices = series(date(2025, 1, 1), [100.0 + i * 0.05 for i in range(400)])
+    m = compute_etf_metrics(prices, prices[-1].date, risk_free=0.015,
+                            bench_closes={}, navs=[], listing_date=None)
+    assert all(v is None for v in m.excess.values())
+
+
+def test_excess_is_none_for_periods_the_benchmark_does_not_cover():
+    """基準自 2016 年起,更早的期間算不出超額 —— 留 null,不拿短期間頂替。"""
+    prices = series(date(2020, 1, 1), [100.0 + i * 0.01 for i in range(2000)])
+    late = [p.date for p in prices if p.date >= date(2024, 1, 1)]
+    m = compute_etf_metrics(prices, prices[-1].date, risk_free=0.015,
+                            bench_closes=bench_from(prices, 1.0, on=late),
+                            navs=[], listing_date=None)
+    assert m.excess["Y1"] is not None, "一年期在基準涵蓋範圍內"
+    assert m.excess["Y5"] is None, "五年期起點早於基準,應為 null"
+
+
+def test_excess_tolerates_a_benchmark_that_lags_by_a_day():
+    """實測:基準最新到 08-24 而價格已到 08-25(來源出檔時間差)。
+    要求日期精確吻合的話,超額報酬會整批變成 null。"""
+    prices = series(date(2025, 1, 1), [100.0 + i * 0.05 for i in range(400)])
+    lagged = [p.date for p in prices[:-1]]          # 少最後一天
+    m = compute_etf_metrics(prices, prices[-1].date, risk_free=0.015,
+                            bench_closes=bench_from(prices, 0.5, on=lagged),
+                            navs=[], listing_date=None)
+    assert m.excess["Y1"] is not None
+
+
+def test_excess_does_not_reach_back_arbitrarily_far():
+    """回看是為了容忍出檔時間差,不是拿幾週前的指數硬湊。"""
+    prices = series(date(2025, 1, 1), [100.0 + i * 0.05 for i in range(400)])
+    stale = [p.date for p in prices[:-30]]          # 基準停在 30 天前
+    m = compute_etf_metrics(prices, prices[-1].date, risk_free=0.015,
+                            bench_closes=bench_from(prices, 0.5, on=stale),
+                            navs=[], listing_date=None)
+    assert m.excess["Y1"] is None

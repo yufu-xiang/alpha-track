@@ -4,7 +4,7 @@ import { GLOSSARY } from './glossary'
 describe('指標詞典', () => {
   it('涵蓋階段 1 顯示的全部指標', () => {
     expect(Object.keys(GLOSSARY).sort()).toEqual([
-      'annualized', 'beta', 'cagr', 'mdd', 'premium_discount',
+      'annualized', 'beta', 'cagr', 'excess', 'mdd', 'premium_discount',
       'sharpe', 'total_return', 'volatility',
     ])
   })

@@ -30,6 +30,9 @@ export const fixtureRankings: RankingsData = {
       annualized: periods({
         Y3: 0.1321, Y5: 0.1468, Y10: 0.1312,
       }),
+      excess: periods({
+        D1: 0.0012, Y1: 0.0421, Y3: 0.2103, Y5: 0.4412, Y10: 0.9887,
+      }),
       risk: { volatility: 0.1833, mdd: -0.3421, sharpe: 0.9187, beta: 1.0210 },
       premium_discount: 0.0012,
     },
@@ -46,6 +49,9 @@ export const fixtureRankings: RankingsData = {
       annualized: periods({
         Y3: 0.0942, Y5: 0.1057, Y10: 0.0915, INCEPTION: 0.0644,
       }),
+      excess: periods({
+        D1: -0.0031, Y1: -0.0168, Y3: 0.0688, Y5: 0.1201, Y10: 0.0344,
+      }),
       risk: { volatility: 0.1521, mdd: -0.2988, sharpe: 0.7133, beta: 0.8422 },
       premium_discount: 0.0231,
     },
@@ -59,6 +65,9 @@ export const fixtureRankings: RankingsData = {
         YTD: 0.1544, Y1: 0.2011, Y3: 0.3877, INCEPTION: 0.4102,
       }),
       annualized: periods({ Y3: 0.1153, INCEPTION: 0.1201 }),
+      excess: periods({
+        D1: 0.0066, Y1: 0.0598, Y3: 0.1466, INCEPTION: 0.0912,
+      }),
       risk: { volatility: 0.2144, mdd: -0.1877, sharpe: 0.8632, beta: 1.1044 },
       premium_discount: -0.0044,
     },
@@ -73,6 +82,9 @@ export const fixtureRankings: RankingsData = {
         INCEPTION: -0.1033,
       }),
       annualized: periods({ Y3: -0.0545, Y5: -0.0641, INCEPTION: -0.0114 }),
+      excess: periods({
+        D1: -0.0006, Y1: -0.1091, Y3: -0.5933, Y5: -0.7422,
+      }),
       risk: { volatility: 0.1211, mdd: -0.4522, sharpe: 0.1421, beta: 0.1033 },
       premium_discount: 0.0008,
     },
@@ -88,6 +100,9 @@ export const fixtureRankings: RankingsData = {
       }),
       annualized: periods({
         Y3: 0.2544, Y5: 0.2788, Y10: 0.2455, INCEPTION: 0.2211,
+      }),
+      excess: periods({
+        D1: 0.0063, Y1: 0.2409, Y3: 0.6466, Y5: 1.8602, Y10: 5.6941,
       }),
       risk: { volatility: 0.3688, mdd: -0.6211, sharpe: 0.9922, beta: 2.0411 },
       premium_discount: 0.0055,
@@ -105,6 +120,9 @@ export const fixtureRankings: RankingsData = {
       annualized: periods({
         Y3: -0.1588, Y5: -0.1955, Y10: -0.1577, INCEPTION: -0.1522,
       }),
+      excess: periods({
+        D1: -0.0091, Y1: -0.3224, Y3: -0.7433, Y5: -1.1135, Y10: -3.2314,
+      }),
       risk: { volatility: 0.1822, mdd: -0.8433, sharpe: null, beta: -1.0122 },
       premium_discount: -0.0011,
     },
@@ -115,6 +133,9 @@ export const fixtureRankings: RankingsData = {
       data_start: '2026-07-15',
       returns: periods({ D1: 0.0013, W1: 0.0044, M1: 0.0102, INCEPTION: 0.0013 }),
       annualized: periods({ INCEPTION: null }),
+      excess: periods({
+        D1: -0.0027,
+      }),
       risk: { volatility: null, mdd: null, sharpe: null, beta: null },
       premium_discount: null,
     },

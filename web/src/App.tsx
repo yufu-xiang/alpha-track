@@ -118,6 +118,7 @@ export function App() {
         sortBy={sortBy}
         onSortChange={setSortBy}
         showRisk
+        showExcess
       />
 
       <footer>

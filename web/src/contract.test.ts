@@ -15,9 +15,9 @@ import { PERIODS } from './types'
 // 由 pipeline/src/alpha_track/export.py 的實際輸出取得,見 docs/json-contract.md
 const BACKEND_TOP_LEVEL_KEYS = ['data_date', 'etfs']
 const BACKEND_ROW_KEYS = [
-  'annualized', 'category', 'close', 'code', 'data_start', 'is_inverse',
-  'is_leveraged', 'listing_date', 'name', 'premium_discount', 'region',
-  'returns', 'risk',
+  'annualized', 'category', 'close', 'code', 'data_start', 'excess',
+  'is_inverse', 'is_leveraged', 'listing_date', 'name', 'premium_discount',
+  'region', 'returns', 'risk',
 ]
 const BACKEND_RISK_KEYS = ['beta', 'mdd', 'sharpe', 'volatility']
 const BACKEND_META_KEYS = [
@@ -59,6 +59,7 @@ describe('與後端 export.py 的契約', () => {
     for (const row of fixtureRankings.etfs) {
       expect(Object.keys(row.returns).sort()).toEqual([...BACKEND_PERIODS].sort())
       expect(Object.keys(row.annualized).sort()).toEqual([...BACKEND_PERIODS].sort())
+      expect(Object.keys(row.excess).sort()).toEqual([...BACKEND_PERIODS].sort())
     }
   })
 })

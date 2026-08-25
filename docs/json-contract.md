@@ -89,6 +89,7 @@
 | `data_start` | `string \| null` | **實際持有資料的起點。** 見下節。 |
 | `returns` | `Record<PeriodCode, number \| null>` | 各期間**含息**總報酬,小數。 |
 | `annualized` | `Record<PeriodCode, number \| null>` | 年化報酬(CAGR)。**一年以內的期間一律 `null`** —— 把一週報酬年化會得到「年化 380%」這種誤導性數字。 |
+| `excess` | `Record<PeriodCode, number \| null>` | **相對加權報酬指數的超額報酬**(規格 §4.5b)。同期間的標的報酬減大盤報酬,正值代表贏大盤。大盤資料自 2016-08 起,更早的期間為 `null`。注意基準是**台股**指數,用它衡量美債或海外 ETF 沒有意義。 |
 | `risk.volatility` | `number \| null` | 年化波動度。最低樣本 60 個交易日。 |
 | `risk.mdd` | `number \| null` | 最大回撤,**負數**。最低樣本 60 個交易日。 |
 | `risk.sharpe` | `number \| null` | (一年報酬 − 無風險利率) ÷ 年化波動度。波動為零時 `null`。 |

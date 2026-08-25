@@ -12,9 +12,9 @@ describe('契約型別', () => {
   it('fixture 的每一列都具備契約規定的全部欄位', () => {
     const row: EtfRow = fixtureRankings.etfs[0]!
     expect(Object.keys(row).sort()).toEqual([
-      'annualized', 'category', 'close', 'code', 'data_start', 'is_inverse',
-      'is_leveraged', 'listing_date', 'name', 'premium_discount', 'region',
-      'returns', 'risk',
+      'annualized', 'category', 'close', 'code', 'data_start', 'excess',
+      'is_inverse', 'is_leveraged', 'listing_date', 'name', 'premium_discount',
+      'region', 'returns', 'risk',
     ])
   })
 

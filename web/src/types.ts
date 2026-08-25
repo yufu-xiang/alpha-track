@@ -52,6 +52,11 @@ export interface EtfRow {
   data_start: string | null
   returns: Record<PeriodCode, number | null>
   annualized: Record<PeriodCode, number | null>
+  /**
+   * 相對加權報酬指數的超額報酬(規格 §4.5b)。同期間的標的報酬減大盤報酬。
+   * 正值代表贏大盤。大盤資料涵蓋不到的期間為 null。
+   */
+  excess: Record<PeriodCode, number | null>
   risk: RiskMetrics
   premium_discount: number | null
 }

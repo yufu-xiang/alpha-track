@@ -176,3 +176,46 @@ describe('RankingTable', () => {
     expect(within(row).getByText('+0.52%')).toBeInTheDocument()
   })
 })
+
+describe('RankingTable 超額報酬', () => {
+  it('顯示當前排序期間的超額報酬,表頭標明是哪一期', () => {
+    // 規格 §4.5b:「這檔有沒有贏大盤」。每個期間各加一欄會爆版,
+    // 所以只顯示當前選取期間的那一個,並在表頭寫清楚是哪一期。
+    renderTable({ visibleColumns: ['Y1'], sortBy: 'Y1', showExcess: true })
+    expect(screen.getByRole('columnheader', { name: /超額.*一年/ })).toBeInTheDocument()
+    const row = within(screen.getByRole('table'))
+      .getAllByRole('row')
+      .find((r) => within(r).queryByText('0050'))!
+    expect(within(row).getByText('+4.21%')).toBeInTheDocument()
+  })
+
+  it('切換期間時超額報酬跟著換', () => {
+    renderTable({ visibleColumns: ['D1'], sortBy: 'D1', showExcess: true })
+    expect(screen.getByRole('columnheader', { name: /超額.*當日/ })).toBeInTheDocument()
+    const row = within(screen.getByRole('table'))
+      .getAllByRole('row')
+      .find((r) => within(r).queryByText('0050'))!
+    expect(within(row).getByText('+0.12%')).toBeInTheDocument()
+  })
+
+  it('大盤資料涵蓋不到的期間顯示破折號', () => {
+    renderTable({ visibleColumns: ['Y10'], sortBy: 'Y10', showExcess: true })
+    const row = within(screen.getByRole('table'))
+      .getAllByRole('row')
+      .find((r) => within(r).queryByText('00929'))!
+    expect(within(row).getAllByRole('cell').at(-1)).toHaveTextContent('—')
+  })
+
+  it('贏大盤標成 gain、輸大盤標成 loss', () => {
+    renderTable({ visibleColumns: ['Y1'], sortBy: 'Y1', showExcess: true })
+    const table = within(screen.getByRole('table'))
+    const rowOf = (c: string) => table.getAllByRole('row').find((r) => within(r).queryByText(c))!
+    expect(within(rowOf('0050')).getByText('+4.21%')).toHaveClass('gain')
+    expect(within(rowOf('0056')).getByText('-1.68%')).toHaveClass('loss')
+  })
+
+  it('sortBy 為 null 時不渲染超額報酬欄 —— 沒有期間就沒有對應的超額', () => {
+    renderTable({ visibleColumns: [], sortBy: null, showExcess: true })
+    expect(screen.queryByRole('columnheader', { name: /超額/ })).not.toBeInTheDocument()
+  })
+})

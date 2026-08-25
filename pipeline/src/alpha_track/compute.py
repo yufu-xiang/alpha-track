@@ -22,6 +22,14 @@ MIN_DAYS_FOR_RISK = 60
 MIN_DAYS_FOR_SHARPE = 250
 """規格 §4.4:Sharpe 與 Beta 需至少一年樣本。"""
 
+BENCHMARK_LOOKBACK_DAYS = 7
+"""查基準指數時允許回看的天數。
+
+基準與價格的出檔時間不一定同步:實測基準最新到 08-24 而價格已到 08-25。
+要求日期精確吻合的話,超額報酬會整批變成 null。回看只是為了容忍這種
+時間差與連假,不是拿幾週前的指數硬湊 —— 超過就回傳 None。
+"""
+
 INCEPTION_TOLERANCE_DAYS = 30
 """最早資料日期與掛牌日相差在此天數內,才認可「成立以來」報酬。
 免費資料源的起始日常與掛牌日差幾個交易日,不必因此整欄作廢。"""
@@ -32,6 +40,8 @@ class EtfMetrics:
     code: str
     returns: dict[str, float | None] = field(default_factory=dict)
     annualized: dict[str, float | None] = field(default_factory=dict)
+    excess: dict[str, float | None] = field(default_factory=dict)
+    """相對加權報酬指數的超額報酬(規格 §4.5b)。同期間的標的報酬減大盤報酬。"""
     volatility: float | None = None
     mdd: float | None = None
     sharpe: float | None = None
@@ -39,6 +49,17 @@ class EtfMetrics:
     premium_discount: float | None = None
     data_start: date | None = None
     """最早持有價格資料的日期。與掛牌日不同時,前端據此說明實際涵蓋範圍。"""
+
+
+def _benchmark_at(
+    bench_closes: Mapping[date, float], target: date
+) -> float | None:
+    """取 target 當日的基準指數;當日沒有就往回找,最多 BENCHMARK_LOOKBACK_DAYS 天。"""
+    for back in range(BENCHMARK_LOOKBACK_DAYS + 1):
+        value = bench_closes.get(target - timedelta(days=back))
+        if value is not None:
+            return value
+    return None
 
 
 def compute_etf_metrics(
@@ -62,6 +83,7 @@ def compute_etf_metrics(
     m = EtfMetrics(code=code)
     m.returns = {p.value: None for p in Period}
     m.annualized = {p.value: None for p in Period}
+    m.excess = {p.value: None for p in Period}
 
     if not prices:
         return m
@@ -96,6 +118,13 @@ def compute_etf_metrics(
             m.annualized[period.value] = cagr(
                 ret, years_between(start.date, end.date)
             )
+
+        # 超額報酬:同一段期間內,標的報酬減大盤報酬(規格 §4.5b)。
+        # 兩端都要查得到基準才算,否則留 None —— 不拿別的期間頂替。
+        bench_start = _benchmark_at(bench_closes, start.date)
+        bench_end = _benchmark_at(bench_closes, end.date)
+        if bench_start is not None and bench_end is not None and bench_start > 0:
+            m.excess[period.value] = ret - total_return(bench_start, bench_end)
 
     adj = [by_date[d].adj_close for d in own_days]
     if len(adj) >= MIN_DAYS_FOR_RISK:

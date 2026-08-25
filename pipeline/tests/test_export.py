@@ -18,6 +18,7 @@ def metrics(code="0050") -> EtfMetrics:
     m = EtfMetrics(code=code)
     m.returns = {"D1": 0.0052, "Y1": 0.1834, "Y10": None}
     m.annualized = {"D1": None, "Y1": None, "Y10": None}
+    m.excess = {"D1": 0.0011, "Y1": 0.0421, "Y10": None}
     m.volatility = 0.1833
     m.mdd = -0.25
     m.sharpe = 0.9
@@ -32,8 +33,8 @@ def test_rankings_uses_exact_contract_field_names():
     etf = out["etfs"][0]
     assert set(etf.keys()) == {
         "code", "name", "category", "region", "is_leveraged", "is_inverse",
-        "close", "listing_date", "data_start", "returns", "annualized", "risk",
-        "premium_discount",
+        "close", "listing_date", "data_start", "returns", "annualized",
+        "excess", "risk", "premium_discount",
     }
     assert set(etf["risk"].keys()) == {"volatility", "mdd", "sharpe", "beta"}
 
@@ -65,6 +66,13 @@ def test_missing_listing_date_serializes_as_null():
     out = build_rankings(date(2026, 8, 21),
                          [(profile(listing_date=None), metrics(), 195.5)])
     assert out["etfs"][0]["listing_date"] is None
+
+
+def test_excess_return_is_exported():
+    """規格 §4.5b 明文要提供,先前整條漏掉了。"""
+    out = build_rankings(date(2026, 8, 21), [(profile(), metrics(), 195.5)])
+    assert out["etfs"][0]["excess"]["Y1"] == 0.0421
+    assert out["etfs"][0]["excess"]["Y10"] is None
 
 
 def test_rankings_does_not_alias_the_metrics_dicts():
