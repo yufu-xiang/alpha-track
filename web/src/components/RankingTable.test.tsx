@@ -48,7 +48,7 @@ describe('RankingTable', () => {
   })
 
   it('資料不足的欄位顯示破折號而非 0', () => {
-    renderTable({ visibleColumns: ['Y10'] })
+    renderTable({ visibleColumns: ['Y10'], sortBy: 'Y10' })
     const row = within(screen.getByRole('table'))
       .getAllByRole('row')
       .find((r) => within(r).queryByText('00929'))!
@@ -80,7 +80,7 @@ describe('RankingTable', () => {
   })
 
   it('風險欄位標頭附帶指標說明按鈕', () => {
-    renderTable({ visibleColumns: [], showRisk: true })
+    renderTable({ visibleColumns: [], showRisk: true, sortBy: null })
     expect(screen.getByRole('button', { name: /夏普值.*說明/ })).toBeInTheDocument()
   })
 
@@ -89,7 +89,7 @@ describe('RankingTable', () => {
     // 就會把整張表翻掉,而使用者不會意識到是自己按出來的。
     const onSortChange = vi.fn()
     const user = userEvent.setup()
-    renderTable({ visibleColumns: [], showRisk: true, onSortChange })
+    renderTable({ visibleColumns: [], showRisk: true, sortBy: null, onSortChange })
     const before = bodyRowCodes()
     await user.click(screen.getByRole('button', { name: /夏普值.*說明/ }))
     expect(screen.getByRole('dialog')).toBeInTheDocument()
@@ -102,7 +102,7 @@ describe('RankingTable', () => {
     // 說明看不完整等於這個功能不存在,而這件事只有真的打開瀏覽器才看得到,
     // 所以在這裡把「必須在容器外」這個結構條件釘住。
     const user = userEvent.setup()
-    const { container } = renderTable({ visibleColumns: [], showRisk: true })
+    const { container } = renderTable({ visibleColumns: [], showRisk: true, sortBy: null })
     await user.click(screen.getByRole('button', { name: /夏普值.*說明/ }))
     const dialog = screen.getByRole('dialog')
     expect(container.querySelector('.table-wrap')!.contains(dialog)).toBe(false)
@@ -140,7 +140,7 @@ describe('RankingTable', () => {
   it('正報酬標成 gain、負報酬標成 loss,資料不足兩者皆無', () => {
     // 樣式表只驗得到 CSS 文字裡有 var(--gain);真正決定畫面上有沒有顏色的
     // 是這裡有沒有吐出對應的 class。少了它,CSS 測試全綠而畫面一片灰。
-    renderTable({ visibleColumns: ['D1', 'Y10'] })
+    renderTable({ visibleColumns: ['D1', 'Y10'], sortBy: 'D1' })
     const table = within(screen.getByRole('table'))
     const rowOf = (code: string) =>
       table.getAllByRole('row').find((r) => within(r).queryByText(code))!
@@ -155,13 +155,13 @@ describe('RankingTable', () => {
 
   it('零報酬不著色 —— 沒漲沒跌不是漲也不是跌', () => {
     const flat = ROWS.map((r) => ({ ...r, returns: { ...r.returns, D1: 0 } }))
-    renderTable({ rows: flat, visibleColumns: ['D1'] })
+    renderTable({ rows: flat, visibleColumns: ['D1'], sortBy: 'D1' })
     const cell = within(screen.getByRole('table')).getAllByRole('row')[1]!
     expect(within(cell).getByText('0.00%').className).toBe('')
   })
 
   it('風險欄位不著色 —— 最大回撤恆為負、波動度高也不代表糟', () => {
-    renderTable({ visibleColumns: [], showRisk: true })
+    renderTable({ visibleColumns: [], showRisk: true, sortBy: null })
     const row = within(screen.getByRole('table'))
       .getAllByRole('row')
       .find((r) => within(r).queryByText('0050'))!
@@ -169,7 +169,7 @@ describe('RankingTable', () => {
   })
 
   it('報酬以百分比呈現並帶正負號', () => {
-    renderTable({ visibleColumns: ['D1'] })
+    renderTable({ visibleColumns: ['D1'], sortBy: 'D1' })
     const row = within(screen.getByRole('table'))
       .getAllByRole('row')
       .find((r) => within(r).queryByText('0050'))!
