@@ -139,12 +139,26 @@ export function RankingTable({
     return <p className="empty-state">沒有符合條件的 ETF。試著放寬篩選條件。</p>
   }
 
+  // 名次是**排序的結果**,不是一個資料欄位 —— 所以不做成 TanStack 欄位,
+  // 直接依顯示順序算。規格 §4.3:資料不足者不參與排名,那些顯示「—」而
+  // 不是編號 —— 依十年排序時,沒有十年資料的不是「第 300 名」,是沒有排名。
+  const sortedId = sorting[0]?.id
+  const displayRows = table.getRowModel().rows
+  const ranks = new Map<string, number>()
+  let nextRank = 1
+  for (const row of displayRows) {
+    if (!sortedId) continue                       // 沒有排序就沒有名次可言
+    if (row.getValue(sortedId) === undefined) continue   // toSortable 把 null 映成 undefined
+    ranks.set(row.id, nextRank++)
+  }
+
   return (
     <div className="table-wrap">
       <table>
         <thead>
           {table.getHeaderGroups().map((hg) => (
             <tr key={hg.id}>
+              <th className="col-rank">名次</th>
               {hg.headers.map((header) => {
                 const canSort = header.column.getCanSort()
                 const isPeriod = (visibleColumns as string[]).includes(header.column.id)
@@ -184,8 +198,9 @@ export function RankingTable({
           ))}
         </thead>
         <tbody>
-          {table.getRowModel().rows.map((row) => (
+          {displayRows.map((row) => (
             <tr key={row.id}>
+              <td className="col-rank">{ranks.get(row.id) ?? '—'}</td>
               {row.getVisibleCells().map((cell) => (
                 <td key={cell.id}>
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}

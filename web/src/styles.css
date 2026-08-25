@@ -21,6 +21,8 @@
   /* 窄螢幕凍結第一欄的寬度。第二欄的 left 位移直接引用這個變數,
      兩者各寫各的魔術數字就會疊在一起。 */
   --sticky-code-w: 76px;
+  /* 名次欄在窄螢幕的寬度。第二欄的 left 位移引用它,兩者不可各寫各的。 */
+  --sticky-rank-w: 40px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -211,9 +213,19 @@ th, td {
   border-bottom: 1px solid var(--border);
 }
 
-th:nth-child(1), td:nth-child(1),
+/* 名次靠右(數字對齊),代號/名稱/分類靠左。名次欄插在最前面,
+   所以文字欄位的序號各往後推一位。 */
 th:nth-child(2), td:nth-child(2),
-th:nth-child(3), td:nth-child(3) { text-align: left; }
+th:nth-child(3), td:nth-child(3),
+th:nth-child(4), td:nth-child(4) { text-align: left; }
+
+.col-rank {
+  text-align: right;
+  color: var(--fg-muted);
+  font-variant-numeric: tabular-nums;
+  width: 3rem;
+  min-width: 3rem;
+}
 
 thead th {
   position: sticky;
@@ -245,18 +257,22 @@ td .loss { color: var(--loss); }
 
 /* 窄螢幕:凍結代號與名稱欄 */
 @media (max-width: 768px) {
+  /* 凍結名次與代號兩欄。名稱欄在窄螢幕不凍結 —— 三欄凍結會吃掉大半寬度,
+     反而看不到報酬數字,而排行榜的重點就是那些數字。 */
   th:nth-child(1), td:nth-child(1) {
     position: sticky;
     left: 0;
     z-index: 1;
-    width: var(--sticky-code-w);
-    min-width: var(--sticky-code-w);
+    width: var(--sticky-rank-w);
+    min-width: var(--sticky-rank-w);
     background: var(--bg);
   }
   th:nth-child(2), td:nth-child(2) {
     position: sticky;
-    left: var(--sticky-code-w);
+    left: var(--sticky-rank-w);
     z-index: 1;
+    width: var(--sticky-code-w);
+    min-width: var(--sticky-code-w);
     background: var(--bg);
   }
   thead th:nth-child(1), thead th:nth-child(2) { z-index: 3; background: var(--surface); }

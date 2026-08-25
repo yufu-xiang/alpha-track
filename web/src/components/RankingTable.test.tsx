@@ -27,8 +27,9 @@ function renderTable(props: Partial<Parameters<typeof RankingTable>[0]> = {}) {
 }
 
 function bodyRowCodes(): string[] {
+  // 第 0 格是名次,代號在第 1 格
   const rows = within(screen.getByRole('table')).getAllByRole('row').slice(1)
-  return rows.map((r) => within(r).getAllByRole('cell')[0]!.textContent!.trim())
+  return rows.map((r) => within(r).getAllByRole('cell')[1]!.textContent!.trim())
 }
 
 describe('RankingTable', () => {
@@ -258,5 +259,62 @@ describe('RankingTable 排序指示', () => {
       .not.toHaveClass('is-sortable')
     expect(screen.getByRole('columnheader', { name: /^一年/ }))
       .toHaveClass('is-sortable')
+  })
+})
+
+describe('RankingTable 名次', () => {
+  it('第一欄是名次,依當前排序由 1 起算', () => {
+    renderTable({ visibleColumns: ['Y1'], sortBy: 'Y1' })
+    const rows = within(screen.getByRole('table')).getAllByRole('row').slice(1)
+    expect(within(rows[0]!).getAllByRole('cell')[0]).toHaveTextContent('1')
+    expect(within(rows[1]!).getAllByRole('cell')[0]).toHaveTextContent('2')
+  })
+
+  it('反轉排序後名次跟著重排', async () => {
+    const user = userEvent.setup()
+    renderTable({ visibleColumns: ['Y1'], sortBy: 'Y1' })
+    const first = () => {
+      const r = within(screen.getByRole('table')).getAllByRole('row')[1]!
+      const cells = within(r).getAllByRole('cell')
+      return [cells[0]!.textContent, cells[1]!.textContent]
+    }
+    expect(first()).toEqual(['1', '00631L'])
+    await user.click(screen.getByRole('columnheader', { name: /^一年/ }))
+    expect(first()[0]).toBe('1')
+    expect(first()[1]).not.toBe('00631L')
+  })
+
+  it('資料不足者不給名次 —— 規格 §4.3 明文「不參與排名」', () => {
+    // 依十年排序時,沒有十年資料的不是「第 300 名」,是沒有排名。
+    // 給它編號等於憑空造出一個不存在的名次。
+    renderTable({ visibleColumns: ['Y10'], sortBy: 'Y10' })
+    const table = within(screen.getByRole('table'))
+    const rowOf = (c: string) => table.getAllByRole('row')
+      .find((r) => within(r).queryByText(c))!
+    expect(within(rowOf('00929')).getAllByRole('cell')[0]).toHaveTextContent('—')
+    expect(within(rowOf('0050')).getAllByRole('cell')[0]).not.toHaveTextContent('—')
+  })
+
+  it('名次不因為前面有無名次者而跳號', () => {
+    // 三檔沒有十年資料排在最後,不影響前面的連號。
+    renderTable({ visibleColumns: ['Y10'], sortBy: 'Y10' })
+    const nums = within(screen.getByRole('table')).getAllByRole('row').slice(1)
+      .map((r) => within(r).getAllByRole('cell')[0]!.textContent!.trim())
+      .filter((t) => t !== '—')
+    expect(nums).toEqual(['1', '2', '3', '4'])
+  })
+
+  it('篩選後名次自 1 重新起算', () => {
+    const subset = ROWS.filter((r) => r.category === '高股息')
+    renderTable({ rows: subset, visibleColumns: ['Y1'], sortBy: 'Y1' })
+    const rows = within(screen.getByRole('table')).getAllByRole('row').slice(1)
+    expect(within(rows[0]!).getAllByRole('cell')[0]).toHaveTextContent('1')
+    expect(rows).toHaveLength(subset.length)
+  })
+
+  it('名次欄不可排序 —— 它是排序的結果,不是排序的依據', () => {
+    renderTable({ visibleColumns: ['Y1'], sortBy: 'Y1' })
+    expect(screen.getByRole('columnheader', { name: '名次' }))
+      .not.toHaveClass('is-sortable')
   })
 })
