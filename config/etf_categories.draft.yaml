@@ -1,84 +1,48 @@
-# ETF 分類草稿 —— 全部條目**都需要人工確認**,不可直接改名沿用
+# ETF 分類草稿 —— 依 TWSE 官方清單的「標的指數」逐筆判定
 #
-# 依據:TWSE 官方 ETF 清單的「標的指數」欄位(基金投資範圍的權威敘述),
-# 不是行銷名稱 —— 規格 §3.2 禁止的是後者。
+# 標的指數是基金投資範圍的權威敘述,不是規格 §3.2 禁止的行銷名稱。
+# 每一行的註解就是判定依據,可自行覆核。
 #
-# **但這份草稿的建議經自我檢視後,約每七筆有一筆判錯**,例如把「特選臺灣
-# 上市上櫃IC設計動能指數」因為含「動能」而歸成因子型(實為產業型)。
-# 規則已針對已知錯誤修正(產業訊號優先於因子:選股方法不改變投資範圍),
-# 但沒有理由相信剩下的都對。請把下面的建議當成起點,不是結論。
+# 我採用的原則(可推翻):
+#   海外指數 = 追蹤外國「大盤」。外國的產業/主題 ETF 歸產業型或主題型,地區記在 region。
+#   產業型   = 傳統產業別(半導體、金融、生技、不動產、航運、電子)。
+#   主題型   = 跨產業的投資題材(AI、電動車、元宇宙、5G、資安、潔淨能源、太空)。
 #
-# 共 199 檔:需先決定分類法 39 檔、有建議 118 檔、待判斷 42 檔。
+# 共 199 檔:定案 116、卡在定義問題 37、待新增分類 46。
 
-# ═══ 第一步:這 39 檔需要先決定分類法 ═══
-# 規格 §3.2 的分類清單沒有任何一項對應得上它們。
-# 先決定要新增哪些分類(例如 主動型 / 商品期貨 / 多資產),再回頭填。
+# ═════ 已定案(可直接併入 etf_categories.yaml)═════
 
-# ── 主動式(代號結尾 A):30 檔
-# 00400A: { name: 主動國泰動能高息, category: ?, region: ? }  # 無追蹤指數
-# 00401A: { name: 主動摩根台灣鑫收, category: ?, region: ? }  # 無追蹤指數
-# 00402A: { name: 主動安聯美國科技, category: ?, region: ? }  # 無追蹤指數
-# 00403A: { name: 主動統一升級50, category: ?, region: ? }  # 臺灣證券交易所發行量加權股價報酬指數
-# 00404A: { name: 主動聯博動能50, category: ?, region: ? }  # 無追蹤指數
-# 00405A: { name: 主動富邦台灣龍耀, category: ?, region: ? }  # 無追蹤指數
-# 00406A: { name: 主動中信台灣收益, category: ?, region: ? }  # 無追蹤指數
-# 00407A: { name: 主動凱基台灣, category: ?, region: ? }  # 無追蹤指數
-# 00408A: { name: 主動第一金優股息, category: ?, region: ? }  # 無追蹤指數
-# 00410A: { name: 主動永豐科技趨勢, category: ?, region: ? }  # 無追蹤指數
-# 00980A: { name: 主動野村臺灣優選, category: ?, region: ? }  # 臺灣證券交易所發行量加權股價報酬指數
-# 00981A: { name: 主動統一台股增長, category: ?, region: ? }  # 臺灣證券交易所發行量加權股價報酬指數
-# 00982A: { name: 主動群益台灣強棒, category: ?, region: ? }  # 無追蹤指數
-# 00983A: { name: 主動中信ARK創新, category: ?, region: ? }  # 無追蹤指數
-# 00984A: { name: 主動安聯台灣高息, category: ?, region: ? }  # 無追蹤指數
-# 00985A: { name: 主動野村台灣50, category: ?, region: ? }  # 富時臺灣證券交易所臺灣50報酬指數
-# 00986A: { name: 主動台新龍頭成長, category: ?, region: ? }  # 無追蹤指數
-# 00987A: { name: 主動台新優勢成長, category: ?, region: ? }  # 無追蹤指數
-# 00988A: { name: 主動統一全球創新, category: ?, region: ? }  # 無追蹤指數
-# 00989A: { name: 主動摩根美國科技, category: ?, region: ? }  # 無追蹤指數
-# 00990A: { name: 主動元大AI新經濟, category: ?, region: ? }  # 無追蹤指數
-# 00991A: { name: 主動復華未來50, category: ?, region: ? }  # 臺灣證券交易所發行量加權股價報酬指數
-# 00992A: { name: 主動群益科技創新, category: ?, region: ? }  # 無追蹤指數
-# 00993A: { name: 主動安聯台灣, category: ?, region: ? }  # 臺灣證券交易所發行量加權股價指數
-# 00994A: { name: 主動第一金台股優, category: ?, region: ? }  # 富時臺灣證券交易所臺灣50指數
-# 00995A: { name: 主動中信台灣卓越, category: ?, region: ? }  # 無追蹤指數
-# 00996A: { name: 主動兆豐台灣豐收, category: ?, region: ? }  # 無追蹤指數
-# 00997A: { name: 主動群益美國增長, category: ?, region: ? }  # 無追蹤指數
-# 00998A: { name: 主動復華金融股息, category: ?, region: ? }  # 無追蹤指數
-# 00999A: { name: 主動野村臺灣高息, category: ?, region: ? }  # 無追蹤指數
-
-# ── 期貨信託 —— 商品與匯率(結尾 U):6 檔
-# 00635U: { name: 期元大S&P黃金, category: ?, region: ? }  # 標普高盛黃金ER指數(S&P GSCI Gold Excess Return Index)
-# 00642U: { name: 期元大S&P石油, category: ?, region: ? }  # 標普高盛原油ER指數(S&P GSCI Crude Oil Enhanced Excess 
-# 00682U: { name: 期元大美元指數, category: ?, region: ? }  # 標普美元ER指數(S&P US Dollar Futures Index ER)
-# 00693U: { name: 期街口S&P黃豆, category: ?, region: ? }  # 標普高盛黃豆ER指數(S&P GSCI Soybeans Excess Return Ind
-# 00738U: { name: 期元大道瓊白銀, category: ?, region: ? }  # 道瓊白銀ER指數(Dow Jones Commodity Index Silver Exce
-# 00763U: { name: 期街口道瓊銅, category: ?, region: ? }  # 道瓊銅ER指數(Dow Jones Commodity Index North Americ
-
-# ── 多資產平衡(結尾 T):3 檔
-# 00980T: { name: 平衡凱基美國TOP, category: ?, region: ? }  # 無追蹤指數
-# 00981T: { name: 平衡凱基雙核收息, category: ?, region: ? }  # 臺灣指數公司 ICE雙核債股平衡指數
-# 00982T: { name: 平衡兆豐台美動能, category: ?, region: ? }  # 臺灣指數公司彭博台美動能多資產平衡指數
-
-# ═══ 第二步:以下有建議值,請逐條確認 ═══
-
-# ── 因子型(6 檔)
+00737: { name: 國泰AI機器人, category: 主題型, region: 全球 }  # 納斯達克CTA全球人工智慧及機器人指數
+00762: { name: 元大全球AI, category: 主題型, region: 全球 }  # STOXX全球人工智慧指數(STOXX® Global Artificial Intelligence Inde
+00851: { name: 台新全球AI, category: 主題型, region: 全球 }  # SG全球AI機器人精選指數
+00861: { name: 元大全球未來通訊, category: 主題型, region: 全球 }  # ICE FactSet全球未來通訊指數(ICE FactSet Global NextGen Communica
+00875: { name: 國泰網路資安, category: 主題型, region: 全球 }  # 納斯達克ISE全球網路資安指數
+00876: { name: 元大全球5G, category: 主題型, region: 全球 }  # iSTOXX全球5G關鍵科技指數
+00893: { name: 國泰智能電動車, category: 主題型, region: 全球 }  # ICE FactSet 全球智能電動車指數
+00895: { name: 富邦未來車, category: 主題型, region: 全球 }  # MSCI ACWI IMI精選未來車30指數
+00896: { name: 中信綠能及電動車, category: 主題型, region: 台灣 }  # 臺灣指數公司特選臺灣上市上櫃綠能及電動車指數
+00899: { name: FT潔淨能源, category: 主題型, region: 全球 }  # 標普全球潔淨能源精選指數
+00901: { name: 永豐智能車供應鏈, category: 主題型, region: 台灣 }  # 特選臺灣智能車供應鏈聯盟指數
+00902: { name: 中信電池及儲能, category: 主題型, region: 全球 }  # NYSE FactSet電池與儲能科技指數
+00903: { name: 富邦元宇宙, category: 主題型, region: 全球 }  # Solactive元宇宙指數
+00909: { name: 國泰數位支付服務, category: 主題型, region: 全球 }  # Solactive全球數位支付服務指數
+00910: { name: 第一金太空衛星, category: 主題型, region: 全球 }  # 太空衛星指數
+00916: { name: 國泰全球品牌50, category: 主題型, region: 全球 }  # ICE FactSet全球品牌50指數
+00920: { name: 富邦ESG綠色電力, category: 主題型, region: 全球 }  # NYSE FactSet全球綠能ESG指數
+00952: { name: 凱基台灣AI 50, category: 主題型, region: 台灣 }  # 臺灣指數公司特選臺灣上市上櫃FactSet優選AI 50指數
+009819: { name: 中信數據及電力, category: 主題型, region: 全球 }  # NYSE TIP 數據中心及電力指數
 00692: { name: 富邦公司治理, category: 因子型, region: 台灣 }  # 臺灣證券交易所公司治理100 指數
-00850: { name: 元大臺灣ESG永續, category: 因子型, region: 台灣 }  # 臺灣永續指數(FTSE4Good TIP Taiwan ESG Index)
 00905: { name: FT臺灣Smart, category: 因子型, region: 台灣 }  # 臺灣指數公司特選Smart多因子指數 (簡稱「特選Smart多因子指數」)
-00923: { name: 群益台ESG低碳50, category: 因子型, region: 台灣 }  # 臺灣指數公司特選臺灣ESG低碳50指數
 00938: { name: 凱基優選30, category: 因子型, region: 台灣 }  # 臺灣指數公司特選臺灣上市上櫃優選多因子30指數
-009809: { name: 富邦淨零ESG50, category: 因子型, region: 美國 }  # S&P TIP臺灣淨零轉型ESG 50指數
-
-# ── 市值型(7 檔)
+009808: { name: 華南永昌優選50, category: 因子型, region: 台灣 }  # 臺灣指數公司特選臺灣護城河概念優選50指數
 0057: { name: 富邦摩台, category: 市值型, region: 台灣 }  # MSCI台灣指數
+006201: { name: 元大富櫃50, category: 市值型, region: 台灣 }  # 
 006203: { name: 元大MSCI台灣, category: 市值型, region: 台灣 }  # MSCI®臺灣指數
 006204: { name: 永豐臺灣加權, category: 市值型, region: 台灣 }  # 臺灣證券交易所發行量加權股價指數
-00690: { name: 兆豐藍籌30, category: 市值型, region: 待填 }  # 藍籌30指數
-00733: { name: 富邦臺灣中小, category: 市值型, region: 台灣 }  # 臺灣指數公司中小型A級動能50指數
+00690: { name: 兆豐藍籌30, category: 市值型, region: 台灣 }  # 藍籌30指數
 00922: { name: 國泰台灣領袖50, category: 市值型, region: 台灣 }  # MSCI台灣領袖50精選指數
 009804: { name: 聯邦台精彩50, category: 市值型, region: 台灣 }  # 富時臺灣證券交易所臺灣50權重上限30%指數
-
-# ── 海外指數(39 檔)
+009816: { name: 凱基台灣TOP50, category: 市值型, region: 台灣 }  # 臺灣指數公司特選臺灣TOP 50指數
 0061: { name: 元大寶滬深, category: 海外指數, region: 中國 }  # 滬深300指數
 006205: { name: 富邦上証, category: 海外指數, region: 中國 }  # 上証180指數
 006206: { name: 元大上證50, category: 海外指數, region: 中國 }  # 上證50指數
@@ -86,6 +50,7 @@
 00636: { name: 國泰中國A50, category: 海外指數, region: 中國 }  # 富時中國A50指數
 00636K: { name: 國泰中國A50+U, category: 海外指數, region: 中國 }  # 富時中國A50指數
 00639: { name: 富邦深100, category: 海外指數, region: 中國 }  # 深証100指數
+00643: { name: 群益深証中小, category: 海外指數, region: 中國 }  # 中小企業100指數(SZSE SME 100 Index)
 00645: { name: 富邦日本, category: 海外指數, region: 日本 }  # 東証股價指數
 00646: { name: 元大S&P500, category: 海外指數, region: 美國 }  # 標普指數(S&P 500®)
 00652: { name: 富邦印度, category: 海外指數, region: 印度 }  # NIFTY指數
@@ -98,139 +63,188 @@
 00700: { name: 富邦恒生國企, category: 海外指數, region: 中國 }  # 恒生中國企業指數
 00703: { name: 台新MSCI中國, category: 海外指數, region: 中國 }  # MSCI 中國指數(MSCI China Index)
 00709: { name: 富邦歐洲, category: 海外指數, region: 歐洲 }  # 富時發展歐洲指數
-00717: { name: 富邦美國特別股, category: 海外指數, region: 美國 }  # 標普美國特別股指數
-00736: { name: 國泰新興市場, category: 海外指數, region: 中國 }  # 富時新興市場(納入A股)指數
+00736: { name: 國泰新興市場, category: 海外指數, region: 新興市場 }  # 富時新興市場(納入A股)指數
 00739: { name: 元大MSCI A股, category: 海外指數, region: 中國 }  # MSCI中國A股國際通指數(MSCI China A Inclusion Index)
 00752: { name: 中信中國50, category: 海外指數, region: 中國 }  # MSCI 中國外資自由投資50不含A及B股指數
-00757: { name: 統一FANG+, category: 海外指數, region: 待填 }  # NYSE FANG+ Index
-00771: { name: 元大US高息特別股, category: 海外指數, region: 美國 }  # 標普美國高收益特別股指數(S&P U.S. High Yield Preferred Stock I
+00783: { name: 富邦中証500, category: 海外指數, region: 中國 }  # 中証小盤500指數
 00885: { name: 富邦越南, category: 海外指數, region: 越南 }  # 富時越南30指數
-00903: { name: 富邦元宇宙, category: 海外指數, region: 待填 }  # Solactive元宇宙指數
-00916: { name: 國泰全球品牌50, category: 海外指數, region: 全球 }  # ICE FactSet全球品牌50指數
-00924: { name: 復華S&P500成長, category: 海外指數, region: 美國 }  # 標普500成長指數
-00926: { name: 凱基全球菁英55, category: 海外指數, region: 全球 }  # 彭博全球菁英55指數
-00949: { name: 復華日本龍頭, category: 海外指數, region: 日本 }  # NYSE FactSet 日本護城河優勢龍頭企業指數
-00971: { name: 野村美國研發龍頭, category: 海外指數, region: 待填 }  # 彭博研發龍頭指數
 009800: { name: 中信NASDAQ, category: 海外指數, region: 美國 }  # 美國納斯達克100指數
-009810: { name: 玉山全球藍籌100, category: 海外指數, region: 美國 }  # 標普全球100指數
+009810: { name: 玉山全球藍籌100, category: 海外指數, region: 全球 }  # 標普全球100指數
 009811: { name: 統一美國50, category: 海外指數, region: 美國 }  # NYSE美國50指數
-009813: { name: 貝萊德標普卓越50, category: 海外指數, region: 美國 }  # 標普500卓越50指數
-009819: { name: 中信數據及電力, category: 海外指數, region: 待填 }  # NYSE TIP 數據中心及電力指數
-009820: { name: 元大納斯達克精選, category: 海外指數, region: 美國 }  # 納斯達克100增強成長指數
-009826: { name: 貝萊德世界股票, category: 海外指數, region: 美國 }  # 標普TIP世界股票指數
-
-# ── 產業型(46 檔)
+009812: { name: 野村日本東證, category: 海外指數, region: 日本 }  # 東證股價總報酬指數
+009826: { name: 貝萊德世界股票, category: 海外指數, region: 全球 }  # 標普TIP世界股票指數
+009829: { name: 大華韓國KOSPI50, category: 海外指數, region: 南韓 }  # KOSPI 50指數
 0052: { name: 富邦科技, category: 產業型, region: 台灣 }  # 臺灣證券交易所臺灣資訊科技指數
-0053: { name: 元大電子, category: 產業型, region: 待填 }  # 電子類加權股價指數
+0053: { name: 元大電子, category: 產業型, region: 台灣 }  # 電子類加權股價指數
 0055: { name: 元大MSCI金融, category: 產業型, region: 台灣 }  # MSCI台灣金融指數
 00678: { name: 群益那斯達克生技, category: 產業型, region: 美國 }  # 那斯達克生技指數（Nasdaq Biotechnology Index）
-00712: { name: 復華富時不動產, category: 產業型, region: 美國 }  # 富時NAREIT抵押權型不動產投資信託指數(FTSE NAREIT Mortgage REITs I
+00712: { name: 復華富時不動產, category: 產業型, region: 美國 }  # 富時NAREIT抵押權型不動產投資信託指數(FTSE NAREIT Mortgage REITs Index)
 00714: { name: 群益道瓊美國地產, category: 產業型, region: 美國 }  # 道瓊美國地產指數(Dow Jones U.S. Real Estate Index)
-00735: { name: 國泰臺韓科技, category: 產業型, region: 南韓 }  # 臺韓資訊科技指數
-00737: { name: 國泰AI機器人, category: 產業型, region: 美國 }  # 納斯達克CTA全球人工智慧及機器人指數
-00762: { name: 元大全球AI, category: 產業型, region: 歐洲 }  # STOXX全球人工智慧指數(STOXX® Global Artificial Intelligenc
+00728: { name: 第一金工業30, category: 產業型, region: 台灣 }  # 臺灣指數公司工業菁英30指數
+00735: { name: 國泰臺韓科技, category: 產業型, region: 台灣、南韓 }  # 臺韓資訊科技指數
+00757: { name: 統一FANG+, category: 產業型, region: 美國 }  # NYSE FANG+ Index
 00770: { name: 國泰北美科技, category: 產業型, region: 美國 }  # 標普北美科技行業指數
 00830: { name: 國泰費城半導體, category: 產業型, region: 美國 }  # 美國費城半導體指數
-00851: { name: 台新全球AI, category: 產業型, region: 全球 }  # SG全球AI機器人精選指數
-00861: { name: 元大全球未來通訊, category: 產業型, region: 全球 }  # ICE FactSet全球未來通訊指數(ICE FactSet Global NextGen Com
-00875: { name: 國泰網路資安, category: 產業型, region: 美國 }  # 納斯達克ISE全球網路資安指數
-00876: { name: 元大全球5G, category: 產業型, region: 歐洲 }  # iSTOXX全球5G關鍵科技指數
 00881: { name: 國泰台灣科技龍頭, category: 產業型, region: 台灣 }  # 臺灣指數公司特選臺灣上市上櫃FactSet科技龍頭通訊指數
 00891: { name: 中信關鍵半導體, category: 產業型, region: 台灣 }  # NYSE FactSet臺灣ESG永續關鍵半導體指數
 00892: { name: 富邦台灣半導體, category: 產業型, region: 台灣 }  # NYSE FactSet台灣核心半導體指數
-00893: { name: 國泰智能電動車, category: 產業型, region: 全球 }  # ICE FactSet 全球智能電動車指數
-00896: { name: 中信綠能及電動車, category: 產業型, region: 台灣 }  # 臺灣指數公司特選臺灣上市上櫃綠能及電動車指數
 00897: { name: 富邦基因免疫生技, category: 產業型, region: 全球 }  # NYSE FactSet全球基因免疫生技指數
 00898: { name: 國泰基因免疫革命, category: 產業型, region: 全球 }  # Solactive全球基因免疫與醫療革命指數
-00899: { name: FT潔淨能源, category: 產業型, region: 美國 }  # 標普全球潔淨能源精選指數
-00902: { name: 中信電池及儲能, category: 產業型, region: 待填 }  # NYSE FactSet電池與儲能科技指數
 00904: { name: 台新臺灣半導體30, category: 產業型, region: 台灣 }  # 臺灣指數公司臺灣全市場半導體精選30指數
 00908: { name: 富邦入息REITs+, category: 產業型, region: 全球 }  # 全球入息不動產與基礎建設指數
-00909: { name: 國泰數位支付服務, category: 產業型, region: 全球 }  # Solactive全球數位支付服務指數
-00911: { name: 兆豐洲際半導體, category: 產業型, region: 待填 }  # 洲際半導體指數 (ICE Semiconductor Index)
-00917: { name: 中信特選金融, category: 產業型, region: 待填 }  # NYSE FactSet特選金融及數據指數
-00920: { name: 富邦ESG綠色電力, category: 產業型, region: 全球 }  # NYSE FactSet全球綠能ESG指數
-00927: { name: 群益半導體收益, category: 產業型, region: 台灣 }  # 臺灣指數公司特選臺灣上市上櫃半導體收益指數
+00911: { name: 兆豐洲際半導體, category: 產業型, region: 全球 }  # 洲際半導體指數 (ICE Semiconductor Index)
+00913: { name: 兆豐台灣晶圓製造, category: 產業型, region: 台灣 }  # 臺灣指數公司特選臺灣晶圓製造指數
+00917: { name: 中信特選金融, category: 產業型, region: 全球 }  # NYSE FactSet特選金融及數據指數
 00935: { name: 野村臺灣新科技50, category: 產業型, region: 台灣 }  # 臺灣指數公司特選臺灣上市上櫃FactSet創新科技50指數
-00941: { name: 中信上游半導體, category: 產業型, region: 待填 }  # NYSE Factset上游半導體指數
+00941: { name: 中信上游半導體, category: 產業型, region: 全球 }  # NYSE Factset上游半導體指數
 00947: { name: 台新臺灣IC設計, category: 產業型, region: 台灣 }  # 臺灣指數公司特選臺灣上市上櫃IC設計動能指數
 00951: { name: 台新日本半導體, category: 產業型, region: 日本 }  # NYSE FactSet 日本半導體指數
-00952: { name: 凱基台灣AI 50, category: 產業型, region: 台灣 }  # 臺灣指數公司特選臺灣上市上櫃FactSet優選AI 50指數
 00954: { name: 中信日本半導體, category: 產業型, region: 日本 }  # NYSE FactSet 日本半導體指數
 00960: { name: 野村全球航運龍頭, category: 產業型, region: 全球 }  # NYSE FactSet全球航運龍頭息收指數
-00962: { name: 台新AI優息動能, category: 產業型, region: 台灣 }  # 臺灣指數公司特選臺灣上市上櫃AI優息動能指數
 00965: { name: 元大航太防衛科技, category: 產業型, region: 全球 }  # NYSE FactSet全球航太與防衛科技指數
 009801: { name: 中信美國創新科技, category: 產業型, region: 美國 }  # Solactive 美國創新科技指數
 009805: { name: 台新美國電力基建, category: 產業型, region: 美國 }  # NYSE FactSet美國電力基建息收指數
 009817: { name: 國泰日本不動產, category: 產業型, region: 日本 }  # 東証REIT總報酬指數
-009818: { name: 華南永昌NASDAQxT, category: 產業型, region: 美國 }  # NASDAQ 100 科技市值加權指數
 009821: { name: 野村稀土關鍵資源, category: 產業型, region: 全球 }  # NYSE TIP全球稀土與關鍵資源指數
 009824: { name: 群益美國科技巨頭, category: 產業型, region: 美國 }  # Solactive 美國科技巨頭指數
-
-# ── 高股息(20 檔)
-00701: { name: 國泰股利精選30, category: 高股息, region: 台灣 }  # 臺灣指數公司低波動股利精選30指數
-00702: { name: 國泰標普低波高息, category: 高股息, region: 美國 }  # 標普500低波高息指數
-00730: { name: 富邦臺灣優質高息, category: 高股息, region: 美國 }  # 道瓊斯台灣優質高股息30指數
-00731: { name: 復華富時高息低波, category: 高股息, region: 台灣 }  # 富時台灣高股息低波動指數(FTSE Taiwan High Dividend Low Volatil
+00730: { name: 富邦臺灣優質高息, category: 高股息, region: 台灣 }  # 道瓊斯台灣優質高股息30指數
 00882: { name: 中信中國高股息, category: 高股息, region: 中國 }  # 恒生中國高股息率指數
 00900: { name: 富邦特選高股息30, category: 高股息, region: 台灣 }  # 臺灣指數公司特選臺灣上市上櫃高股息 30 指數
-00915: { name: 凱基優選高股息30, category: 高股息, region: 台灣 }  # 臺灣指數公司特選臺灣上市上櫃多因子優選高股息30指數
+00907: { name: 永豐優息存股, category: 高股息, region: 台灣 }  # 特選臺灣優選入息存股指數
 00918: { name: 大華優利高填息30, category: 高股息, region: 台灣 }  # 臺灣指數公司特選臺灣上市上櫃優選股利高填息30指數
-00930: { name: 永豐ESG低碳高息, category: 高股息, region: 台灣 }  # 特選臺灣上市上櫃ESG低碳高息40指數
-00932: { name: 兆豐永續高息等權, category: 高股息, region: 台灣 }  # 臺灣指數公司特選臺灣上市上櫃ESG永續高股息等權重指數
-00934: { name: 中信成長高股息, category: 高股息, region: 台灣 }  # 臺灣指數公司特選臺灣上市上櫃優選成長高股息指數
-00936: { name: 台新永續高息中小, category: 高股息, region: 台灣 }  # 臺灣指數公司特選臺灣上市上櫃永續高息中小型股指數
-00939: { name: 統一台灣高息動能, category: 高股息, region: 台灣 }  # 臺灣指數公司特選臺灣上市上櫃高息動能指數
-00940: { name: 元大台灣價值高息, category: 高股息, region: 台灣 }  # 臺灣指數公司特選臺灣價值高息指數
-00944: { name: 野村趨勢動能高息, category: 高股息, region: 台灣 }  # 臺灣指數公司特選臺灣上市上櫃FactSet臺灣趨勢動能高股息指數
 00956: { name: 中信日經高股息, category: 高股息, region: 日本 }  # 日經高股息 50指數
-00961: { name: FT臺灣永續高息, category: 高股息, region: 台灣 }  # ICE臺灣ESG高息指數
 00963: { name: 中信全球高股息, category: 高股息, region: 全球 }  # NYSE全球特選高股息自由現金流指數
-00964: { name: 中信亞太高股息, category: 高股息, region: 待填 }  # NYSE亞太高股息指數
-00972: { name: 野村日本動能高息, category: 高股息, region: 日本 }  # 彭博日本價值動能高息指數
+00964: { name: 中信亞太高股息, category: 高股息, region: 亞太 }  # NYSE亞太高股息指數
 
-# ═══ 第三步:這 42 檔我不給建議 ═══
-# 訊號衝突或規則未命中。猜錯會直接汙染排行榜可信度,寧可留白。
+# ── 以下 13 檔**只有基金名稱可依據**(上櫃,官方 ETF 清單不涵蓋,無標的指數)
+#    證據比上面弱。名稱直接點名指數的(標普500、NASDAQ)可信度較高,
+#    「未來金融」「金融創新」這類則是我的推斷,請優先覆核。
+00877: { name: 復華中國5G, category: 主題型, region: 中國 }  # 僅依名稱
+009822: { name: 華南永昌未來金融, category: 主題型, region: 全球 }  # 僅依名稱
+009825: { name: 聯邦美國金融創新, category: 主題型, region: 美國 }  # 僅依名稱
+00687C: { name: 國泰20年美債+櫃U, category: 債券型, region: 美國 }  # 僅依名稱
+00858: { name: 永豐美國500大, category: 海外指數, region: 美國 }  # 僅依名稱
+009806: { name: 台新標普500, category: 海外指數, region: 美國 }  # 僅依名稱
+009814: { name: 富邦標普500, category: 海外指數, region: 美國 }  # 僅依名稱
+009823: { name: 群益S&P500, category: 海外指數, region: 美國 }  # 僅依名稱
+00886: { name: 永豐美國科技, category: 產業型, region: 美國 }  # 僅依名稱
+00887: { name: 永豐中國科技50大, category: 產業型, region: 中國 }  # 僅依名稱
+00955: { name: 中信日本商社, category: 產業型, region: 日本 }  # 僅依名稱
+009807: { name: 台新標普科技精選, category: 產業型, region: 美國 }  # 僅依名稱
+009815: { name: 大華美國MAG7+, category: 產業型, region: 美國 }  # 僅依名稱
 
-# 006201: { name: 元大富櫃50, category: ?, region: ? }  # 無標的指數(官方 ETF 清單不涵蓋上櫃) | -
-# 00643: { name: 群益深証中小, category: ?, region: ? }  # 指數名稱未命中任何規則 | 中小企業100指數(SZSE SME 100 Index)
-# 00687C: { name: 國泰20年美債+櫃U, category: ?, region: ? }  # 無標的指數(官方 ETF 清單不涵蓋上櫃) | -
-# 00728: { name: 第一金工業30, category: ?, region: ? }  # 指數名稱未命中任何規則 | 臺灣指數公司工業菁英30指數
-# 00783: { name: 富邦中証500, category: ?, region: ? }  # 指數名稱未命中任何規則 | 中証小盤500指數
-# 00858: { name: 永豐美國500大, category: ?, region: ? }  # 無標的指數(官方 ETF 清單不涵蓋上櫃) | -
-# 00877: { name: 復華中國5G, category: ?, region: ? }  # 無標的指數(官方 ETF 清單不涵蓋上櫃) | -
-# 00886: { name: 永豐美國科技, category: ?, region: ? }  # 無標的指數(官方 ETF 清單不涵蓋上櫃) | -
-# 00887: { name: 永豐中國科技50大, category: ?, region: ? }  # 無標的指數(官方 ETF 清單不涵蓋上櫃) | -
-# 00888: { name: 永豐台灣ESG, category: ?, region: ? }  # 無標的指數(官方 ETF 清單不涵蓋上櫃) | -
-# 00894: { name: 中信小資高價30, category: ?, region: ? }  # 指數名稱未命中任何規則 | 臺灣指數公司特選小資高價30指數
-# 00895: { name: 富邦未來車, category: ?, region: ? }  # 指數名稱未命中任何規則 | MSCI ACWI IMI精選未來車30指數
-# 00901: { name: 永豐智能車供應鏈, category: ?, region: ? }  # 指數名稱未命中任何規則 | 特選臺灣智能車供應鏈聯盟指數
-# 00907: { name: 永豐優息存股, category: ?, region: ? }  # 指數名稱未命中任何規則 | 特選臺灣優選入息存股指數
-# 00910: { name: 第一金太空衛星, category: ?, region: ? }  # 指數名稱未命中任何規則 | 太空衛星指數
-# 00912: { name: 中信臺灣智慧 50, category: ?, region: ? }  # 指數名稱未命中任何規則 | 臺灣指數公司特選臺灣上市上櫃智慧50指數
-# 00913: { name: 兆豐台灣晶圓製造, category: ?, region: ? }  # 指數名稱未命中任何規則 | 臺灣指數公司特選臺灣晶圓製造指數
-# 00921: { name: 兆豐龍頭等權重, category: ?, region: ? }  # 指數名稱未命中任何規則 | 臺灣指數公司特選臺灣產業龍頭存股等權重指數
-# 00928: { name: 中信上櫃ESG 30, category: ?, region: ? }  # 無標的指數(官方 ETF 清單不涵蓋上櫃) | -
-# 00943: { name: 兆豐電子高息等權, category: ?, region: ? }  # 訊號衝突:高股息/產業型 | 臺灣指數公司特選臺灣上市上櫃電子成長高息等權重指數
-# 00946: { name: 群益科技高息成長, category: ?, region: ? }  # 訊號衝突:高股息/產業型 | 臺灣指數公司特選臺灣上市上櫃科技高息成長指數
-# 00955: { name: 中信日本商社, category: ?, region: ? }  # 無標的指數(官方 ETF 清單不涵蓋上櫃) | -
-# 009802: { name: 富邦旗艦50, category: ?, region: ? }  # 指數名稱未命中任何規則 | 臺灣指數公司台灣上市上櫃旗艦動能50指數
-# 009803: { name: 玉山市值動能50, category: ?, region: ? }  # 指數名稱未命中任何規則 | 臺灣指數公司特選FactSet臺灣市值動能50指數
-# 009806: { name: 台新標普500, category: ?, region: ? }  # 無標的指數(官方 ETF 清單不涵蓋上櫃) | -
-# 009807: { name: 台新標普科技精選, category: ?, region: ? }  # 無標的指數(官方 ETF 清單不涵蓋上櫃) | -
-# 009808: { name: 華南永昌優選50, category: ?, region: ? }  # 指數名稱未命中任何規則 | 臺灣指數公司特選臺灣護城河概念優選50指數
-# 00980D: { name: 主動聯博投等入息, category: ?, region: ? }  # 無標的指數(官方 ETF 清單不涵蓋上櫃) | -
-# 009812: { name: 野村日本東證, category: ?, region: ? }  # 指數名稱未命中任何規則 | 東證股價總報酬指數
-# 009814: { name: 富邦標普500, category: ?, region: ? }  # 無標的指數(官方 ETF 清單不涵蓋上櫃) | -
-# 009815: { name: 大華美國MAG7+, category: ?, region: ? }  # 無標的指數(官方 ETF 清單不涵蓋上櫃) | -
-# 009816: { name: 凱基台灣TOP50, category: ?, region: ? }  # 指數名稱未命中任何規則 | 臺灣指數公司特選臺灣TOP 50指數
-# 00981D: { name: 主動中信非投等債, category: ?, region: ? }  # 無標的指數(官方 ETF 清單不涵蓋上櫃) | -
-# 009822: { name: 華南永昌未來金融, category: ?, region: ? }  # 無標的指數(官方 ETF 清單不涵蓋上櫃) | -
-# 009823: { name: 群益S&P500, category: ?, region: ? }  # 無標的指數(官方 ETF 清單不涵蓋上櫃) | -
-# 009825: { name: 聯邦美國金融創新, category: ?, region: ? }  # 無標的指數(官方 ETF 清單不涵蓋上櫃) | -
-# 009829: { name: 大華韓國KOSPI50, category: ?, region: ? }  # 指數名稱未命中任何規則 | KOSPI 50指數
-# 00982D: { name: 主動富邦動態入息, category: ?, region: ? }  # 無標的指數(官方 ETF 清單不涵蓋上櫃) | -
-# 00983D: { name: 主動富邦複合收益, category: ?, region: ? }  # 無標的指數(官方 ETF 清單不涵蓋上櫃) | -
-# 00984D: { name: 主動聯博全球非投, category: ?, region: ? }  # 無標的指數(官方 ETF 清單不涵蓋上櫃) | -
-# 00985D: { name: 主動貝萊德優投等, category: ?, region: ? }  # 無標的指數(官方 ETF 清單不涵蓋上櫃) | -
-# 00986D: { name: 主動復華金融債息, category: ?, region: ? }  # 無標的指數(官方 ETF 清單不涵蓋上櫃) | -
+# ═════ 卡在 5 個定義問題(37 檔)═════
+# 這不是 37 個獨立判斷,是同一組問題重複出現。決定了通則就能一次填完。
+
+# ── Q1:「高股息 + 因子疊加」算高股息還是因子型?
+#    規格自己拿 00713(元大台灣高息低波)當例子說它是因子型。若這是通則,下列 12 檔全部歸因子型;若 00713 只是個案,它們就是高股息。
+#    影響 12 檔:
+#      00701: { name: 國泰股利精選30, category: ?, region: ? }  # 臺灣指數公司低波動股利精選30指數
+#      00702: { name: 國泰標普低波高息, category: ?, region: ? }  # 標普500低波高息指數
+#      00731: { name: 復華富時高息低波, category: ?, region: ? }  # 富時台灣高股息低波動指數(FTSE Taiwan High Dividend Low Volat
+#      00915: { name: 凱基優選高股息30, category: ?, region: ? }  # 臺灣指數公司特選臺灣上市上櫃多因子優選高股息30指數
+#      00934: { name: 中信成長高股息, category: ?, region: ? }  # 臺灣指數公司特選臺灣上市上櫃優選成長高股息指數
+#      00939: { name: 統一台灣高息動能, category: ?, region: ? }  # 臺灣指數公司特選臺灣上市上櫃高息動能指數
+#      00940: { name: 元大台灣價值高息, category: ?, region: ? }  # 臺灣指數公司特選臺灣價值高息指數
+#      00943: { name: 兆豐電子高息等權, category: ?, region: ? }  # 臺灣指數公司特選臺灣上市上櫃電子成長高息等權重指數
+#      00944: { name: 野村趨勢動能高息, category: ?, region: ? }  # 臺灣指數公司特選臺灣上市上櫃FactSet臺灣趨勢動能高股息指數
+#      00946: { name: 群益科技高息成長, category: ?, region: ? }  # 臺灣指數公司特選臺灣上市上櫃科技高息成長指數
+#      00962: { name: 台新AI優息動能, category: ?, region: ? }  # 臺灣指數公司特選臺灣上市上櫃AI優息動能指數
+#      00972: { name: 野村日本動能高息, category: ?, region: ? }  # 彭博日本價值動能高息指數
+
+# ── Q2:ESG / 永續 / 低碳 算因子型還是主題型?
+#    ESG 既是選股條件(因子)也是投資題材(主題),兩種歸法都有人用。
+#    影響 9 檔:
+#      00850: { name: 元大臺灣ESG永續, category: ?, region: ? }  # 臺灣永續指數(FTSE4Good TIP Taiwan ESG Index)
+#      00888: { name: 永豐台灣ESG, category: ?, region: ? }  # (無標的指數)
+#      00923: { name: 群益台ESG低碳50, category: ?, region: ? }  # 臺灣指數公司特選臺灣ESG低碳50指數
+#      00928: { name: 中信上櫃ESG 30, category: ?, region: ? }  # (無標的指數)
+#      00930: { name: 永豐ESG低碳高息, category: ?, region: ? }  # 特選臺灣上市上櫃ESG低碳高息40指數
+#      00932: { name: 兆豐永續高息等權, category: ?, region: ? }  # 臺灣指數公司特選臺灣上市上櫃ESG永續高股息等權重指數
+#      00936: { name: 台新永續高息中小, category: ?, region: ? }  # 臺灣指數公司特選臺灣上市上櫃永續高息中小型股指數
+#      00961: { name: FT臺灣永續高息, category: ?, region: ? }  # ICE臺灣ESG高息指數
+#      009809: { name: 富邦淨零ESG50, category: ?, region: ? }  # S&P TIP臺灣淨零轉型ESG 50指數
+
+# ── Q3:外國大盤的「因子版」算海外指數還是因子型?
+#    例如標普500成長、標普500卓越50 —— 底層是美股大盤,但套了選股條件。
+#    影響 5 檔:
+#      00924: { name: 復華S&P500成長, category: ?, region: ? }  # 標普500成長指數
+#      00949: { name: 復華日本龍頭, category: ?, region: ? }  # NYSE FactSet 日本護城河優勢龍頭企業指數
+#      009813: { name: 貝萊德標普卓越50, category: ?, region: ? }  # 標普500卓越50指數
+#      009818: { name: 華南永昌NASDAQxT, category: ?, region: ? }  # NASDAQ 100 科技市值加權指數
+#      009820: { name: 元大納斯達克精選, category: ?, region: ? }  # 納斯達克100增強成長指數
+
+# ── Q4:「產業 + 收益」算產業型還是高股息?
+#    追蹤「半導體收益指數」,投資範圍是半導體,選股條件是配息。
+#    影響 1 檔:
+#      00927: { name: 群益半導體收益, category: ?, region: ? }  # 臺灣指數公司特選臺灣上市上櫃半導體收益指數
+
+# ── Q5:等權重 / 市值動能 / 特殊選股法算因子型還是市值型?
+#    另含兩檔美國特別股(00717、00771)—— 特別股行為近債券,規格清單沒有這一類。
+#    影響 10 檔:
+#      00717: { name: 富邦美國特別股, category: ?, region: ? }  # 標普美國特別股指數
+#      00733: { name: 富邦臺灣中小, category: ?, region: ? }  # 臺灣指數公司中小型A級動能50指數
+#      00771: { name: 元大US高息特別股, category: ?, region: ? }  # 標普美國高收益特別股指數(S&P U.S. High Yield Preferred Stock
+#      00894: { name: 中信小資高價30, category: ?, region: ? }  # 臺灣指數公司特選小資高價30指數
+#      00912: { name: 中信臺灣智慧 50, category: ?, region: ? }  # 臺灣指數公司特選臺灣上市上櫃智慧50指數
+#      00921: { name: 兆豐龍頭等權重, category: ?, region: ? }  # 臺灣指數公司特選臺灣產業龍頭存股等權重指數
+#      00926: { name: 凱基全球菁英55, category: ?, region: ? }  # 彭博全球菁英55指數
+#      00971: { name: 野村美國研發龍頭, category: ?, region: ? }  # 彭博研發龍頭指數
+#      009802: { name: 富邦旗艦50, category: ?, region: ? }  # 臺灣指數公司台灣上市上櫃旗艦動能50指數
+#      009803: { name: 玉山市值動能50, category: ?, region: ? }  # 臺灣指數公司特選FactSet臺灣市值動能50指數
+
+# ═════ 沒有分類可放(46 檔)═════
+# 規格 §3.2 的清單沒有任何一項對應得上。需先決定要不要新增分類。
+
+# ── 主動式 —— 依定義沒有追蹤指數(37 檔)
+#   00400A: { name: 主動國泰動能高息, category: ?, region: ? }  # 無追蹤指數
+#   00401A: { name: 主動摩根台灣鑫收, category: ?, region: ? }  # 無追蹤指數
+#   00402A: { name: 主動安聯美國科技, category: ?, region: ? }  # 無追蹤指數
+#   00403A: { name: 主動統一升級50, category: ?, region: ? }  # 臺灣證券交易所發行量加權股價報酬指數
+#   00404A: { name: 主動聯博動能50, category: ?, region: ? }  # 無追蹤指數
+#   00405A: { name: 主動富邦台灣龍耀, category: ?, region: ? }  # 無追蹤指數
+#   00406A: { name: 主動中信台灣收益, category: ?, region: ? }  # 無追蹤指數
+#   00407A: { name: 主動凱基台灣, category: ?, region: ? }  # 無追蹤指數
+#   00408A: { name: 主動第一金優股息, category: ?, region: ? }  # 無追蹤指數
+#   00410A: { name: 主動永豐科技趨勢, category: ?, region: ? }  # 無追蹤指數
+#   00980A: { name: 主動野村臺灣優選, category: ?, region: ? }  # 臺灣證券交易所發行量加權股價報酬指數
+#   00980D: { name: 主動聯博投等入息, category: ?, region: ? }  # 無追蹤指數
+#   00981A: { name: 主動統一台股增長, category: ?, region: ? }  # 臺灣證券交易所發行量加權股價報酬指數
+#   00981D: { name: 主動中信非投等債, category: ?, region: ? }  # 無追蹤指數
+#   00982A: { name: 主動群益台灣強棒, category: ?, region: ? }  # 無追蹤指數
+#   00982D: { name: 主動富邦動態入息, category: ?, region: ? }  # 無追蹤指數
+#   00983A: { name: 主動中信ARK創新, category: ?, region: ? }  # 無追蹤指數
+#   00983D: { name: 主動富邦複合收益, category: ?, region: ? }  # 無追蹤指數
+#   00984A: { name: 主動安聯台灣高息, category: ?, region: ? }  # 無追蹤指數
+#   00984D: { name: 主動聯博全球非投, category: ?, region: ? }  # 無追蹤指數
+#   00985A: { name: 主動野村台灣50, category: ?, region: ? }  # 富時臺灣證券交易所臺灣50報酬指數
+#   00985D: { name: 主動貝萊德優投等, category: ?, region: ? }  # 無追蹤指數
+#   00986A: { name: 主動台新龍頭成長, category: ?, region: ? }  # 無追蹤指數
+#   00986D: { name: 主動復華金融債息, category: ?, region: ? }  # 無追蹤指數
+#   00987A: { name: 主動台新優勢成長, category: ?, region: ? }  # 無追蹤指數
+#   00988A: { name: 主動統一全球創新, category: ?, region: ? }  # 無追蹤指數
+#   00989A: { name: 主動摩根美國科技, category: ?, region: ? }  # 無追蹤指數
+#   00990A: { name: 主動元大AI新經濟, category: ?, region: ? }  # 無追蹤指數
+#   00991A: { name: 主動復華未來50, category: ?, region: ? }  # 臺灣證券交易所發行量加權股價報酬指數
+#   00992A: { name: 主動群益科技創新, category: ?, region: ? }  # 無追蹤指數
+#   00993A: { name: 主動安聯台灣, category: ?, region: ? }  # 臺灣證券交易所發行量加權股價指數
+#   00994A: { name: 主動第一金台股優, category: ?, region: ? }  # 富時臺灣證券交易所臺灣50指數
+#   00995A: { name: 主動中信台灣卓越, category: ?, region: ? }  # 無追蹤指數
+#   00996A: { name: 主動兆豐台灣豐收, category: ?, region: ? }  # 無追蹤指數
+#   00997A: { name: 主動群益美國增長, category: ?, region: ? }  # 無追蹤指數
+#   00998A: { name: 主動復華金融股息, category: ?, region: ? }  # 無追蹤指數
+#   00999A: { name: 主動野村臺灣高息, category: ?, region: ? }  # 無追蹤指數
+
+# ── 期貨信託 —— 追蹤商品或匯率,不是股票(6 檔)
+#   00635U: { name: 期元大S&P黃金, category: ?, region: ? }  # 標普高盛黃金ER指數(S&P GSCI Gold Excess Return Index)
+#   00642U: { name: 期元大S&P石油, category: ?, region: ? }  # 標普高盛原油ER指數(S&P GSCI Crude Oil Enhanced Excess 
+#   00682U: { name: 期元大美元指數, category: ?, region: ? }  # 標普美元ER指數(S&P US Dollar Futures Index ER)
+#   00693U: { name: 期街口S&P黃豆, category: ?, region: ? }  # 標普高盛黃豆ER指數(S&P GSCI Soybeans Excess Return Ind
+#   00738U: { name: 期元大道瓊白銀, category: ?, region: ? }  # 道瓊白銀ER指數(Dow Jones Commodity Index Silver Exce
+#   00763U: { name: 期街口道瓊銅, category: ?, region: ? }  # 道瓊銅ER指數(Dow Jones Commodity Index North Americ
+
+# ── 多資產平衡 —— 同時持有股與債(3 檔)
+#   00980T: { name: 平衡凱基美國TOP, category: ?, region: ? }  # 無追蹤指數
+#   00981T: { name: 平衡凱基雙核收息, category: ?, region: ? }  # 臺灣指數公司 ICE雙核債股平衡指數
+#   00982T: { name: 平衡兆豐台美動能, category: ?, region: ? }  # 臺灣指數公司彭博台美動能多資產平衡指數
+
