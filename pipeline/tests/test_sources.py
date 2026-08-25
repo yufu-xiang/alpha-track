@@ -585,3 +585,24 @@ def test_split_detection_tolerates_a_market_move_on_the_same_day():
     """分割當天大盤也在動。1:4 分割搭配 -5% 的行情是 4.21 倍,仍應判為分割。"""
     rows = parse_yahoo_chart(_chart([100.0] * 3 + [23.75] * 3), code="0050")
     assert len(rows) == 3
+
+
+def test_etf_list_null_cells_do_not_become_the_string_none():
+    """主動式 ETF 沒有追蹤指數,官方清單那一格是 JSON null(實測 232 列中有 25 列)。
+    以 str() 轉換會得到字串 'None',於是資料庫裡就有 25 檔「追蹤一個叫 None 的指數」
+    —— 是個看起來有值、實際無意義的欄位。"""
+    payload = {
+        "stat": "OK",
+        "fields": ["上市日期", "證券代號", "證券簡稱", "發行人", "標的指數"],
+        "data": [["2025.05.22", "00982A", "主動群益台灣強棒", "群益投信", None]],
+    }
+    p = parse_twse_etf_list(payload)[0]
+    assert p.tracking_index is None, "應為 None,不是字串 'None'"
+    assert p.issuer == "群益投信"
+
+
+def test_real_etf_list_fixture_has_no_none_string_anywhere():
+    for p in parse_twse_etf_list(load("twse_etf_list.json")):
+        assert p.tracking_index != "None", p.code
+        assert p.issuer != "None", p.code
+        assert p.name != "None", p.code

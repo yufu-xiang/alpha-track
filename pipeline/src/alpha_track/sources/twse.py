@@ -66,7 +66,10 @@ def _rows_by_field(payload: object) -> list[dict[str, str]]:
     if not isinstance(payload, dict):
         return []
     fields = [str(f).strip() for f in (payload.get("fields") or [])]
-    return [dict(zip(fields, [str(c) for c in row]))
+    # null 要轉成空字串,不能交給 str():str(None) 是 "None",看起來像有值。
+    # 實測官方 ETF 清單 232 列中有 25 列的「標的指數」是 null(主動式 ETF
+    # 本來就沒有追蹤指數),不處理的話資料庫裡就有 25 檔追蹤一個叫 None 的指數。
+    return [dict(zip(fields, ["" if c is None else str(c) for c in row]))
             for row in (payload.get("data") or [])]
 
 
