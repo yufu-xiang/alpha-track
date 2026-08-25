@@ -2,9 +2,12 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { fixtureRankings } from '../data/fixture'
+import type { RiskColumn } from '../types'
 import { RankingTable } from './RankingTable'
 
 const ROWS = fixtureRankings.etfs
+const ALL_RISK: RiskColumn[] = ['excess', 'volatility', 'mdd', 'sharpe',
+                                'beta', 'premium_discount']
 
 /** 從資料本身推導,而不是把代號寫死 —— 動 fixture 時測試才不會莫名變紅。 */
 function codesWithoutData(period: 'Y1' | 'Y5' | 'Y10'): string[] {
@@ -80,7 +83,7 @@ describe('RankingTable', () => {
   })
 
   it('風險欄位標頭附帶指標說明按鈕', () => {
-    renderTable({ visibleColumns: [], showRisk: true, sortBy: null })
+    renderTable({ visibleColumns: [], visibleRisk: ALL_RISK, sortBy: null })
     expect(screen.getByRole('button', { name: /夏普值.*說明/ })).toBeInTheDocument()
   })
 
@@ -89,7 +92,7 @@ describe('RankingTable', () => {
     // 就會把整張表翻掉,而使用者不會意識到是自己按出來的。
     const onSortChange = vi.fn()
     const user = userEvent.setup()
-    renderTable({ visibleColumns: [], showRisk: true, sortBy: null, onSortChange })
+    renderTable({ visibleColumns: [], visibleRisk: ALL_RISK, sortBy: null, onSortChange })
     const before = bodyRowCodes()
     await user.click(screen.getByRole('button', { name: /夏普值.*說明/ }))
     expect(screen.getByRole('dialog')).toBeInTheDocument()
@@ -102,7 +105,7 @@ describe('RankingTable', () => {
     // 說明看不完整等於這個功能不存在,而這件事只有真的打開瀏覽器才看得到,
     // 所以在這裡把「必須在容器外」這個結構條件釘住。
     const user = userEvent.setup()
-    const { container } = renderTable({ visibleColumns: [], showRisk: true, sortBy: null })
+    const { container } = renderTable({ visibleColumns: [], visibleRisk: ALL_RISK, sortBy: null })
     await user.click(screen.getByRole('button', { name: /夏普值.*說明/ }))
     const dialog = screen.getByRole('dialog')
     expect(container.querySelector('.table-wrap')!.contains(dialog)).toBe(false)
@@ -161,7 +164,7 @@ describe('RankingTable', () => {
   })
 
   it('風險欄位不著色 —— 最大回撤恆為負、波動度高也不代表糟', () => {
-    renderTable({ visibleColumns: [], showRisk: true, sortBy: null })
+    renderTable({ visibleColumns: [], visibleRisk: ALL_RISK, sortBy: null })
     const row = within(screen.getByRole('table'))
       .getAllByRole('row')
       .find((r) => within(r).queryByText('0050'))!
@@ -181,7 +184,7 @@ describe('RankingTable 超額報酬', () => {
   it('顯示當前排序期間的超額報酬,表頭標明是哪一期', () => {
     // 規格 §4.5b:「這檔有沒有贏大盤」。每個期間各加一欄會爆版,
     // 所以只顯示當前選取期間的那一個,並在表頭寫清楚是哪一期。
-    renderTable({ visibleColumns: ['Y1'], sortBy: 'Y1', showExcess: true })
+    renderTable({ visibleColumns: ['Y1'], sortBy: 'Y1', visibleRisk: ['excess'] as RiskColumn[] })
     expect(screen.getByRole('columnheader', { name: /超額.*一年/ })).toBeInTheDocument()
     const row = within(screen.getByRole('table'))
       .getAllByRole('row')
@@ -190,7 +193,7 @@ describe('RankingTable 超額報酬', () => {
   })
 
   it('切換期間時超額報酬跟著換', () => {
-    renderTable({ visibleColumns: ['D1'], sortBy: 'D1', showExcess: true })
+    renderTable({ visibleColumns: ['D1'], sortBy: 'D1', visibleRisk: ['excess'] as RiskColumn[] })
     expect(screen.getByRole('columnheader', { name: /超額.*當日/ })).toBeInTheDocument()
     const row = within(screen.getByRole('table'))
       .getAllByRole('row')
@@ -199,7 +202,7 @@ describe('RankingTable 超額報酬', () => {
   })
 
   it('大盤資料涵蓋不到的期間顯示破折號', () => {
-    renderTable({ visibleColumns: ['Y10'], sortBy: 'Y10', showExcess: true })
+    renderTable({ visibleColumns: ['Y10'], sortBy: 'Y10', visibleRisk: ['excess'] as RiskColumn[] })
     const row = within(screen.getByRole('table'))
       .getAllByRole('row')
       .find((r) => within(r).queryByText('00929'))!
@@ -207,7 +210,7 @@ describe('RankingTable 超額報酬', () => {
   })
 
   it('贏大盤標成 gain、輸大盤標成 loss', () => {
-    renderTable({ visibleColumns: ['Y1'], sortBy: 'Y1', showExcess: true })
+    renderTable({ visibleColumns: ['Y1'], sortBy: 'Y1', visibleRisk: ['excess'] as RiskColumn[] })
     const table = within(screen.getByRole('table'))
     const rowOf = (c: string) => table.getAllByRole('row').find((r) => within(r).queryByText(c))!
     expect(within(rowOf('0050')).getByText('+4.21%')).toHaveClass('gain')
@@ -215,7 +218,7 @@ describe('RankingTable 超額報酬', () => {
   })
 
   it('sortBy 為 null 時不渲染超額報酬欄 —— 沒有期間就沒有對應的超額', () => {
-    renderTable({ visibleColumns: [], sortBy: null, showExcess: true })
+    renderTable({ visibleColumns: [], sortBy: null, visibleRisk: ['excess'] as RiskColumn[] })
     expect(screen.queryByRole('columnheader', { name: /超額/ })).not.toBeInTheDocument()
   })
 })

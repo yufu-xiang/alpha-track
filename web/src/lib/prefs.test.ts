@@ -58,3 +58,34 @@ describe('偏好儲存', () => {
     expect(loadPrefs().showLevered).toBe(true)
   })
 })
+
+describe('風險欄位偏好', () => {
+  beforeEach(() => localStorage.clear())
+
+  it('預設開啟超額報酬、波動度、MDD、夏普值與貝他值', () => {
+    expect(DEFAULT_PREFS.visibleRisk).toEqual([
+      'excess', 'volatility', 'mdd', 'sharpe', 'beta',
+    ])
+  })
+
+  it('折溢價預設關閉 —— 目前查不到淨值來源,整欄都是破折號', () => {
+    expect(DEFAULT_PREFS.visibleRisk).not.toContain('premium_discount')
+  })
+
+  it('允許全部關閉,不像期間欄位至少要留一欄', () => {
+    savePrefs({ ...DEFAULT_PREFS, visibleRisk: [] })
+    expect(loadPrefs().visibleRisk).toEqual([])
+  })
+
+  it('捨棄不認識的欄位代碼', () => {
+    localStorage.setItem('alpha-track:prefs',
+      JSON.stringify({ visibleRisk: ['sharpe', 'BOGUS'] }))
+    expect(loadPrefs().visibleRisk).toEqual(['sharpe'])
+  })
+
+  it('舊版偏好沒有這個欄位時回退預設,而非變成空的', () => {
+    localStorage.setItem('alpha-track:prefs',
+      JSON.stringify({ visibleColumns: ['Y1'], showLevered: false }))
+    expect(loadPrefs().visibleRisk).toEqual(DEFAULT_PREFS.visibleRisk)
+  })
+})

@@ -17,7 +17,10 @@ import {
 import { useEffect, useMemo, useState } from 'react'
 import { formatNumber, formatPercent } from '../lib/format'
 import { toSortable } from '../lib/sorting'
-import { PERIOD_LABELS, type EtfRow, type PeriodCode } from '../types'
+import {
+  PERIOD_LABELS, RISK_LABELS, RISK_TERMS,
+  type EtfRow, type PeriodCode, type RiskColumn,
+} from '../types'
 import { MetricInfo } from './MetricInfo'
 
 const helper = createColumnHelper<EtfRow>()
@@ -40,13 +43,12 @@ interface Props {
   visibleColumns: PeriodCode[]
   sortBy: PeriodCode | null
   onSortChange: (period: PeriodCode) => void
-  showRisk?: boolean
-  showExcess?: boolean
+  /** 要顯示哪些風險指標。規格 §5.2:由欄位選單控制,勾選即顯示。 */
+  visibleRisk?: RiskColumn[]
 }
 
 export function RankingTable({
-  rows, visibleColumns, sortBy, onSortChange, showRisk = false,
-  showExcess = false,
+  rows, visibleColumns, sortBy, onSortChange, visibleRisk = [],
 }: Props) {
   const [sorting, setSorting] = useState<SortingState>(
     sortBy ? [{ id: sortBy, desc: true }] : [],
@@ -92,52 +94,37 @@ export function RankingTable({
       }),
     )
 
-    // 超額報酬只顯示「當前選取期間」的那一個:十一個期間各加一欄會爆版,
-    // 而使用者一次也只關心正在看的那一期(規格 §4.5b)。
-    const excessCols = showExcess && sortBy
-      ? [
-          helper.accessor((row) => toSortable(row.excess[sortBy]), {
-            id: 'excess',
-            header: () => (
-              <span>超額報酬({PERIOD_LABELS[sortBy]}) <MetricInfo termId="excess" /></span>
-            ),
-            cell: (c) => <ReturnCell value={c.getValue() ?? null} />,
-            sortUndefined: 'last',
-          }),
-        ]
-      : []
+    // 每個風險指標各自可開關(規格 §5.2)。超額報酬只取「當前選取期間」的
+    // 那一個:十一個期間各加一欄會爆版,而使用者一次也只關心正在看的那一期。
+    const riskHeader = (c: RiskColumn, suffix = '') => () => (
+      <span>{RISK_LABELS[c]}{suffix} <MetricInfo termId={RISK_TERMS[c]} /></span>
+    )
+    const riskCols = visibleRisk.flatMap((c) => {
+      if (c === 'excess') {
+        if (!sortBy) return []   // 沒有選期間就沒有對應的超額報酬
+        return [helper.accessor((row) => toSortable(row.excess[sortBy]), {
+          id: 'excess',
+          header: riskHeader('excess', `(${PERIOD_LABELS[sortBy]})`),
+          cell: (v) => <ReturnCell value={v.getValue() ?? null} />,
+          sortUndefined: 'last',
+        })]
+      }
+      const pick = (row: EtfRow) =>
+        c === 'premium_discount' ? row.premium_discount : row.risk[c]
+      // 貝他值是倍數不是百分比;其餘四個都是比率。
+      const asNumber = c === 'beta' || c === 'sharpe'
+      return [helper.accessor((row) => toSortable(pick(row)), {
+        id: c,
+        header: riskHeader(c),
+        cell: (v) => (asNumber
+          ? formatNumber(v.getValue() ?? null, 2)
+          : formatPercent(v.getValue() ?? null)),
+        sortUndefined: 'last',
+      })]
+    })
 
-    const riskCols = showRisk
-      ? [
-          helper.accessor((row) => toSortable(row.risk.volatility), {
-            id: 'volatility',
-            header: () => (<span>年化波動 <MetricInfo termId="volatility" /></span>),
-            cell: (c) => formatPercent(c.getValue() ?? null),
-            sortUndefined: 'last',
-          }),
-          helper.accessor((row) => toSortable(row.risk.mdd), {
-            id: 'mdd',
-            header: () => (<span>最大回撤 <MetricInfo termId="mdd" /></span>),
-            cell: (c) => formatPercent(c.getValue() ?? null),
-            sortUndefined: 'last',
-          }),
-          helper.accessor((row) => toSortable(row.risk.sharpe), {
-            id: 'sharpe',
-            header: () => (<span>夏普值 <MetricInfo termId="sharpe" /></span>),
-            cell: (c) => formatNumber(c.getValue() ?? null, 2),
-            sortUndefined: 'last',
-          }),
-          helper.accessor((row) => toSortable(row.premium_discount), {
-            id: 'premium_discount',
-            header: () => (<span>折溢價 <MetricInfo termId="premium_discount" /></span>),
-            cell: (c) => formatPercent(c.getValue() ?? null),
-            sortUndefined: 'last',
-          }),
-        ]
-      : []
-
-    return [...base, ...periodCols, ...excessCols, ...riskCols]
-  }, [visibleColumns, showRisk, showExcess, sortBy])
+    return [...base, ...periodCols, ...riskCols]
+  }, [visibleColumns, visibleRisk, sortBy])
 
   const table = useReactTable({
     data: rows,

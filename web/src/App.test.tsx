@@ -153,3 +153,37 @@ describe('App 超額報酬', () => {
       expect(screen.getByRole('columnheader', { name: /超額.*三年/ })).toBeInTheDocument())
   })
 })
+
+describe('App 風險欄位自選', () => {
+  it('預設顯示貝他值 —— 它一直有算,先前根本沒有欄位', async () => {
+    await renderLoaded()
+    expect(screen.getByRole('columnheader', { name: /貝他值/ })).toBeInTheDocument()
+  })
+
+  it('折溢價預設關閉 —— 目前整欄都是破折號', async () => {
+    await renderLoaded()
+    expect(screen.queryByRole('columnheader', { name: /折溢價/ })).not.toBeInTheDocument()
+  })
+
+  it('勾掉風險指標後該欄消失,並存入 localStorage', async () => {
+    const user = userEvent.setup()
+    await renderLoaded()
+    expect(screen.getByRole('columnheader', { name: /夏普值/ })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /欄位/ }))
+    await user.click(screen.getByRole('checkbox', { name: '夏普值' }))
+
+    await waitFor(() =>
+      expect(screen.queryByRole('columnheader', { name: /夏普值/ })).not.toBeInTheDocument())
+    expect(localStorage.getItem('alpha-track:prefs')).toContain('visibleRisk')
+  })
+
+  it('勾選折溢價後該欄出現', async () => {
+    const user = userEvent.setup()
+    await renderLoaded()
+    await user.click(screen.getByRole('button', { name: /欄位/ }))
+    await user.click(screen.getByRole('checkbox', { name: '折溢價' }))
+    await waitFor(() =>
+      expect(screen.getByRole('columnheader', { name: /折溢價/ })).toBeInTheDocument())
+  })
+})

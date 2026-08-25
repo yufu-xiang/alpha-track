@@ -109,6 +109,8 @@ export function App() {
         <ColumnPicker
           selected={prefs.visibleColumns}
           onChange={handleColumnsChange}
+          selectedRisk={prefs.visibleRisk}
+          onRiskChange={(next) => setPrefs((p) => ({ ...p, visibleRisk: next }))}
         />
       </div>
 
@@ -117,8 +119,7 @@ export function App() {
         visibleColumns={prefs.visibleColumns}
         sortBy={sortBy}
         onSortChange={setSortBy}
-        showRisk
-        showExcess
+        visibleRisk={prefs.visibleRisk}
       />
 
       <footer>

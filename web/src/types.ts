@@ -28,6 +28,32 @@ export const PERIOD_LABELS: Record<PeriodCode, string> = {
   INCEPTION: '成立以來',
 }
 
+/** 可自選顯示的非期間欄位。規格 §5.2:欄位選單須列出風險指標,勾選即顯示。 */
+export const RISK_COLUMNS = [
+  'excess', 'volatility', 'mdd', 'sharpe', 'beta', 'premium_discount',
+] as const
+
+export type RiskColumn = (typeof RISK_COLUMNS)[number]
+
+export const RISK_LABELS: Record<RiskColumn, string> = {
+  excess: '超額報酬',
+  volatility: '年化波動',
+  mdd: '最大回撤',
+  sharpe: '夏普值',
+  beta: '貝他值',
+  premium_discount: '折溢價',
+}
+
+/** 欄位對應的詞典條目,供表頭的 ⓘ 使用。 */
+export const RISK_TERMS: Record<RiskColumn, string> = {
+  excess: 'excess',
+  volatility: 'volatility',
+  mdd: 'mdd',
+  sharpe: 'sharpe',
+  beta: 'beta',
+  premium_discount: 'premium_discount',
+}
+
 export interface RiskMetrics {
   volatility: number | null
   mdd: number | null
