@@ -79,4 +79,10 @@ export interface MetaData {
   unclassified: string[]
   anomalies: Anomaly[]
   risk_free_rate: number
+  /**
+   * 加權報酬指數的近一年漲幅。不是健康狀態,是**判讀基準** ——
+   * 大盤漲九成的年份,整張表的報酬與夏普值都會很誇張,
+   * 沒有這個對照,使用者無從判斷「+99%」是這檔厲害還是全市場都在漲。
+   */
+  benchmark_return_1y: number | null
 }

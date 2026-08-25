@@ -102,7 +102,7 @@ def test_meta_keys_match_the_frontend_contract_exactly():
                    anomalies=[], is_stale=False, risk_free_rate=0.015)
     assert set(m.keys()) == {
         "generated_at", "data_date", "is_stale", "etf_count",
-        "unclassified", "anomalies", "risk_free_rate",
+        "unclassified", "anomalies", "risk_free_rate", "benchmark_return_1y",
     }
 
 
@@ -131,3 +131,19 @@ def test_write_json_output_is_valid_json_and_round_trips(tmp_path: Path):
     payload = build_rankings(date(2026, 8, 21), [(profile(), metrics(), 195.5)])
     write_json(p, payload)
     assert json.loads(p.read_text(encoding="utf-8")) == payload
+
+
+def test_meta_carries_the_benchmark_return_for_context():
+    """大盤一年漲 +91.85% 的年份,整張表的報酬與夏普值都會很誇張。
+    沒有這個對照,使用者無從判斷「+99%」是這檔厲害還是全市場都在漲。"""
+    m = build_meta(data_date=date(2026, 8, 25), etf_count=351, unclassified=[],
+                   anomalies=[], is_stale=False, risk_free_rate=0.015,
+                   benchmark_return_1y=0.9185)
+    assert m["benchmark_return_1y"] == 0.9185
+
+
+def test_meta_benchmark_return_is_null_without_data():
+    m = build_meta(data_date=date(2026, 8, 25), etf_count=0, unclassified=[],
+                   anomalies=[], is_stale=False, risk_free_rate=0.015,
+                   benchmark_return_1y=None)
+    assert m["benchmark_return_1y"] is None

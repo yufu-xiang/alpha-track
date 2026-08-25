@@ -43,8 +43,8 @@ describe('契約型別', () => {
 
   it('meta fixture 具備健康狀態列所需的全部欄位', () => {
     expect(Object.keys(fixtureMeta).sort()).toEqual([
-      'anomalies', 'data_date', 'etf_count', 'generated_at',
-      'is_stale', 'risk_free_rate', 'unclassified',
+      'anomalies', 'benchmark_return_1y', 'data_date', 'etf_count',
+      'generated_at', 'is_stale', 'risk_free_rate', 'unclassified',
     ])
   })
 })

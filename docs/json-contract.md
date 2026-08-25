@@ -151,6 +151,7 @@ D1  W1  M1  M3  M6  YTD  Y1  Y3  Y5  Y10  INCEPTION
 | `unclassified` | `string[]` | 落入「未分類」的代號,提示維護者補 `config/etf_categories.yaml`。 |
 | `anomalies` | `{code, reason}[]` | 已寫入但需人工檢查的列(如無除息卻單日暴漲)。 |
 | `risk_free_rate` | `number` | Sharpe 用的無風險利率。前端須顯示在 Sharpe 欄位旁,使數字可被檢驗(規格 §4.5a)。 |
+| `benchmark_return_1y` | `number \| null` | 加權報酬指數近一年漲幅。**不是健康狀態,是判讀基準** —— 大盤漲九成的年份,整張表的報酬與夏普值都會很誇張,沒有這個對照,使用者無從判斷「+99%」是這檔厲害還是全市場都在漲。無資料時為 `null`,前端整段不顯示(顯示破折號會被誤讀成「大盤沒漲」)。 |
 
 `meta.json` 是前端唯一能得知「資料是否健康」的來源。
 **即使資料庫為空,`meta.json` 也一定會被寫出**,前端才有東西可以據以顯示錯誤狀態。

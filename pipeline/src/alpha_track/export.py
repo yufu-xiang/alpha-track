@@ -70,8 +70,14 @@ def build_meta(
     anomalies: Sequence[tuple[str, str]],
     is_stale: bool,
     risk_free_rate: float,
+    benchmark_return_1y: float | None = None,
 ) -> dict:
-    """組裝 meta.json,驅動前端的資料健康狀態列(規格 §5.5)。"""
+    """組裝 meta.json,驅動前端的資料健康狀態列(規格 §5.5)。
+
+    benchmark_return_1y 是加權報酬指數的近一年漲幅。它不是健康狀態,
+    是**判讀基準**:大盤漲九成的年份,整張表的報酬與夏普值都會很誇張,
+    沒有這個對照,使用者無從判斷「+99%」是這檔厲害還是全市場都在漲。
+    """
     return {
         "generated_at": datetime.now(TAIPEI).isoformat(timespec="seconds"),
         "data_date": data_date.isoformat(),
@@ -80,6 +86,7 @@ def build_meta(
         "unclassified": list(unclassified),
         "anomalies": [{"code": c, "reason": r} for c, r in anomalies],
         "risk_free_rate": risk_free_rate,
+        "benchmark_return_1y": benchmark_return_1y,
     }
 
 

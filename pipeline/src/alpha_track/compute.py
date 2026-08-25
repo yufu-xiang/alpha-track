@@ -22,6 +22,21 @@ MIN_DAYS_FOR_RISK = 60
 MIN_DAYS_FOR_SHARPE = 250
 """規格 §4.4:Sharpe 與 Beta 需至少一年樣本。"""
 
+VOLATILITY_WINDOW_DAYS = 250
+"""年化波動度的取樣窗口(交易日),約一年。
+
+刻意不用全歷史,理由有二:
+
+1. **全歷史波動度不可比較。** 十年歷史與兩年歷史的基金,波動度量在不同
+   長度、不同市場環境的窗口上,並排排序本身就不對等。固定窗口才能比。
+2. **夏普值的分子分母要同窗口。** 分子是近一年報酬,分母若取全歷史,
+   多頭年份會讓數值爆掉 —— 實測改版前 289 檔中有 84 檔(29%)大於 2,
+   而判讀門檻正是 2,等於這個指標沒有訊號。
+
+歷史不足此窗口者以手上全部資料計算(仍需滿足 MIN_DAYS_FOR_RISK),
+不因此整欄留白。
+"""
+
 BENCHMARK_LOOKBACK_DAYS = 7
 """查基準指數時允許回看的天數。
 
@@ -128,16 +143,16 @@ def compute_etf_metrics(
 
     adj = [by_date[d].adj_close for d in own_days]
     if len(adj) >= MIN_DAYS_FOR_RISK:
-        m.volatility = annualized_volatility(daily_returns(adj))
+        # 波動度取近一年窗口(見 VOLATILITY_WINDOW_DAYS)。
+        # MDD 維持全歷史 —— 它問的是「這檔最慘曾經跌多少」,
+        # 截成一年就回答不了那個問題。
+        m.volatility = annualized_volatility(
+            daily_returns(adj[-VOLATILITY_WINDOW_DAYS:]))
         m.mdd = max_drawdown(adj)
         if len(adj) >= MIN_DAYS_FOR_SHARPE:
             # 一年期不年化(Period.Y1.annualize is False),故年報酬取自 returns。
-            #
-            # 分子是近一年報酬,分母是**全歷史**波動度,窗口刻意不同:
-            # 規格 §7 要求使用者能拿畫面上的數字自行驗算 Sharpe,而畫面上的
-            # 波動度欄位就是全歷史的這一個。改用近一年波動度會讓公式更純粹,
-            # 卻使畫面上的三個數字對不起來 —— 可驗證性是規格明確選擇的取捨。
-            # 前端的名詞說明需載明兩者的窗口(規格 §7 的「怎麼算」欄)。
+            # 分子與分母現在同為近一年窗口,而且兩者都顯示在畫面上 ——
+            # 使用者能拿「一年」欄與「年化波動」欄自行驗算(規格 §7)。
             annual = m.returns[Period.Y1.value]
             if annual is not None:
                 m.sharpe = sharpe(annual, m.volatility, risk_free)

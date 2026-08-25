@@ -150,4 +150,5 @@ export const fixtureMeta: MetaData = {
   unclassified: ['00999'],
   anomalies: [],
   risk_free_rate: 0.015,
+  benchmark_return_1y: 0.9185,
 }

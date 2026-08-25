@@ -160,7 +160,27 @@ def run_export(
             data_date=base_date, etf_count=len(rows),
             unclassified=sorted(unclassified), anomalies=anomalies,
             is_stale=is_stale, risk_free_rate=settings.risk_free_rate,
+            benchmark_return_1y=_benchmark_year_return(bench_closes, base_date),
         ))
+
+
+def _benchmark_year_return(
+    bench_closes: dict[date, float], base_date: date
+) -> float | None:
+    """大盤近一年漲幅,供前端當作整張表的判讀基準。
+
+    起點取「一年前當日或之前最近的一筆」—— 一年前那天不一定是交易日。
+    """
+    if not bench_closes:
+        return None
+    end_key = max((d for d in bench_closes if d <= base_date), default=None)
+    if end_key is None:
+        return None
+    target = end_key - timedelta(days=365)
+    start_key = max((d for d in bench_closes if d <= target), default=None)
+    if start_key is None or bench_closes[start_key] <= 0:
+        return None
+    return bench_closes[end_key] / bench_closes[start_key] - 1.0
 
 
 FetchAll = Callable[

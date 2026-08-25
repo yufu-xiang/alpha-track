@@ -512,3 +512,30 @@ def test_export_unclassified_is_sorted_and_deduplicated(tmp_path: Path):
     run_export(settings_for(tmp_path, db_path), is_stale=False, anomalies=[])
     meta = json.loads((out / "meta.json").read_text("utf-8"))
     assert meta["unclassified"] == ["00997", "00998", "00999"]
+
+
+def test_export_includes_the_benchmark_year_return(tmp_path: Path):
+    """整張表的判讀基準。沒有它,使用者不知道 +99% 是厲害還是隨大盤。"""
+    db_path = tmp_path / "t.db"
+    days = [date(2025, 1, 1) + timedelta(days=i) for i in range(500)]
+    with Database(db_path) as db:
+        db.init_schema()
+        db.upsert_prices([price_at("0050", d, 100.0) for d in days])
+        db.upsert_benchmark("TAIEX_TR",
+                            [(d, 1000.0 * (1.001 ** i)) for i, d in enumerate(days)])
+
+    out = tmp_path / "out"
+    run_export(settings_for(tmp_path, db_path), is_stale=False, anomalies=[])
+    meta = json.loads((out / "meta.json").read_text("utf-8"))
+    assert meta["benchmark_return_1y"] is not None
+    assert meta["benchmark_return_1y"] > 0
+
+
+def test_export_benchmark_year_return_is_null_when_table_is_empty(tmp_path: Path):
+    db_path = tmp_path / "t.db"
+    with Database(db_path) as db:
+        db.init_schema()
+        db.upsert_prices([price_at("0050", date(2026, 8, 21))])
+    run_export(settings_for(tmp_path, db_path), is_stale=False, anomalies=[])
+    meta = json.loads(((tmp_path / "out") / "meta.json").read_text("utf-8"))
+    assert meta["benchmark_return_1y"] is None

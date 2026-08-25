@@ -63,3 +63,15 @@ describe('HealthBar', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })
+
+describe('HealthBar 大盤對照', () => {
+  it('顯示大盤同期漲幅 —— 沒有它,整張表的數字無從判讀', () => {
+    render(<HealthBar meta={{ ...healthy, benchmark_return_1y: 0.9185 }} now={NOW} />)
+    expect(screen.getByText(/大盤一年 \+91\.85%/)).toBeInTheDocument()
+  })
+
+  it('沒有大盤資料時不顯示該段,而非顯示破折號', () => {
+    render(<HealthBar meta={{ ...healthy, benchmark_return_1y: null }} now={NOW} />)
+    expect(screen.queryByText(/大盤一年/)).not.toBeInTheDocument()
+  })
+})

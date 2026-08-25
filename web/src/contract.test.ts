@@ -21,8 +21,8 @@ const BACKEND_ROW_KEYS = [
 ]
 const BACKEND_RISK_KEYS = ['beta', 'mdd', 'sharpe', 'volatility']
 const BACKEND_META_KEYS = [
-  'anomalies', 'data_date', 'etf_count', 'generated_at', 'is_stale',
-  'risk_free_rate', 'unclassified',
+  'anomalies', 'benchmark_return_1y', 'data_date', 'etf_count', 'generated_at',
+  'is_stale', 'risk_free_rate', 'unclassified',
 ]
 const BACKEND_PERIODS = [
   'D1', 'W1', 'M1', 'M3', 'M6', 'YTD', 'Y1', 'Y3', 'Y5', 'Y10', 'INCEPTION',

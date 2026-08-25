@@ -285,3 +285,41 @@ def test_excess_does_not_reach_back_arbitrarily_far():
                             bench_closes=bench_from(prices, 0.5, on=stale),
                             navs=[], listing_date=None)
     assert m.excess["Y1"] is None
+
+
+def test_volatility_uses_a_trailing_window_not_the_whole_history():
+    """全歷史波動度不可比較:十年歷史與兩年歷史的基金,量在不同長度、
+    不同市場環境的窗口上,並排排序本身就不對等。改取近一年。"""
+    calm = [100.0 + i * 0.01 for i in range(300)]
+    wild = [100.0 * (1.3 if i % 2 else 0.7) for i in range(300)]
+    prices = series(date(2022, 1, 1), wild + calm)   # 早期劇烈、近期平穩
+    m = compute_etf_metrics(prices, prices[-1].date, risk_free=0.015,
+                            bench_closes={}, navs=[], listing_date=None)
+    assert m.volatility is not None and m.volatility < 0.5, \
+        "近期平穩就該顯示低波動,不該被五年前的劇烈期拉高"
+
+
+def test_sharpe_numerator_and_denominator_share_the_same_window():
+    """分子取近一年報酬、分母取全歷史波動度會讓多頭年份的夏普值爆掉
+    ——實測 289 檔中有 84 檔(29%)大於 2,而判讀門檻正是 2。"""
+    values = [100.0 * (1.0008 ** i) for i in range(600)]
+    prices = series(date(2024, 1, 1), values)
+    m = compute_etf_metrics(prices, prices[-1].date, risk_free=0.015,
+                            bench_closes={}, navs=[], listing_date=None)
+    # 仍可用畫面上的兩個數字自行驗算
+    assert m.sharpe == pytest.approx((m.returns["Y1"] - 0.015) / m.volatility)
+
+
+def test_volatility_falls_back_to_available_history_when_shorter_than_a_year():
+    """歷史不足一年者用手上有的,不因此整欄留白。"""
+    prices = series(date(2026, 1, 1), [100.0 + i * 0.05 for i in range(120)])
+    m = compute_etf_metrics(prices, prices[-1].date, risk_free=0.015,
+                            bench_closes={}, navs=[], listing_date=None)
+    assert m.volatility is not None
+
+
+def test_volatility_still_requires_the_minimum_sample():
+    prices = series(date(2026, 8, 1), [100.0 + i * 0.05 for i in range(20)])
+    m = compute_etf_metrics(prices, prices[-1].date, risk_free=0.015,
+                            bench_closes={}, navs=[], listing_date=None)
+    assert m.volatility is None
