@@ -187,3 +187,25 @@ describe('App 風險欄位自選', () => {
       expect(screen.getByRole('columnheader', { name: /折溢價/ })).toBeInTheDocument())
   })
 })
+
+describe('App 地區篩選', () => {
+  it('列出地區按鈕,台灣在前', async () => {
+    await renderLoaded()
+    const group = screen.getByRole('group', { name: /地區/ })
+    const names = within(group).getAllByRole('button').map((b) => b.textContent)
+    expect(names[0]).toBe('台灣')
+    expect(names).toContain('美國')
+  })
+
+  it('選地區會縮減表格列數', async () => {
+    const user = userEvent.setup()
+    await renderLoaded()
+    const before = within(screen.getByRole('table')).getAllByRole('row').length
+    const group = screen.getByRole('group', { name: /地區/ })
+    await user.click(within(group).getByRole('button', { name: '台灣' }))
+    await waitFor(() => {
+      expect(within(screen.getByRole('table')).getAllByRole('row').length)
+        .toBeLessThan(before)
+    })
+  })
+})

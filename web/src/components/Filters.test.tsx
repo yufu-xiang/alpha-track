@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { Filters } from './Filters'
@@ -6,6 +6,9 @@ import { Filters } from './Filters'
 const PROPS = {
   categories: ['市值型', '高股息', '債券型'],
   selected: [] as string[],
+  regions: ['台灣', '美國'],
+  selectedRegions: [] as string[],
+  onRegionsChange: vi.fn(),
   query: '',
   showLevered: false,
   onCategoriesChange: vi.fn(),
@@ -66,8 +69,31 @@ describe('Filters', () => {
   })
 
   it('沒有任何分類時不渲染空的按鈕列', () => {
-    render(<Filters {...PROPS} categories={[]} />)
-    // 只剩下槓桿開關那個 checkbox,沒有任何分類按鈕
+    render(<Filters {...PROPS} categories={[]} regions={[]} />)
+    // 只剩下槓桿開關那個 checkbox,沒有任何分類或地區按鈕
     expect(screen.queryAllByRole('button')).toHaveLength(0)
+  })
+})
+
+describe('Filters 地區', () => {
+  it('每個地區渲染成一個可切換的按鈕', () => {
+    render(<Filters {...PROPS} />)
+    const group = screen.getByRole('group', { name: /地區/ })
+    expect(within(group).getByRole('button', { name: '台灣' })).toBeInTheDocument()
+    expect(within(group).getByRole('button', { name: '美國' })).toBeInTheDocument()
+  })
+
+  it('點擊地區會回報', async () => {
+    const onRegionsChange = vi.fn()
+    const user = userEvent.setup()
+    render(<Filters {...PROPS} onRegionsChange={onRegionsChange} />)
+    const group = screen.getByRole('group', { name: /地區/ })
+    await user.click(within(group).getByRole('button', { name: '美國' }))
+    expect(onRegionsChange).toHaveBeenCalledWith(['美國'])
+  })
+
+  it('沒有地區資料時不渲染空的按鈕列', () => {
+    render(<Filters {...PROPS} regions={[]} />)
+    expect(screen.queryByRole('group', { name: /地區/ })).not.toBeInTheDocument()
   })
 })

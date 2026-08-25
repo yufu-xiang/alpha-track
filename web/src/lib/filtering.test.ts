@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { fixtureRankings } from '../data/fixture'
-import { applyFilters, collectCategories } from './filtering'
+import { applyFilters, collectCategories, collectRegions } from './filtering'
 
 const ROWS = fixtureRankings.etfs
-const NONE = { categories: [], query: '', showLevered: false }
+const NONE = { categories: [], regions: [], query: '', showLevered: false }
 
 describe('applyFilters', () => {
   it('預設隱藏槓桿與反向標的', () => {
@@ -100,5 +100,57 @@ describe('collectCategories', () => {
       { ...ROWS[0]!, category: '未分類' },
     ]
     expect(collectCategories(rows)).toEqual(['市值型', '未分類', '某種新分類'])
+  })
+})
+
+describe('地區篩選', () => {
+  it('依地區篩選', () => {
+    const rows = ROWS.map((r, i) => ({ ...r, region: i < 3 ? '台灣' : '美國' }))
+    expect(applyFilters(rows, { ...NONE, regions: ['美國'], showLevered: true }))
+      .toHaveLength(4)
+  })
+
+  it('多個地區為聯集', () => {
+    const rows = ROWS.map((r, i) => ({ ...r, region: ['台灣', '美國', '日本'][i % 3]! }))
+    const out = applyFilters(rows, { ...NONE, regions: ['美國', '日本'], showLevered: true })
+    expect(out.every((r) => r.region !== '台灣')).toBe(true)
+  })
+
+  it('複合地區只要包含選取的其中之一就算命中', () => {
+    // 「台灣、美國」這種標的兩邊都投,選台灣或選美國都該找得到它 ——
+    // 做成獨立按鈕的話,使用者選「台灣」卻漏掉它,而且完全不會意識到。
+    const rows = [{ ...ROWS[0]!, region: '台灣、美國' }]
+    expect(applyFilters(rows, { ...NONE, regions: ['台灣'] })).toHaveLength(1)
+    expect(applyFilters(rows, { ...NONE, regions: ['美國'] })).toHaveLength(1)
+    expect(applyFilters(rows, { ...NONE, regions: ['日本'] })).toHaveLength(0)
+  })
+
+  it('地區與分類同時作用時取交集', () => {
+    const rows = ROWS.map((r, i) => ({ ...r, region: i === 0 ? '台灣' : '美國' }))
+    const out = applyFilters(rows, {
+      ...NONE, regions: ['台灣'], categories: ['市值型'], showLevered: true,
+    })
+    expect(out.map((r) => r.code)).toEqual(['0050'])
+  })
+
+  it('沒有地區的標的在有選地區時被排除', () => {
+    const rows = [{ ...ROWS[0]!, region: null }]
+    expect(applyFilters(rows, { ...NONE, regions: ['台灣'] })).toHaveLength(0)
+    expect(applyFilters(rows, { ...NONE, regions: [] })).toHaveLength(1)
+  })
+})
+
+describe('collectRegions', () => {
+  it('把複合地區拆開,常見地區在前', () => {
+    const rows = [
+      { ...ROWS[0]!, region: '台灣、美國' },
+      { ...ROWS[1]!, region: '日本' },
+      { ...ROWS[2]!, region: '全球' },
+    ]
+    expect(collectRegions(rows)).toEqual(['台灣', '美國', '日本', '全球'])
+  })
+
+  it('略過沒有地區的列', () => {
+    expect(collectRegions([{ ...ROWS[0]!, region: null }])).toEqual([])
   })
 })

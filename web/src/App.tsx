@@ -13,7 +13,7 @@ import { HealthBar } from './components/HealthBar'
 import { PeriodTabs } from './components/PeriodTabs'
 import { RankingTable } from './components/RankingTable'
 import { loadData, type LoadResult } from './data/loader'
-import { applyFilters, collectCategories } from './lib/filtering'
+import { applyFilters, collectCategories, collectRegions } from './lib/filtering'
 import { formatPercent } from './lib/format'
 import { loadPrefs, savePrefs } from './lib/prefs'
 import { PERIODS, type PeriodCode } from './types'
@@ -23,6 +23,7 @@ export function App() {
   const [prefs, setPrefs] = useState(() => loadPrefs())
   const [sortBy, setSortBy] = useState<PeriodCode>('Y1')
   const [categories, setCategories] = useState<string[]>([])
+  const [regions, setRegions] = useState<string[]>([])
   const [query, setQuery] = useState('')
 
   useEffect(() => {
@@ -60,15 +61,22 @@ export function App() {
   // 槓桿型/反向型的按鈕,而按下去必然是空表 —— 那是個死路,
   // 使用者只會以為壞了。
   const visibleRows = useMemo(
-    () => applyFilters(allRows, { categories: [], query: '', showLevered: prefs.showLevered }),
+    () => applyFilters(allRows, {
+      categories: [], regions: [], query: '', showLevered: prefs.showLevered,
+    }),
     [allRows, prefs.showLevered],
   )
   const availableCategories = useMemo(
     () => collectCategories(visibleRows), [visibleRows],
   )
+  const availableRegions = useMemo(
+    () => collectRegions(visibleRows), [visibleRows],
+  )
   const rows = useMemo(
-    () => applyFilters(allRows, { categories, query, showLevered: prefs.showLevered }),
-    [allRows, categories, query, prefs.showLevered],
+    () => applyFilters(allRows, {
+      categories, regions, query, showLevered: prefs.showLevered,
+    }),
+    [allRows, categories, regions, query, prefs.showLevered],
   )
 
   if (result === null) {
@@ -100,6 +108,9 @@ export function App() {
         <Filters
           categories={availableCategories}
           selected={categories}
+          regions={availableRegions}
+          selectedRegions={regions}
+          onRegionsChange={setRegions}
           query={query}
           showLevered={prefs.showLevered}
           onCategoriesChange={setCategories}

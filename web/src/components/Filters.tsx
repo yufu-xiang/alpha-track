@@ -2,6 +2,9 @@
 interface Props {
   categories: string[]
   selected: string[]
+  regions: string[]
+  selectedRegions: string[]
+  onRegionsChange: (next: string[]) => void
   query: string
   showLevered: boolean
   onCategoriesChange: (next: string[]) => void
@@ -10,14 +13,22 @@ interface Props {
 }
 
 export function Filters({
-  categories, selected, query, showLevered,
-  onCategoriesChange, onQueryChange, onShowLeveredChange,
+  categories, selected, regions, selectedRegions, query, showLevered,
+  onCategoriesChange, onRegionsChange, onQueryChange, onShowLeveredChange,
 }: Props) {
   function toggle(category: string) {
     onCategoriesChange(
       selected.includes(category)
         ? selected.filter((c) => c !== category)
         : [...selected, category],
+    )
+  }
+
+  function toggleRegion(region: string) {
+    onRegionsChange(
+      selectedRegions.includes(region)
+        ? selectedRegions.filter((r) => r !== region)
+        : [...selectedRegions, region],
     )
   }
 
@@ -33,6 +44,22 @@ export function Filters({
               onClick={() => toggle(c)}
             >
               {c}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {regions.length > 0 && (
+        <div className="filters__chips filters__chips--region" role="group"
+             aria-label="依地區篩選">
+          {regions.map((r) => (
+            <button
+              key={r}
+              type="button"
+              aria-pressed={selectedRegions.includes(r)}
+              onClick={() => toggleRegion(r)}
+            >
+              {r}
             </button>
           ))}
         </div>

@@ -58,22 +58,32 @@ def load_category_map(path: Path) -> dict[str, dict]:
 
 
 def classify(code: str, category_map: dict[str, dict]) -> Classification:
-    """判定單一 ETF 的分類。未知代號歸「未分類」,不拋出例外。"""
+    """判定單一 ETF 的分類。未知代號歸「未分類」,不拋出例外。
+
+    分類與地區的來源刻意分開:
+      - **分類**由代號規則(B/L/R)確定性判定,規則優先於對照表。
+      - **地區**只能來自對照表 —— 代號決定不了它。元大美債20年(00679B)
+        與元大台灣50正2(00631L)都靠規則分類,地區卻一個美國一個台灣。
+
+    早期版本在三個規則分支直接 return,對照表整個沒查,於是這 143 檔的
+    地區永遠是空的,而且就算把地區填進 YAML 也讀不到。
+    """
     suffix = code[-1].upper() if code else ""
+    entry = category_map.get(code) or {}
+    region = entry.get("region")
 
     if suffix == "B":
-        return Classification("債券型", None, False, False)
+        return Classification("債券型", region, False, False)
     if suffix == "L":
-        return Classification("槓桿型", None, True, False)
+        return Classification("槓桿型", region, True, False)
     if suffix == "R":
-        return Classification("反向型", None, False, True)
+        return Classification("反向型", region, False, True)
 
-    entry = category_map.get(code)
-    if entry is None:
+    if not entry:
         return Classification(UNCLASSIFIED, None, False, False)
     return Classification(
         category=entry.get("category", UNCLASSIFIED),
-        region=entry.get("region"),
+        region=region,
         is_leveraged=False,
         is_inverse=False,
     )

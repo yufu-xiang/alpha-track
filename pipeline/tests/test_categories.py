@@ -107,3 +107,26 @@ def test_non_etf_securities_are_excluded():
     """01xxxT 是 REIT、020xxx 是 ETN、四碼數字是個股 —— 都不是 ETF。"""
     for code in ("2330", "1101", "01001T", "020000", "02001L", ""):
         assert not is_etf_code(code), code
+
+
+def test_code_rule_decides_category_but_region_still_comes_from_the_table():
+    """規格 §3.2:B/L/R 的**分類**由代號規則確定性判定。
+    但地區不是代號能決定的 —— 元大美債20年與元大台灣50正2 都靠規則分類,
+    地區卻一個是美國一個是台灣。原本三個分支提前 return,對照表整個沒查,
+    於是這 143 檔的地區永遠是空的,而且就算填了 YAML 也讀不到。"""
+    m = {
+        "00679B": {"category": "海外指數", "region": "美國"},
+        "00631L": {"category": "市值型", "region": "台灣"},
+        "00632R": {"category": "市值型", "region": "台灣"},
+    }
+    assert classify("00679B", m).category == "債券型", "分類仍由代號規則決定"
+    assert classify("00679B", m).region == "美國", "地區要讀得到"
+    assert classify("00631L", m).region == "台灣"
+    assert classify("00631L", m).is_leveraged is True
+    assert classify("00632R", m).region == "台灣"
+    assert classify("00632R", m).is_inverse is True
+
+
+def test_code_rule_still_works_when_the_table_has_no_entry():
+    assert classify("00679B", {}).category == "債券型"
+    assert classify("00679B", {}).region is None

@@ -8,8 +8,14 @@ import type { EtfRow } from '../types'
 
 export interface FilterState {
   categories: string[]
+  regions: string[]
   query: string
   showLevered: boolean
+}
+
+/** 複合地區以頓號分隔(「台灣、美國」)。拆成單一地區的清單。 */
+function splitRegion(region: string | null): string[] {
+  return region ? region.split('、').map((r) => r.trim()).filter(Boolean) : []
 }
 
 /**
@@ -21,6 +27,15 @@ export interface FilterState {
  * 一樣沒有意義,而且結果相依於執行環境的 ICU 資料。既然兩種機器排序
  * 都不好用,不如照使用者實際會找的順序寫死。
  */
+/**
+ * 篩選列的地區順序。台股網站,台灣在前;其餘依台灣投資人常見程度排,
+ * 「全球」殿後 —— 它是「沒有單一市場」的意思,不是一個地方。
+ */
+const REGION_ORDER = [
+  '台灣', '美國', '日本', '中國', '香港', '南韓', '印度', '越南',
+  '歐洲', '澳洲', '亞太', '新興市場', '全球',
+]
+
 const CATEGORY_ORDER = [
   // 股票型:一般人最常比較的,放最前面
   '市值型', '高股息', '因子型', '主題型', '產業型', '海外指數',
@@ -44,6 +59,13 @@ export function applyFilters(rows: EtfRow[], state: FilterState): EtfRow[] {
       if (!row.category || !state.categories.includes(row.category)) return false
     }
 
+    if (state.regions.length > 0) {
+      // 複合地區(「台灣、美國」)只要包含選取的其中之一就算命中 ——
+      // 那種標的兩邊都投,選任一邊都該找得到它。
+      const own = splitRegion(row.region)
+      if (!own.some((r) => state.regions.includes(r))) return false
+    }
+
     if (q) {
       // 只比對代號與名稱。把分類也納入的話,搜「高股息」會連名稱不含
       // 該詞、只是分類相同的標的一起帶出來,使用者無從理解為何命中。
@@ -54,6 +76,19 @@ export function applyFilters(rows: EtfRow[], state: FilterState): EtfRow[] {
     return true
   })
 }
+
+export function collectRegions(rows: EtfRow[]): string[] {
+  const seen = new Set<string>()
+  for (const row of rows) {
+    for (const r of splitRegion(row.region)) seen.add(r)
+  }
+  const rank = (r: string) => {
+    const i = REGION_ORDER.indexOf(r)
+    return i === -1 ? REGION_ORDER.length : i
+  }
+  return [...seen].sort((a, b) => rank(a) - rank(b))
+}
+
 
 export function collectCategories(rows: EtfRow[]): string[] {
   const seen = new Set<string>()

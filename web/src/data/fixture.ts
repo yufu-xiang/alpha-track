@@ -72,7 +72,7 @@ export const fixtureRankings: RankingsData = {
       premium_discount: -0.0044,
     },
     {
-      code: '00679B', name: '元大美債20年', category: '債券型', region: null,
+      code: '00679B', name: '元大美債20年', category: '債券型', region: '美國',
       is_leveraged: false, is_inverse: false, close: 29.8,
       listing_date: '2017-01-11',
       data_start: '2017-01-11',
@@ -89,7 +89,7 @@ export const fixtureRankings: RankingsData = {
       premium_discount: 0.0008,
     },
     {
-      code: '00631L', name: '元大台灣50正2', category: '槓桿型', region: null,
+      code: '00631L', name: '元大台灣50正2', category: '槓桿型', region: '台灣',
       is_leveraged: true, is_inverse: false, close: 210.5,
       listing_date: '2014-10-31',
       data_start: '2014-10-31',
@@ -108,7 +108,7 @@ export const fixtureRankings: RankingsData = {
       premium_discount: 0.0055,
     },
     {
-      code: '00632R', name: '元大台灣50反1', category: '反向型', region: null,
+      code: '00632R', name: '元大台灣50反1', category: '反向型', region: '台灣',
       is_leveraged: false, is_inverse: true, close: 4.12,
       listing_date: '2014-10-31',
       data_start: '2014-10-31',
