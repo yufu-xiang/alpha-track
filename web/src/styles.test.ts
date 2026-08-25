@@ -41,6 +41,19 @@ describe('樣式表', () => {
     expect(css).toMatch(/left:\s*var\(--sticky-code-w\)/)
   })
 
+  it('排序中的欄位有視覺區隔,不只靠 aria-sort', () => {
+    // aria-sort 只有螢幕閱讀器讀得到。用眼睛看的人也要能一眼看出
+    // 目前依哪一欄排序 —— 那是這張表的核心互動。
+    expect(css).toMatch(/th\[aria-sort\]/)
+    expect(css).toMatch(/\.sort-caret/)
+  })
+
+  it('只有可排序的欄位是手指游標', () => {
+    // 對不可排序的欄位給 pointer,等於告訴使用者可以點、點了卻沒反應。
+    expect(css).toMatch(/th\.is-sortable\s*\{[^}]*cursor:\s*pointer/)
+    expect(css).not.toMatch(/thead th\s*\{[^}]*cursor:\s*pointer/)
+  })
+
   it('正負報酬使用不同顏色,且不只靠顏色區分', () => {
     expect(css).toMatch(/--gain:/)
     expect(css).toMatch(/--loss:/)

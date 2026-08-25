@@ -219,3 +219,41 @@ describe('RankingTable 超額報酬', () => {
     expect(screen.queryByRole('columnheader', { name: /超額/ })).not.toBeInTheDocument()
   })
 })
+
+describe('RankingTable 排序指示', () => {
+  it('目前排序中的欄位顯示方向箭頭', () => {
+    renderTable({ visibleColumns: ['D1', 'Y1'], sortBy: 'Y1' })
+    const sorted = screen.getByRole('columnheader', { name: /^一年/ })
+    expect(sorted.querySelector('.sort-caret')).toHaveTextContent('▼')
+  })
+
+  it('切成升冪時箭頭跟著反過來', async () => {
+    const user = userEvent.setup()
+    renderTable({ visibleColumns: ['D1', 'Y1'], sortBy: 'Y1' })
+    const sorted = screen.getByRole('columnheader', { name: /^一年/ })
+    await user.click(sorted)
+    expect(sorted).toHaveAttribute('aria-sort', 'ascending')
+    expect(sorted.querySelector('.sort-caret')).toHaveTextContent('▲')
+  })
+
+  it('未排序的欄位沒有箭頭 —— 否則等於沒有指示', () => {
+    renderTable({ visibleColumns: ['D1', 'Y1'], sortBy: 'Y1' })
+    const other = screen.getByRole('columnheader', { name: /^當日/ })
+    expect(other.querySelector('.sort-caret')).toBeNull()
+  })
+
+  it('箭頭對螢幕閱讀器隱藏 —— aria-sort 已經表達了同一件事', () => {
+    renderTable({ visibleColumns: ['Y1'], sortBy: 'Y1' })
+    const caret = screen.getByRole('columnheader', { name: /^一年/ })
+      .querySelector('.sort-caret')!
+    expect(caret).toHaveAttribute('aria-hidden', 'true')
+  })
+
+  it('不可排序的欄位不標成可排序 —— 游標說可以點卻沒反應是騙人', () => {
+    renderTable({ visibleColumns: ['Y1'], sortBy: 'Y1' })
+    expect(screen.getByRole('columnheader', { name: '代號' }))
+      .not.toHaveClass('is-sortable')
+    expect(screen.getByRole('columnheader', { name: /^一年/ }))
+      .toHaveClass('is-sortable')
+  })
+})

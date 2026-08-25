@@ -206,10 +206,19 @@ thead th {
   top: 0;
   z-index: 2;
   background: var(--surface);
-  cursor: pointer;
   font-size: 0.8125rem;
   color: var(--fg-muted);
 }
+
+/* 只有真的能排序的欄位才是手指游標。原本所有表頭都給 pointer,
+   包括代號/名稱/分類這三個 enableSorting: false 的欄 —— 游標說可以點、
+   點了卻沒反應,是對使用者說謊。 */
+thead th.is-sortable { cursor: pointer; }
+thead th.is-sortable:hover { color: var(--fg); }
+
+/* 排序中的欄位:箭頭 + 提高對比,一眼看得出目前依哪一欄、往哪個方向排。 */
+thead th[aria-sort] { color: var(--accent); }
+.sort-caret { margin-left: 0.25rem; font-size: 0.7rem; }
 
 tbody tr:hover { background: var(--surface); }
 

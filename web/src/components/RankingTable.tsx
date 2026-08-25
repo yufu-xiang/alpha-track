@@ -161,9 +161,11 @@ export function RankingTable({
               {hg.headers.map((header) => {
                 const canSort = header.column.getCanSort()
                 const isPeriod = (visibleColumns as string[]).includes(header.column.id)
+                const sorted = header.column.getIsSorted()
                 return (
                   <th
                     key={header.id}
+                    className={canSort ? 'is-sortable' : undefined}
                     onClick={
                       canSort
                         ? () => {
@@ -173,14 +175,21 @@ export function RankingTable({
                         : undefined
                     }
                     aria-sort={
-                      header.column.getIsSorted() === 'asc'
+                      sorted === 'asc'
                         ? 'ascending'
-                        : header.column.getIsSorted() === 'desc'
+                        : sorted === 'desc'
                           ? 'descending'
                           : undefined
                     }
                   >
                     {flexRender(header.column.columnDef.header, header.getContext())}
+                    {/* 箭頭給眼睛看,aria-sort 給螢幕閱讀器 —— 同一件事講兩次
+                        會讓語音把「一年 降冪 向下三角形」整串念出來。 */}
+                    {sorted && (
+                      <span className="sort-caret" aria-hidden="true">
+                        {sorted === 'desc' ? '▼' : '▲'}
+                      </span>
+                    )}
                   </th>
                 )
               })}
