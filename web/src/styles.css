@@ -663,3 +663,18 @@ footer { margin-top: 1.5rem; font-size: 0.8125rem; color: var(--fg-muted); }
 }
 /* 蒙地卡羅表格中已耗盡的百分位。用文字說明,不只靠顏色 —— 顏色不是資訊。 */
 .is-depleted { color: var(--loss); }
+
+.tool-list { list-style: none; padding: 0; margin: 1rem 0 0; }
+.tool-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.tool-list a { color: var(--accent); font-weight: 600; }
+.tool-list span { font-size: 0.8125rem; color: var(--fg-muted); }
+/* 警告色,不是漲跌色。--gain/--loss 在本站是台股的漲跌語意,
+   借來表達「安全/危險」會與同一頁上的報酬數字互相矛盾。 */
+.card dd.is-warn { color: var(--warn-fg); }

@@ -53,3 +53,28 @@ describe('比較頁路由', () => {
     expect(parseHash(hashFor(r))).toEqual(r)
   })
 })
+
+describe('工具子路由(規格 §7.4:每個工具一頁)', () => {
+  it('#/tools 是工具列表', () => {
+    expect(parseHash('#/tools')).toEqual({ name: 'tools', tool: null })
+  })
+
+  it('#/tools/<id> 指向單一工具', () => {
+    expect(parseHash('#/tools/monte-carlo')).toEqual({
+      name: 'tools', tool: 'monte-carlo',
+    })
+  })
+
+  it('往返一致', () => {
+    for (const r of [
+      { name: 'tools', tool: null },
+      { name: 'tools', tool: 'fire' },
+    ] as const) {
+      expect(parseHash(hashFor(r))).toEqual(r)
+    }
+  })
+
+  it('工具 id 只接受小寫連字號 —— 其餘退回排行榜,不猜使用者的意思', () => {
+    expect(parseHash('#/tools/Monte_Carlo')).toEqual({ name: 'rankings' })
+  })
+})

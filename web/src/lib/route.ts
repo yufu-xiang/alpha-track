@@ -13,14 +13,19 @@ export type Route =
   | { name: 'detail'; code: string }
   | { name: 'compare'; codes: string[] }
   | { name: 'portfolio' }
-  | { name: 'tools' }
+  | { name: 'tools'; tool: string | null }
 
 export function parseHash(hash: string): Route {
   const detail = /^#\/etf\/([A-Za-z0-9]+)$/.exec(hash)
   if (detail) return { name: 'detail', code: detail[1]!.toUpperCase() }
 
   if (hash === '#/portfolio') return { name: 'portfolio' }
-  if (hash === '#/tools') return { name: 'tools' }
+  // 規格 §7.4「每個工具一頁」。無 id 時是工具列表;id 不存在時由 Tools
+  // 顯示「找不到」再列出全部,不是靜默退回列表 —— 舊書籤失效時使用者
+  // 需要知道發生了什麼,而不是納悶自己是不是點錯了。
+  if (hash === '#/tools') return { name: 'tools', tool: null }
+  const tool = /^#\/tools\/([a-z0-9-]+)$/.exec(hash)
+  if (tool) return { name: 'tools', tool: tool[1]! }
 
   const compare = /^#\/compare\/([A-Za-z0-9,]+)$/.exec(hash)
   if (compare) {
@@ -34,7 +39,7 @@ export function hashFor(route: Route): string {
   if (route.name === 'detail') return `#/etf/${route.code}`
   if (route.name === 'compare') return `#/compare/${serializeCodes(route.codes)}`
   if (route.name === 'portfolio') return '#/portfolio'
-  if (route.name === 'tools') return '#/tools'
+  if (route.name === 'tools') return route.tool ? `#/tools/${route.tool}` : '#/tools'
   return '#/'
 }
 
