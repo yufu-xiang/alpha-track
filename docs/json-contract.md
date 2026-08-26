@@ -94,7 +94,10 @@
         "sharpe": 5.3256858795932365,
         "beta": null
       },
-      "premium_discount": null
+      "premium_discount": null,
+      "avg_volume": 18420000.0,
+      "avg_turnover": 3601110000.0,
+      "dividend_yield": 0.0231
     }
   ]
 }
@@ -121,6 +124,9 @@
 | `risk.sharpe` | `number \| null` | (一年報酬 − 無風險利率) ÷ 年化波動度。波動為零時 `null`。 |
 | `risk.beta` | `number \| null` | 對加權報酬指數迴歸。與基準的日期交集不足一年時 `null`。 |
 | `premium_discount` | `number \| null` | 折溢價率。**階段 1 一律為 `null`** —— 見下節。 |
+| `avg_volume` | `number \| null` | 近 20 個交易日的平均成交**股數**。 |
+| `avg_turnover` | `number \| null` | 近 20 個交易日的平均成交**金額**(股數 × 收盤價)。比較流動性要看金額:10 元與 100 元的 ETF 成交同樣股數,換手資金差十倍,只排成交量會讓低價 ETF 系統性看起來比較熱門。 |
+| `dividend_yield` | `number \| null` | 近一年**實配**配息 ÷ 現價。不年化、不推估 —— 推估會把一次性特別配息當成常態,殖利率排行會被那種標的佔滿。無配息紀錄者為 `null`,不是 `0`:「沒有資料」與「這一年沒配」是兩件事。 |
 
 ### `PeriodCode`
 

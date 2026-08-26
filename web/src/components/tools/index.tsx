@@ -11,6 +11,7 @@ import { Fire } from './Fire'
 import { Lohas } from './Lohas'
 import { Margin } from './Margin'
 import { MonteCarlo } from './MonteCarlo'
+import { LiquidityRanking, YieldRanking } from './Ranking'
 import { Reinvest } from './Reinvest'
 import { Withdrawal } from './Withdrawal'
 
@@ -51,6 +52,18 @@ export const TOOLS: ToolEntry[] = [
     title: '融資維持率計算',
     blurb: '依持股市值與融資金額算維持率與追繳價位。',
     Component: Margin,
+  },
+  {
+    id: 'yield',
+    title: 'ETF 殖利率排行',
+    blurb: '近一年實際配息 ÷ 現價,與同期總報酬並列對照。',
+    Component: YieldRanking,
+  },
+  {
+    id: 'liquidity',
+    title: 'ETF 流動性排行',
+    blurb: '近月日均成交金額。排的是金額不是股數。',
+    Component: LiquidityRanking,
   },
   {
     id: 'lohas',

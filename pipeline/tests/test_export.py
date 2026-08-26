@@ -37,6 +37,7 @@ def test_rankings_uses_exact_contract_field_names():
         "code", "name", "category", "region", "is_leveraged", "is_inverse",
         "close", "listing_date", "data_start", "returns", "annualized",
         "excess", "risk", "premium_discount",
+        "avg_volume", "avg_turnover", "dividend_yield",
     }
     assert set(etf["risk"].keys()) == {"volatility", "mdd", "sharpe", "beta"}
 

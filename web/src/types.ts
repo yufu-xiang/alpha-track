@@ -85,6 +85,20 @@ export interface EtfRow {
   excess: Record<PeriodCode, number | null>
   risk: RiskMetrics
   premium_discount: number | null
+  /** 近 20 個交易日的平均成交股數。 */
+  avg_volume: number | null
+  /**
+   * 近 20 個交易日的平均成交金額。比較流動性要看**金額**不是股數:
+   * 10 元與 100 元的 ETF 成交同樣股數,實際換手的資金差十倍,
+   * 只排成交量會讓低價 ETF 系統性看起來比較熱門。
+   */
+  avg_turnover: number | null
+  /**
+   * 近一年**實配**配息 ÷ 現價。不年化、不推估 ——
+   * 推估會把一次性的特別配息當成常態,殖利率排行會被那種標的佔滿。
+   * 無配息紀錄者為 null,不是 0:「沒有資料」與「這一年沒配」是兩件事。
+   */
+  dividend_yield: number | null
 }
 
 /** 價格序列:起點 + 天數位移 + 平行陣列。見 docs/json-contract.md 的說明。 */

@@ -256,3 +256,73 @@ describe('股息再投入', () => {
       expect(screen.getByText(/沒有配息紀錄,兩種做法沒有差別/)).toBeInTheDocument())
   })
 })
+
+describe('殖利率與流動性排行', () => {
+  it('殖利率排行由高到低,並列出同期總報酬 —— 高殖利率不等於高報酬', async () => {
+    render(<Tools tool="yield" />)
+    await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument())
+    const cells = screen.getAllByRole('row').slice(1)
+      .map((r) => within(r).getAllByRole('cell')[3]!.textContent!)
+    const nums = cells.map((c) => parseFloat(c))
+    expect(nums).toEqual([...nums].sort((a, b) => b - a))
+    expect(screen.getByRole('columnheader', { name: '近一年總報酬' }))
+      .toBeInTheDocument()
+  })
+
+  it('沒有配息資料的標的不列入排名,並說明有幾檔被排除', async () => {
+    render(<Tools tool="yield" />)
+    await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument())
+    // fixture 裡有數檔 dividend_yield 為 null
+    expect(screen.getByText(/沒有這項資料,未列入排名/)).toBeInTheDocument()
+    expect(screen.queryByText('00999')).not.toBeInTheDocument()
+  })
+
+  it('流動性排的是金額不是股數,而且兩欄並列', async () => {
+    render(<Tools tool="liquidity" />)
+    await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument())
+    expect(screen.getByRole('columnheader', { name: '近月日均成交金額' }))
+      .toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: '日均成交股數' }))
+      .toBeInTheDocument()
+    // fixture 的 0056 成交股數多於 0050,成交金額卻較少 —— 正是這個工具
+    // 要凸顯的差別。金額排序下 0050 必須在 0056 之前。
+    const codes = screen.getAllByRole('row').slice(1)
+      .map((r) => within(r).getAllByRole('cell')[1]!.textContent!)
+    expect(codes.indexOf('0050')).toBeLessThan(codes.indexOf('0056'))
+  })
+
+  it('殖利率排行不含「該買」這類規範性字眼,而是指出陷阱', async () => {
+    render(<Tools tool="yield" />)
+    await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument())
+    expect(screen.getByText(/高殖利率不等於高報酬/)).toBeInTheDocument()
+  })
+})
+
+describe('排行的涵蓋率', () => {
+  it('資料涵蓋率偏低時明說「這不是全市場排行」', async () => {
+    // 用專屬資料驗門檻:五檔裡只有一檔查得到殖利率。
+    // 這正是配息逐日分批回補期間的真實狀態(上線初期是 14 / 351)。
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const body = url.includes('meta') ? fixtureMeta : {
+        data_date: '2026-08-25',
+        etfs: fixtureRankings.etfs.slice(0, 5).map((r, i) => ({
+          ...r, is_leveraged: false, is_inverse: false,
+          dividend_yield: i === 0 ? 0.05 : null,
+        })),
+      }
+      return { ok: true, json: async () => body }
+    }))
+    render(<Tools tool="yield" />)
+    await waitFor(() => {
+      const alert = screen.getByRole('alert')
+      expect(alert).toHaveTextContent(/這不是全市場排行/)
+      expect(alert).toHaveTextContent(/目前查得到的最高/)
+    })
+  })
+
+  it('涵蓋率足夠時不發警告 —— 常駐的警告等於沒有警告', async () => {
+    render(<Tools tool="liquidity" />)
+    await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument())
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})

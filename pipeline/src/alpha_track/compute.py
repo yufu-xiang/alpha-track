@@ -13,7 +13,7 @@ from .metrics.risk import (
     max_drawdown,
     sharpe,
 )
-from .models import NavRecord, Period, PriceRecord
+from .models import DividendRecord, NavRecord, Period, PriceRecord
 from .periods import period_start
 
 MIN_DAYS_FOR_RISK = 60
@@ -35,6 +35,21 @@ VOLATILITY_WINDOW_DAYS = 250
 
 歷史不足此窗口者以手上全部資料計算(仍需滿足 MIN_DAYS_FOR_RISK),
 不因此整欄留白。
+"""
+
+LIQUIDITY_WINDOW_DAYS = 20
+"""流動性取樣窗口(交易日),約一個月。
+
+窗口要夠短才反映得出「現在」好不好買賣 —— 那正是流動性要回答的問題。
+拿一年平均會被半年前的一次大額換手拖著,而使用者今天下單面對的是
+今天的量。二十個交易日足以壓掉單日的偶發爆量,又不至於失去時效。
+"""
+
+DIVIDEND_YIELD_DAYS = 365
+"""殖利率的回溯期間。採過去一年**實際配息**,不年化、不推估。
+
+推估未來配息會把一次性的特別配息當成常態,殖利率排行會被那種標的
+佔滿。過去一年實配是可查證的事實,推估不是。
 """
 
 BENCHMARK_LOOKBACK_DAYS = 7
@@ -64,6 +79,18 @@ class EtfMetrics:
     premium_discount: float | None = None
     data_start: date | None = None
     """最早持有價格資料的日期。與掛牌日不同時,前端據此說明實際涵蓋範圍。"""
+    avg_volume: float | None = None
+    """近 LIQUIDITY_WINDOW_DAYS 個交易日的平均成交股數。"""
+    avg_turnover: float | None = None
+    """近 LIQUIDITY_WINDOW_DAYS 個交易日的平均成交金額(股數 × 收盤價)。
+
+    比較流動性要看**金額**不是股數:一檔 10 元的 ETF 與一檔 100 元的
+    ETF 成交同樣的股數,實際換手的資金差十倍。只排成交量會讓低價 ETF
+    系統性地看起來比較熱門。
+    """
+    dividend_yield: float | None = None
+    """近一年配息總額 ÷ 最新收盤價。無配息紀錄者為 None,不是 0 ——
+    「沒有資料」與「不配息」是兩件事,而排行榜必須分得出來。"""
 
 
 def _benchmark_at(
@@ -84,6 +111,7 @@ def compute_etf_metrics(
     bench_closes: Mapping[date, float],
     navs: Sequence[NavRecord],
     listing_date: date | None,
+    dividends: Sequence[DividendRecord] = (),
 ) -> EtfMetrics:
     """計算單一 ETF 的所有指標。資料不足的項目一律為 None。
 
@@ -164,6 +192,19 @@ def compute_etf_metrics(
                     daily_returns([by_date[d].adj_close for d in common]),
                     daily_returns([bench_closes[d] for d in common]),
                 )
+
+    recent = [by_date[d] for d in own_days[-LIQUIDITY_WINDOW_DAYS:]]
+    if recent:
+        m.avg_volume = sum(r.volume for r in recent) / len(recent)
+        m.avg_turnover = sum(r.volume * r.close for r in recent) / len(recent)
+
+    latest_close = by_date[own_days[-1]].close if own_days else None
+    if dividends and latest_close and latest_close > 0:
+        cutoff = base_date - timedelta(days=DIVIDEND_YIELD_DAYS)
+        paid = sum(d.amount for d in dividends if cutoff < d.ex_date <= base_date)
+        # 有配息紀錄但這一年沒配 → 0 是正確答案(確實沒配)。
+        # 完全沒有配息紀錄 → None(不知道),兩者不可混為一談。
+        m.dividend_yield = paid / latest_close
 
     latest_nav = max((n for n in navs if n.date <= base_date),
                      key=lambda n: n.date, default=None)

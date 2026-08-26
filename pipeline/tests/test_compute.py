@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import date, timedelta
 
 import pytest
@@ -323,3 +324,71 @@ def test_volatility_still_requires_the_minimum_sample():
     m = compute_etf_metrics(prices, prices[-1].date, risk_free=0.015,
                             bench_closes={}, navs=[], listing_date=None)
     assert m.volatility is None
+
+
+def _prices_with_volume(n: int, volume: int = 1000, close: float = 50.0):
+    from alpha_track.models import PriceRecord
+    start = date(2026, 1, 1)
+    return [PriceRecord(code="0050", date=start + timedelta(days=i), open=close,
+                        high=close, low=close, close=close, volume=volume,
+                        adj_close=close)
+            for i in range(n)]
+
+
+def test_liquidity_uses_a_short_window_not_the_whole_history():
+    """流動性要回答「現在好不好買賣」,拿一年平均會被半年前的爆量拖著。"""
+    from alpha_track.compute import LIQUIDITY_WINDOW_DAYS, compute_etf_metrics
+    prices = _prices_with_volume(100, volume=1000)
+    # 最早那一天灌一筆爆量。若窗口是全歷史,平均會被它拉高。
+    prices[0] = replace(prices[0], volume=10_000_000)
+    m = compute_etf_metrics(prices, prices[-1].date, risk_free=0.0,
+                            bench_closes={}, navs=[], listing_date=None)
+    assert m.avg_volume == pytest.approx(1000)
+    assert LIQUIDITY_WINDOW_DAYS < 100
+
+
+def test_turnover_is_money_not_shares():
+    """10 元與 100 元的 ETF 成交同樣股數,換手資金差十倍。
+
+    只排成交量會讓低價 ETF 系統性看起來比較熱門。
+    """
+    from alpha_track.compute import compute_etf_metrics
+    cheap = _prices_with_volume(30, volume=1000, close=10.0)
+    rich = _prices_with_volume(30, volume=1000, close=100.0)
+    kw = dict(risk_free=0.0, bench_closes={}, navs=[], listing_date=None)
+    a = compute_etf_metrics(cheap, cheap[-1].date, **kw)
+    b = compute_etf_metrics(rich, rich[-1].date, **kw)
+    assert a.avg_volume == pytest.approx(b.avg_volume)
+    assert b.avg_turnover == pytest.approx(a.avg_turnover * 10)
+
+
+def test_dividend_yield_uses_the_past_year_actually_paid():
+    """採過去一年實配,不年化、不推估。
+
+    推估會把一次性的特別配息當成常態,殖利率排行會被那種標的佔滿。
+    """
+    from alpha_track.compute import compute_etf_metrics
+    from alpha_track.models import DividendRecord
+    prices = _prices_with_volume(400, close=50.0)
+    base = prices[-1].date
+    divs = [
+        DividendRecord(code="0050", ex_date=base - timedelta(days=30),
+                       pay_date=None, amount=1.0),
+        DividendRecord(code="0050", ex_date=base - timedelta(days=200),
+                       pay_date=None, amount=1.5),
+        # 一年以外,不計入
+        DividendRecord(code="0050", ex_date=base - timedelta(days=400),
+                       pay_date=None, amount=99.0),
+    ]
+    m = compute_etf_metrics(prices, base, risk_free=0.0, bench_closes={},
+                            navs=[], listing_date=None, dividends=divs)
+    assert m.dividend_yield == pytest.approx(2.5 / 50.0)
+
+
+def test_no_dividend_record_yields_none_not_zero():
+    """「沒有配息資料」與「不配息」是兩件事,排行榜必須分得出來。"""
+    from alpha_track.compute import compute_etf_metrics
+    m = compute_etf_metrics(_prices_with_volume(30), date(2026, 1, 30),
+                            risk_free=0.0, bench_closes={}, navs=[],
+                            listing_date=None, dividends=[])
+    assert m.dividend_yield is None

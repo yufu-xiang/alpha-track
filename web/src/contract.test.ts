@@ -15,9 +15,9 @@ import { PERIODS, type Series } from './types'
 // 由 pipeline/src/alpha_track/export.py 的實際輸出取得,見 docs/json-contract.md
 const BACKEND_TOP_LEVEL_KEYS = ['data_date', 'etfs']
 const BACKEND_ROW_KEYS = [
-  'annualized', 'category', 'close', 'code', 'data_start', 'excess',
-  'is_inverse', 'is_leveraged', 'listing_date', 'name', 'premium_discount',
-  'region', 'returns', 'risk',
+  'annualized', 'avg_turnover', 'avg_volume', 'category', 'close', 'code',
+  'data_start', 'dividend_yield', 'excess', 'is_inverse', 'is_leveraged',
+  'listing_date', 'name', 'premium_discount', 'region', 'returns', 'risk',
 ]
 const BACKEND_RISK_KEYS = ['beta', 'mdd', 'sharpe', 'volatility']
 const BACKEND_SERIES_KEYS = ['adj', 'close', 'days', 'start']

@@ -42,6 +42,14 @@ def build_rankings(
                 # (Yahoo 的歷史深度,或未調整分割導致舊區段被捨棄 —— ledger R24),
                 # 前端據此說明,而不是讓使用者以為那一欄本來就沒有數字。
                 "data_start": m.data_start.isoformat() if m.data_start else None,
+                # 流動性比較要看成交**金額**不是股數:10 元與 100 元的 ETF
+                # 成交同樣股數,實際換手的資金差十倍。兩者都送出,
+                # 讓使用者能自己看到這個差別。
+                "avg_volume": m.avg_volume,
+                "avg_turnover": m.avg_turnover,
+                # 近一年實配 ÷ 現價。無配息紀錄者為 None,不是 0 ——
+                # 「沒有資料」與「這一年沒配」是兩件事。
+                "dividend_yield": m.dividend_yield,
                 # 複製而非共用:匯出後呼叫端若再動 EtfMetrics,
                 # 不該連帶改到已經組好的輸出。
                 "returns": dict(m.returns),

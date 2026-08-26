@@ -686,3 +686,25 @@ footer { margin-top: 1.5rem; font-size: 0.8125rem; color: var(--fg-muted); }
 .lohas__line--tl { stroke-width: 1.5; opacity: 0.8; }
 .lohas__line--one { stroke-width: 1; opacity: 0.55; }
 .lohas__line--two { stroke-width: 1; opacity: 0.55; stroke-dasharray: 5 4; }
+.tool-form select {
+  padding: 0.35rem 0.5rem;
+  font: inherit;
+  font-size: 0.875rem;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+/* 選擇器必須比 `.tool-form label`(0,1,1)更 specific,否則欄式排列
+   蓋掉 row,核取方塊會跑到文字上面一行。 */
+.tool-form label.tool-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+  /* 與旁邊的下拉選單對齊:那些欄位上方有一行標籤,這一個沒有。 */
+  align-self: flex-end;
+  padding-bottom: 0.45rem;
+}
+/* .tool-form input 的 width: 9rem 會把核取方塊撐成 9rem 寬,
+   於是方塊與文字之間出現一整段空白,看起來像兩個不相干的元件。 */
+.tool-form label.tool-check input { width: auto; }

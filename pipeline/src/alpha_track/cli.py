@@ -182,18 +182,20 @@ def run_export(
                 category=cls.category, region=cls.region,
                 is_leveraged=cls.is_leveraged, is_inverse=cls.is_inverse,
             )
+            dividends = db.get_dividends(code)
             metrics = compute_etf_metrics(
                 prices, base_date,
                 risk_free=settings.risk_free_rate,
                 bench_closes=bench_closes, navs=db.get_navs(code),
                 listing_date=profile.listing_date,
+                dividends=dividends,
             )
             rows.append((profile, metrics, prices[-1].close))
 
             # 個股頁的資料(規格 §5.2 ②、§5.3 的 lazy load 分層)。
             # 一檔一個檔案:全部價格序列合計約 12 MB,不能塞進 rankings.json。
             write_json(out_dir / "etf" / f"{code}.json",
-                       build_detail(profile, metrics, prices, db.get_dividends(code)))
+                       build_detail(profile, metrics, prices, dividends))
 
         # 基準線 351 檔共用,單獨匯出一次
         write_json(out_dir / "benchmark.json", build_benchmark_series(bench_closes))

@@ -35,6 +35,7 @@ export const fixtureRankings: RankingsData = {
       }),
       risk: { volatility: 0.1833, mdd: -0.3421, sharpe: 0.9187, beta: 1.0210 },
       premium_discount: 0.0012,
+      avg_volume: 18_420_000, avg_turnover: 3_601_110_000, dividend_yield: 0.0231,
     },
     {
       code: '0056', name: '元大高股息', category: '高股息', region: '台灣',
@@ -54,6 +55,7 @@ export const fixtureRankings: RankingsData = {
       }),
       risk: { volatility: 0.1521, mdd: -0.2988, sharpe: 0.7133, beta: 0.8422 },
       premium_discount: 0.0231,
+      avg_volume: 42_310_000, avg_turnover: 1_709_324_000, dividend_yield: 0.0812,
     },
     {
       code: '00929', name: '復華台灣科技優息', category: '高股息', region: '台灣',
@@ -70,6 +72,7 @@ export const fixtureRankings: RankingsData = {
       }),
       risk: { volatility: 0.2144, mdd: -0.1877, sharpe: 0.8632, beta: 1.1044 },
       premium_discount: -0.0044,
+      avg_volume: 55_100_000, avg_turnover: 976_222_000, dividend_yield: 0.0904,
     },
     {
       code: '00679B', name: '元大美債20年', category: '債券型', region: '美國',
@@ -87,6 +90,7 @@ export const fixtureRankings: RankingsData = {
       }),
       risk: { volatility: 0.1211, mdd: -0.4522, sharpe: 0.1421, beta: 0.1033 },
       premium_discount: 0.0008,
+      avg_volume: 8_930_000, avg_turnover: 246_048_000, dividend_yield: 0.0388,
     },
     {
       code: '00631L', name: '元大台灣50正2', category: '槓桿型', region: '台灣',
@@ -106,6 +110,7 @@ export const fixtureRankings: RankingsData = {
       }),
       risk: { volatility: 0.3688, mdd: -0.6211, sharpe: 0.9922, beta: 2.0411 },
       premium_discount: 0.0055,
+      avg_volume: 12_400_000, avg_turnover: 1_984_000_000, dividend_yield: null,
     },
     {
       code: '00632R', name: '元大台灣50反1', category: '反向型', region: '台灣',
@@ -125,6 +130,7 @@ export const fixtureRankings: RankingsData = {
       }),
       risk: { volatility: 0.1822, mdd: -0.8433, sharpe: null, beta: -1.0122 },
       premium_discount: -0.0011,
+      avg_volume: 3_210_000, avg_turnover: 41_730_000, dividend_yield: null,
     },
     {
       code: '00999', name: '未知新標的', category: '未分類', region: null,
@@ -138,6 +144,7 @@ export const fixtureRankings: RankingsData = {
       }),
       risk: { volatility: null, mdd: null, sharpe: null, beta: null },
       premium_discount: null,
+      avg_volume: null, avg_turnover: null, dividend_yield: null,
     },
   ],
 }
