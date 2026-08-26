@@ -64,9 +64,22 @@ TAIEX_TR_MONTHLY_URL = (
 # (docs/data-sources.md 第 8 點)。
 YAHOO_SUFFIX = {"TWSE": ".TW", "TPEX": ".TWO"}
 
+DIVIDEND_REQUEST_INTERVAL = 0.5
+"""逐檔抓配息的請求間隔(秒)。理由同 YAHOO_REQUEST_INTERVAL。"""
+
 BENCHMARK_REQUEST_INTERVAL = 1.0
 """逐月回補基準的請求間隔(秒)。勘查實測未遇限流,但十年是 120 次呼叫,
 不加間隔就是在測試對方的耐性。"""
+
+DIVIDEND_FETCH_LIMIT = 40
+"""每次執行最多抓幾檔配息。
+
+FinMind 是**逐檔**端點,首次執行有三百多檔要抓 —— 一次抓完是對免費 API
+連發。配息一年才變幾次、不急,分幾天攤開反而更穩。
+"""
+
+DIVIDEND_MAX_AGE_DAYS = 30
+"""配息資料的重抓週期。抓過就先擱著,但不能抓一次就永遠不再更新。"""
 
 YAHOO_REQUEST_INTERVAL = 0.5
 """逐檔回補歷史的請求間隔(秒)。
@@ -189,6 +202,7 @@ FetchAll = Callable[
 ]
 FetchHistory = Callable[[str, str], list[PriceRecord]]
 FetchBenchmark = Callable[[date, date], list[tuple[date, float]]]
+FetchDividends = Callable[[str], list[DividendRecord]]
 
 
 def fetch_all_sources(settings: Settings) -> tuple[
@@ -281,11 +295,24 @@ def fetch_taiex_tr_history(start: date, end: date) -> list[tuple[date, float]]:
     return rows
 
 
+def fetch_finmind_dividends(code: str) -> list[DividendRecord]:
+    """向 FinMind 取單一代號的配息紀錄。
+
+    這是**逐檔**端點,沒有全市場版本 —— 也因此不適合每天全抓,
+    由 run_backfill 依 DIVIDEND_MAX_AGE_DAYS 分批更新。
+    """
+    from .sources.base import fetch_json
+    from .sources.finmind import parse_finmind_dividends
+
+    return parse_finmind_dividends(fetch_json(FINMIND_DIVIDEND_URL.format(code=code)))
+
+
 def run_backfill(
     settings: Settings,
     *,
     fetch_history: FetchHistory = fetch_yahoo_history,
     fetch_benchmark: FetchBenchmark | None = fetch_taiex_tr_history,
+    fetch_dividends: FetchDividends | None = fetch_finmind_dividends,
 ) -> None:
     """為缺歷史的代號回補完整還原股價,並補齊大盤報酬指數。
 
@@ -310,6 +337,23 @@ def run_backfill(
             if rows:
                 db.upsert_prices(rows)
                 logger.info("%s 回補 %d 筆", code, len(rows))
+
+        # 配息:除息日豁免的資料來源(驗證閘門用),也是個股頁的配息紀錄。
+        # 成功才記錄抓取時間 —— 失敗的下次會再試,不會被誤認為「已抓過」。
+        if fetch_dividends is not None:
+            targets = db.codes_needing_dividends(DIVIDEND_MAX_AGE_DAYS)
+            for i, code in enumerate(targets[:DIVIDEND_FETCH_LIMIT]):
+                if i > 0:
+                    time.sleep(DIVIDEND_REQUEST_INTERVAL)
+                try:
+                    rows = fetch_dividends(code)
+                except Exception as exc:
+                    logger.warning("%s 配息取得失敗:%s", code, exc)
+                    continue
+                db.upsert_dividends(rows)
+                db.record_dividend_fetch(code, date.today())
+                if rows:
+                    logger.info("%s 配息 %d 筆", code, len(rows))
 
         # 大盤報酬指數:Beta 與超額報酬的基準。缺了不影響其他指標。
         #
@@ -337,6 +381,7 @@ def run_update(
     fetch_all: FetchAll = fetch_all_sources,
     fetch_history: FetchHistory = fetch_yahoo_history,
     fetch_benchmark: FetchBenchmark | None = fetch_taiex_tr_history,
+    fetch_dividends: FetchDividends | None = fetch_finmind_dividends,
 ) -> None:
     """每日更新:抓取 → 篩出 ETF → 驗證 → 寫入 → 回補 → 計算 → 匯出。
 
@@ -383,7 +428,7 @@ def run_update(
     # 否則所有多期間報酬都會是 null(R1)。
     # 基準也在此更新 —— 排程只跑 update,不在這裡補的話 Beta 永遠是 null。
     run_backfill(settings, fetch_history=fetch_history,
-                 fetch_benchmark=fetch_benchmark)
+                 fetch_benchmark=fetch_benchmark, fetch_dividends=fetch_dividends)
 
     run_export(settings, is_stale=False, anomalies=result.flagged)
 

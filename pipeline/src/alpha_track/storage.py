@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Iterable
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from types import TracebackType
 
@@ -53,6 +53,15 @@ CREATE TABLE IF NOT EXISTS dividends (
     pay_date TEXT,
     amount REAL NOT NULL,
     PRIMARY KEY (code, ex_date)
+);
+
+-- 每檔配息的最後抓取時間。
+-- 沒有這張表就分不出「這檔從不配息」與「這檔還沒抓過」——
+-- 靠 dividends 表是否有資料判斷的話,不配息的 ETF 會被每天重抓一輩子。
+-- FinMind 是逐檔端點,351 檔全抓等於每天 351 次請求。
+CREATE TABLE IF NOT EXISTS dividend_fetches (
+    code TEXT PRIMARY KEY,
+    fetched_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS benchmarks (
@@ -229,6 +238,32 @@ class Database:
         cur = self.conn.execute(
             "SELECT code FROM prices GROUP BY code HAVING COUNT(*) < ? ORDER BY code",
             (min_rows,),
+        )
+        return [r["code"] for r in cur.fetchall()]
+
+    def record_dividend_fetch(self, code: str, fetched_at: date) -> None:
+        """記下某檔配息的抓取時間。重複記錄為更新,不新增列。"""
+        self.conn.execute(
+            """INSERT INTO dividend_fetches (code, fetched_at) VALUES (?, ?)
+               ON CONFLICT(code) DO UPDATE SET fetched_at=excluded.fetched_at""",
+            (code, fetched_at.isoformat()),
+        )
+        self.conn.commit()
+
+    def codes_needing_dividends(
+        self, max_age_days: int, today: date | None = None
+    ) -> list[str]:
+        """需要抓(或重抓)配息的代號:從未抓過,或距上次抓取超過 max_age_days。
+
+        配息一年才變幾次,不必天天抓;但也不能抓一次就不再更新。
+        """
+        cutoff = ((today or date.today()) - timedelta(days=max_age_days)).isoformat()
+        cur = self.conn.execute(
+            """SELECT DISTINCT p.code FROM prices p
+               LEFT JOIN dividend_fetches f ON f.code = p.code
+               WHERE f.fetched_at IS NULL OR f.fetched_at < ?
+               ORDER BY p.code""",
+            (cutoff,),
         )
         return [r["code"] for r in cur.fetchall()]
 

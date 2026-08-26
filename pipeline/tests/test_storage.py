@@ -171,3 +171,46 @@ def test_profile_update_still_overwrites_with_a_real_new_value(tmp_path):
         assert stored.name == "元大台灣50"
         assert stored.listing_date == date(2003, 7, 1)
         assert stored.issuer == "元大投信"
+
+
+def test_codes_needing_dividends_returns_never_fetched_codes(tmp_path):
+    with Database(tmp_path / "t.db") as db:
+        db.init_schema()
+        db.upsert_prices([PriceRecord(code=c, date=date(2026, 8, 25), open=1.0,
+                                      high=1.0, low=1.0, close=1.0, volume=1,
+                                      adj_close=1.0)
+                          for c in ("0050", "0056", "00878")])
+        assert db.codes_needing_dividends(max_age_days=30, today=date(2026, 8, 25)) == \
+            ["0050", "0056", "00878"]
+
+
+def test_recording_a_fetch_stops_it_from_being_returned_again(tmp_path):
+    """「沒有配息紀錄」與「還沒抓過」是兩件事 —— 從不配息的 ETF 若靠
+    「表裡沒有資料」判斷,會被每天重抓一輩子。"""
+    with Database(tmp_path / "t.db") as db:
+        db.init_schema()
+        db.upsert_prices([PriceRecord(code="0050", date=date(2026, 8, 25), open=1.0,
+                                      high=1.0, low=1.0, close=1.0, volume=1,
+                                      adj_close=1.0)])
+        db.record_dividend_fetch("0050", date(2026, 8, 25))
+        assert db.codes_needing_dividends(30, today=date(2026, 8, 25)) == []
+
+
+def test_a_stale_fetch_comes_back_for_refresh(tmp_path):
+    with Database(tmp_path / "t.db") as db:
+        db.init_schema()
+        db.upsert_prices([PriceRecord(code="0050", date=date(2026, 8, 25), open=1.0,
+                                      high=1.0, low=1.0, close=1.0, volume=1,
+                                      adj_close=1.0)])
+        db.record_dividend_fetch("0050", date(2026, 7, 1))
+        assert db.codes_needing_dividends(30, today=date(2026, 8, 25)) == ["0050"]
+        assert db.codes_needing_dividends(90, today=date(2026, 8, 25)) == []
+
+
+def test_recording_a_fetch_twice_updates_rather_than_duplicates(tmp_path):
+    with Database(tmp_path / "t.db") as db:
+        db.init_schema()
+        db.record_dividend_fetch("0050", date(2026, 7, 1))
+        db.record_dividend_fetch("0050", date(2026, 8, 25))
+        n = db.conn.execute("SELECT COUNT(*) FROM dividend_fetches").fetchone()[0]
+        assert n == 1
