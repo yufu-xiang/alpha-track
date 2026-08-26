@@ -15,6 +15,7 @@ import { Compare } from './components/Compare'
 import { EtfDetail } from './components/EtfDetail'
 import { Portfolio } from './components/Portfolio'
 import { RankingTable } from './components/RankingTable'
+import { Tools } from './components/Tools'
 import { loadData, type LoadResult } from './data/loader'
 import { applyFilters, collectCategories, collectRegions } from './lib/filtering'
 import { formatPercent } from './lib/format'
@@ -28,6 +29,7 @@ export function App() {
   if (route.name === 'detail') return <EtfDetail code={route.code} />
   if (route.name === 'compare') return <Compare codes={route.codes} />
   if (route.name === 'portfolio') return <Portfolio />
+  if (route.name === 'tools') return <Tools />
   return <Rankings />
 }
 
@@ -113,7 +115,10 @@ function Rankings() {
     <main className="app">
       <header>
         <h1>台股 ETF 績效排行</h1>
-        <p className="app__nav"><a href={hashFor({ name: 'portfolio' })}>我的組合 →</a></p>
+        <p className="app__nav">
+          <a href={hashFor({ name: 'portfolio' })}>我的組合 →</a>
+          <a href={hashFor({ name: 'tools' })}>理財工具 →</a>
+        </p>
         <HealthBar meta={result.meta} />
       </header>
 

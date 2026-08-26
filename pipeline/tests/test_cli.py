@@ -51,7 +51,7 @@ def test_load_settings_applies_defaults_for_missing_keys(tmp_path: Path):
     f.write_text("risk_free_rate: 0.02\n", encoding="utf-8")
     s = load_settings(f)
     assert s.risk_free_rate == 0.02
-    assert s.output_dir == "web/public/data"
+    assert s.output_dir == str(cli.ROOT / "web/public/data")
 
 
 def test_shipped_settings_file_loads():
@@ -435,7 +435,7 @@ def test_benchmark_backfill_is_incremental_after_the_first_run(tmp_path: Path):
     assert start == date(2026, 8, 21), "應自最後一筆的隔天續抓,而非十年前"
 
 
-def test_benchmark_backfill_goes_back_ten_years_when_empty(tmp_path: Path):
+def test_benchmark_backfill_goes_back_to_2003_when_empty(tmp_path: Path):
     db_path = tmp_path / "t.db"
     with Database(db_path) as db:
         db.init_schema()
@@ -451,7 +451,10 @@ def test_benchmark_backfill_goes_back_ten_years_when_empty(tmp_path: Path):
                  fetch_benchmark=fake_bench, fetch_dividends=None)
 
     start, end = asked[0]
-    assert (end - start).days >= 3650, "空的基準表要補滿十年"
+    # 規格 §7.3 的蒙地卡羅要長期歷史;只補十年會讓「資料不足」的警告
+    # 永遠處在邊界上,而 2003 起算才涵蓋 2008 與 2020 兩次崩盤。
+    assert start == date(2003, 1, 1)
+    assert end >= date(2026, 1, 1)
 
 
 def test_backfill_paces_requests_between_codes(tmp_path: Path, monkeypatch):
@@ -669,3 +672,23 @@ def test_export_writes_one_file_per_etf_plus_a_shared_benchmark(tmp_path: Path):
     d = json.loads((out / "etf" / "0050.json").read_text("utf-8"))
     assert d["code"] == "0050"
     assert d["series"]["days"] == [0, 1, 2]
+
+
+def test_settings_resolve_relative_paths_against_repo_root(tmp_path):
+    """相對路徑必須釘在專案根目錄。
+
+    這條測試存在的原因是一次真實的無聲失敗:從 pipeline/ 執行 export,
+    SQLite 建了一個空的新資料庫,指令 exit 0,輸出寫到錯的資料夾,
+    而正式資料夾一個字都沒變。沒有任何錯誤訊息可以察覺。
+    """
+    cfg = tmp_path / "settings.yaml"
+    cfg.write_text("db_path: data/alpha_track.db\n", encoding="utf-8")
+    settings = cli.load_settings(cfg)
+    assert Path(settings.db_path).is_absolute()
+    assert Path(settings.db_path).parent.parent == cli.ROOT.resolve()
+
+
+def test_settings_keep_absolute_paths_unchanged(tmp_path):
+    cfg = tmp_path / "settings.yaml"
+    cfg.write_text(f"db_path: {tmp_path / 'x.db'}\n", encoding="utf-8")
+    assert cli.load_settings(cfg).db_path == str(tmp_path / "x.db")

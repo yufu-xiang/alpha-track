@@ -40,8 +40,17 @@ MIN_HISTORY_ROWS = 60
 """價格列數少於此值即視為缺歷史,觸發向 Yahoo 回補。
 與 compute.MIN_DAYS_FOR_RISK 一致:低於這個量,風險指標一律算不出來。"""
 
-BENCHMARK_BACKFILL_DAYS = 3660
-"""基準表為空時的回溯天數。十年,對應最長的 Y10 期間。"""
+BENCHMARK_EARLIEST = date(2003, 1, 1)
+"""基準回補的最早月份。
+
+TWSE 舊站的加權報酬指數最早只到民國 92 年 1 月;更早的月份回應是
+HTTP 200 帶 `stat` 錯誤訊息(見 docs/data-sources.md)。
+
+為什麼要回補到 2003 而不只是十年:規格 §7.3 要求蒙地卡羅模擬以**長期
+歷史**做 bootstrap,並在資料不足 10 年時顯著警告 —— 只回補十年會讓那個
+警告永遠處在邊界上,而長期退休推論最需要的正是涵蓋多次多空循環的樣本。
+2003 起算涵蓋 2008 金融海嘯與 2020 疫情崩盤,那才是有意義的壓力樣本。
+"""
 
 # 端點來自 docs/data-sources.md 的實測記錄,非憑記憶編寫。
 TWSE_DAILY_URL = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
@@ -99,12 +108,24 @@ class Settings:
     stale_warning_days: int = 3
 
 
+def _resolve(path_str: str) -> str:
+    """把設定檔中的相對路徑釘在專案根目錄,而不是當前工作目錄。
+
+    否則從 pipeline/ 執行 export 會開啟 pipeline/data/alpha_track.db ——
+    那個檔案不存在,SQLite 會**安靜地建一個空的**,於是指令以 exit 0 結束、
+    輸出一份「資料庫為空」的 meta.json 到 pipeline/web/public/data/,
+    真正的資料夾則完全沒被更新。整個過程沒有任何錯誤訊息。
+    """
+    p = Path(path_str)
+    return str(p if p.is_absolute() else ROOT / p)
+
+
 def load_settings(path: Path) -> Settings:
     raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     return Settings(
         risk_free_rate=raw.get("risk_free_rate", 0.015),
-        output_dir=raw.get("output_dir", "web/public/data"),
-        db_path=raw.get("db_path", "data/alpha_track.db"),
+        output_dir=_resolve(raw.get("output_dir", "web/public/data")),
+        db_path=_resolve(raw.get("db_path", "data/alpha_track.db")),
         stale_warning_days=raw.get("stale_warning_days", 3),
     )
 
@@ -372,8 +393,7 @@ def run_backfill(
         if fetch_benchmark is not None:
             stored = db.get_benchmark(BENCHMARK_NAME)
             today = date.today()
-            start = (max(stored) + timedelta(days=1) if stored
-                     else today - timedelta(days=BENCHMARK_BACKFILL_DAYS))
+            start = max(stored) + timedelta(days=1) if stored else BENCHMARK_EARLIEST
             if start <= today:
                 try:
                     bench = fetch_benchmark(start, today)

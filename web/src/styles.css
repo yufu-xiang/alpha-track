@@ -523,7 +523,7 @@ footer { margin-top: 1.5rem; font-size: 0.8125rem; color: var(--fg-muted); }
 
 /* ── 我的組合 ─────────────────────────────────────────────── */
 
-.app__nav { margin: 0 0 0.5rem; font-size: 0.875rem; }
+.app__nav { display: flex; gap: 1rem; margin: 0 0 0.5rem; font-size: 0.875rem; }
 .app__nav a { color: var(--accent); }
 
 /* 匯出提醒用警示色。規格 §6.5 把匯出列為必需品而非加分項 ——
@@ -612,3 +612,54 @@ footer { margin-top: 1.5rem; font-size: 0.8125rem; color: var(--fg-muted); }
 .pie__legend { list-style: none; margin: 0; padding: 0; font-size: 0.875rem; }
 .pie__legend li { display: flex; gap: 0.75rem; justify-content: space-between; }
 .pie__share { color: var(--fg-muted); font-variant-numeric: tabular-nums; }
+
+/* ── 理財工具 ─────────────────────────────────────────── */
+
+.tool-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+}
+.tool-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+}
+.tool-form input {
+  width: 9rem;
+  padding: 0.35rem 0.5rem;
+  font: inherit;
+  font-size: 0.875rem;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+/* 目前使用哪一種參數來源必須看得見(規格 §7.1),所以給它一條左邊界
+   而不是混在內文裡當普通句子。 */
+.tool-mode {
+  margin: 0.5rem 0;
+  padding-left: 0.6rem;
+  border-left: 3px solid var(--accent);
+  font-size: 0.8125rem;
+  color: var(--fg-muted);
+}
+.tool-note {
+  margin: 0.75rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--fg-muted);
+}
+.tool-caption {
+  caption-side: top;
+  padding: 0 0 0.5rem;
+  text-align: left;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--fg-muted);
+}
+/* 蒙地卡羅表格中已耗盡的百分位。用文字說明,不只靠顏色 —— 顏色不是資訊。 */
+.is-depleted { color: var(--loss); }

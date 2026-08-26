@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatDate, formatNumber, formatPercent } from './format'
+import { formatDate, formatNumber, formatPercent, formatMoney } from './format'
 
 describe('formatPercent', () => {
   it('把小數轉為百分比字串', () => {
@@ -62,5 +62,19 @@ describe('formatDate', () => {
 
   it('空字串也視為無資料', () => {
     expect(formatDate('')).toBe('—')
+  })
+})
+
+describe('formatMoney', () => {
+  it('加千分位', () => {
+    expect(formatMoney(302127026)).toBe('302,127,026')
+  })
+
+  it('預設不顯示小數 —— 試算結果的個位數是假精確', () => {
+    expect(formatMoney(1234.56)).toBe('1,235')
+  })
+
+  it('null 顯示破折號,不是 0', () => {
+    expect(formatMoney(null)).toBe('—')
   })
 })

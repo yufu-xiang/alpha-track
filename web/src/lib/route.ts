@@ -13,12 +13,14 @@ export type Route =
   | { name: 'detail'; code: string }
   | { name: 'compare'; codes: string[] }
   | { name: 'portfolio' }
+  | { name: 'tools' }
 
 export function parseHash(hash: string): Route {
   const detail = /^#\/etf\/([A-Za-z0-9]+)$/.exec(hash)
   if (detail) return { name: 'detail', code: detail[1]!.toUpperCase() }
 
   if (hash === '#/portfolio') return { name: 'portfolio' }
+  if (hash === '#/tools') return { name: 'tools' }
 
   const compare = /^#\/compare\/([A-Za-z0-9,]+)$/.exec(hash)
   if (compare) {
@@ -32,6 +34,7 @@ export function hashFor(route: Route): string {
   if (route.name === 'detail') return `#/etf/${route.code}`
   if (route.name === 'compare') return `#/compare/${serializeCodes(route.codes)}`
   if (route.name === 'portfolio') return '#/portfolio'
+  if (route.name === 'tools') return '#/tools'
   return '#/'
 }
 
