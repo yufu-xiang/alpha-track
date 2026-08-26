@@ -8,6 +8,7 @@
 import { hashFor } from '../../lib/route'
 import { Dca } from './Dca'
 import { Fire } from './Fire'
+import { Lohas } from './Lohas'
 import { Margin } from './Margin'
 import { MonteCarlo } from './MonteCarlo'
 import { Reinvest } from './Reinvest'
@@ -50,6 +51,12 @@ export const TOOLS: ToolEntry[] = [
     title: '融資維持率計算',
     blurb: '依持股市值與融資金額算維持率與追繳價位。',
     Component: Margin,
+  },
+  {
+    id: 'lohas',
+    title: '樂活五線譜',
+    blurb: '以對數價格的回歸線與標準差通道,看目前處在這段期間的什麼位階。',
+    Component: Lohas,
   },
   {
     id: 'fire',

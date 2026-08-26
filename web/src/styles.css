@@ -678,3 +678,11 @@ footer { margin-top: 1.5rem; font-size: 0.8125rem; color: var(--fg-muted); }
 /* 警告色,不是漲跌色。--gain/--loss 在本站是台股的漲跌語意,
    借來表達「安全/危險」會與同一頁上的報酬數字互相矛盾。 */
 .card dd.is-warn { color: var(--warn-fg); }
+
+/* 樂活五線譜。五條帶狀線是序數而非類別 —— 用線型與粗細承載層級,
+   不配五個類別色。價格線是唯一有顏色的一條,識別因此不依賴顏色辨別能力。 */
+.lohas__band { fill: var(--fg-muted); opacity: 0.09; }
+.lohas__line { fill: none; stroke: var(--fg-muted); }
+.lohas__line--tl { stroke-width: 1.5; opacity: 0.8; }
+.lohas__line--one { stroke-width: 1; opacity: 0.55; }
+.lohas__line--two { stroke-width: 1; opacity: 0.55; stroke-dasharray: 5 4; }
