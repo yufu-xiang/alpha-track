@@ -48,10 +48,23 @@ jobs:
         env:
           PYTHONPATH: pipeline/src
 
+      # 這一步跑在數分鐘的回補之後,期間任何一次人工推送都會讓遠端前進,
+      # 於是 push 被拒、整批白做 —— 而它已經付出完整回補的代價。
+      # 2026-08-26 的執行就是這樣失敗的。
+      #
+      # rebase 是安全的:本工作只動 web/public/data/ 底下的產出檔,
+      # 與人工變更不會改到同一行。真的衝突就讓它失敗,不要 -X ours 硬吃掉。
       - name: 提交更新的 JSON
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add web/public/data/
-          git diff --staged --quiet || git commit -m "chore: 每日資料更新 $(date +%F)"
-          git push
+          git diff --staged --quiet && echo "資料無變化,略過" && exit 0
+          git commit -m "chore: 每日資料更新 $(date +%F)"
+          for attempt in 1 2 3; do
+            if git push; then exit 0; fi
+            echo "推送被拒(第 $attempt 次),取回遠端後 rebase 重試"
+            git pull --rebase origin main
+          done
+          echo "重試三次仍無法推送" >&2
+          exit 1
