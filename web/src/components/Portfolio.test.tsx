@@ -120,3 +120,27 @@ describe('Portfolio', () => {
       expect(screen.getByText(/查不到 09999 的現價/)).toBeInTheDocument())
   })
 })
+
+describe('推估配息的標記(規格 §6.4)', () => {
+  it('交易紀錄表把推估的配息標出來 —— 只在記錄前標示等於沒標示', async () => {
+    const est = {
+      id: 'e1', type: 'dividend' as const, code: '0050', date: '2026-08-10',
+      shares: 40_000, price: 0.6, fee: 506.4, tax: 0, estimated: true,
+    }
+    localStorage.setItem(KEY, JSON.stringify({ transactions: [est], lastExport: null }))
+    await renderLoaded()
+    const row = screen.getByRole('row', { name: /2026\/08\/10/ })
+    expect(within(row).getByText('推估')).toBeInTheDocument()
+  })
+
+  it('自己記的配息不標推估', async () => {
+    const manual = {
+      id: 'm1', type: 'dividend' as const, code: '0050', date: '2026-08-10',
+      shares: 40_000, price: 0.6, fee: 520, tax: 0,
+    }
+    localStorage.setItem(KEY, JSON.stringify({ transactions: [manual], lastExport: null }))
+    await renderLoaded()
+    const row = screen.getByRole('row', { name: /2026\/08\/10/ })
+    expect(within(row).queryByText('推估')).not.toBeInTheDocument()
+  })
+})

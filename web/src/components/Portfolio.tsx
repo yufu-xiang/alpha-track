@@ -16,6 +16,7 @@ import { hashFor } from '../lib/route'
 import type { EtfRow } from '../types'
 import { AllocationPie } from './AllocationPie'
 import { MetricInfo } from './MetricInfo'
+import { DividendEstimates } from './DividendEstimates'
 import { TransactionForm } from './TransactionForm'
 
 const TYPE_LABEL = { buy: '買進', sell: '賣出', dividend: '配息' } as const
@@ -159,6 +160,11 @@ export function Portfolio() {
       </section>
 
       <section>
+        <h2>應領配息推估</h2>
+        <DividendEstimates transactions={data.transactions} onRecord={addTx} />
+      </section>
+
+      <section>
         <h2>新增交易</h2>
         <TransactionForm fees={data.fees} rows={rows} onAdd={addTx} />
       </section>
@@ -182,7 +188,12 @@ export function Portfolio() {
                   .map((t) => (
                     <tr key={t.id}>
                       <td>{formatDate(t.date)}</td>
-                      <td>{TYPE_LABEL[t.type]}</td>
+                      {/* 推估值在紀錄表裡也要看得出來(規格 §6.4)——
+                          只在記錄前標示等於沒標示,對帳時看的是這張表。 */}
+                      <td>
+                        {TYPE_LABEL[t.type]}
+                        {t.estimated && <span className="tx-estimated">推估</span>}
+                      </td>
                       <td>{t.code}</td>
                       <td>{formatNumber(t.shares, 0)}</td>
                       <td>{formatNumber(t.price, 2)}</td>

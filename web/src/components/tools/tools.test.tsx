@@ -75,13 +75,21 @@ describe('工具列表(規格 §7.4:每個工具一頁)', () => {
 describe('蒙地卡羅(規格 §7.3)', () => {
   async function renderMc() {
     render(<Tools tool="monte-carlo" />)
+    // 等**確切的年數**,不是 /個年度報酬/ —— 後者在基準線載入前就會match
+    // 到「0 個年度報酬」,測試因此會在資料還沒到的時候就往下跑。
     await waitFor(() =>
-      expect(screen.getByText(/個年度報酬/)).toBeInTheDocument())
+      expect(screen.getByText(/20 個年度報酬/)).toBeInTheDocument())
   }
 
   it('顯示「本模擬基於 N 年歷史資料」的 N', async () => {
     await renderMc()
     expect(screen.getByText(/20 個年度報酬/)).toBeInTheDocument()
+  })
+
+  it('基準線載入前不謊報「僅有 0 年歷史資料」—— 那是還沒到,不是不足', () => {
+    render(<Tools tool="monte-carlo" />)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(/載入/)
   })
 
   it('歷史不足 10 年時發出顯著警告', async () => {

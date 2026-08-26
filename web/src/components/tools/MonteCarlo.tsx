@@ -38,6 +38,12 @@ export function MonteCarlo() {
     void loadData().then((r) => { if (r.ok) setRows(r.rankings.etfs) })
   }, [])
 
+  // 基準線尚未載入(null)與「載入了但沒有資料」必須分開。
+  // 混為一談的話,載入的那一瞬間畫面會顯示「0 個年度報酬」並跳出
+  // 紅色的「僅有 0 年歷史資料,不足以支撐長期推論」—— 那是資料還沒到,
+  // 不是資料不足,而使用者只會看到一個閃過去的錯誤警告。
+  const loading = bench === null
+
   const history = useMemo(() => {
     if (!bench?.start || bench.days.length === 0) return { returns: [], years: 0 }
     const base = Date.parse(`${bench.start}T00:00:00Z`)
@@ -73,7 +79,7 @@ export function MonteCarlo() {
     })
   }, [mode, history, initial, rate, inflation, mean, stdev, beta, alpha, canAdjust])
 
-  const thin = mode === 'bootstrap' && history.years < MIN_YEARS_FOR_LONG_TERM
+  const thin = !loading && mode === 'bootstrap' && history.years < MIN_YEARS_FOR_LONG_TERM
 
   return (
     <ToolPage title="退休金蒙地卡羅回測">
@@ -84,7 +90,9 @@ export function MonteCarlo() {
 
       {/* 規格 §7.3 強制顯示:「本模擬基於 N 年歷史資料」 */}
       <p className="tool-mode" role="status">
-        {mode === 'bootstrap'
+        {loading
+          ? '載入加權報酬指數的長期歷史中…'
+          : mode === 'bootstrap'
           ? `實據模式:自加權報酬指數的 ${history.years} 個年度報酬有放回抽樣。` +
             (canAdjust
               ? `以 ${code} 的 Beta ${formatNumber(beta)} 與三年超額報酬調整相對特性。`
@@ -129,7 +137,9 @@ export function MonteCarlo() {
         </p>
       )}
 
-      {result === null ? (
+      {loading && mode === 'bootstrap' ? (
+        <p className="chart-empty">載入中…</p>
+      ) : result === null ? (
         <p className="chart-empty">還沒有歷史資料可供抽樣,請改用參數化假設。</p>
       ) : (
         <>
