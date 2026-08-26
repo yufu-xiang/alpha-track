@@ -17,7 +17,8 @@ const BACKEND_TOP_LEVEL_KEYS = ['data_date', 'etfs']
 const BACKEND_ROW_KEYS = [
   'annualized', 'avg_turnover', 'avg_volume', 'category', 'close', 'code',
   'data_start', 'dividend_yield', 'excess', 'is_inverse', 'is_leveraged',
-  'listing_date', 'name', 'premium_discount', 'region', 'returns', 'risk',
+  'listing_date', 'name', 'premium_days_ratio', 'premium_discount',
+  'premium_high', 'premium_low', 'premium_sample', 'region', 'returns', 'risk',
 ]
 const BACKEND_RISK_KEYS = ['beta', 'mdd', 'sharpe', 'volatility']
 const BACKEND_SERIES_KEYS = ['adj', 'close', 'days', 'start']

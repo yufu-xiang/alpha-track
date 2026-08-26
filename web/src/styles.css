@@ -708,3 +708,9 @@ footer { margin-top: 1.5rem; font-size: 0.8125rem; color: var(--fg-muted); }
 /* .tool-form input 的 width: 9rem 會把核取方塊撐成 9rem 寬,
    於是方塊與文字之間出現一整段空白,看起來像兩個不相干的元件。 */
 .tool-form label.tool-check input { width: auto; }
+
+/* 折溢價走勢圖。零軸是這個量唯一的自然基準,因此畫得比格線明顯。 */
+.chart__zero { stroke: var(--fg-muted); stroke-width: 1.5; opacity: 0.7; }
+/* 刻意不用 --gain/--loss:那組色在本站是台股的漲跌語意,而溢價(買貴了)
+   對買方不利、折價對買方有利 —— 沿用會讓紅色同時代表「上漲」與「買貴」。 */
+.premium__line { stroke: var(--accent); stroke-width: 2; fill: none; }

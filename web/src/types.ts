@@ -85,6 +85,20 @@ export interface EtfRow {
   excess: Record<PeriodCode, number | null>
   risk: RiskMetrics
   premium_discount: number | null
+  /** 近 60 日折溢價的最低值(最深折價)。樣本不足 20 個交易日時為 null。 */
+  premium_low: number | null
+  /** 近 60 日折溢價的最高值(最高溢價)。 */
+  premium_high: number | null
+  /** 近 60 日中折溢價為正的天數佔比。 */
+  premium_days_ratio: number | null
+  /**
+   * 實際納入折溢價統計的天數。
+   *
+   * 這個欄位存在的理由是它讓「為什麼區間是空的」有答案 ——
+   * 淨值來源只有當日快照、沒有歷史,折溢價因此只能逐日累積。
+   * 沒有它,使用者只會看到一個沒有原因的破折號。
+   */
+  premium_sample: number
   /** 近 20 個交易日的平均成交股數。 */
   avg_volume: number | null
   /**
@@ -137,8 +151,35 @@ export interface EtfDetail {
   excess: Record<PeriodCode, number | null>
   risk: RiskMetrics
   premium_discount: number | null
+  /** 近 60 日折溢價的最低值(最深折價)。樣本不足 20 個交易日時為 null。 */
+  premium_low: number | null
+  /** 近 60 日折溢價的最高值(最高溢價)。 */
+  premium_high: number | null
+  /** 近 60 日中折溢價為正的天數佔比。 */
+  premium_days_ratio: number | null
+  /**
+   * 實際納入折溢價統計的天數。
+   *
+   * 這個欄位存在的理由是它讓「為什麼區間是空的」有答案 ——
+   * 淨值來源只有當日快照、沒有歷史,折溢價因此只能逐日累積。
+   * 沒有它,使用者只會看到一個沒有原因的破折號。
+   */
+  premium_sample: number
+  /**
+   * 折溢價走勢。與價格序列分開,因為兩者的起點不同:淨值只能自接上
+   * 來源的那天開始逐日累積,價格則有多年歷史。共用同一組 days
+   * 會讓折溢價前面補上一長串 null,而那看起來像資料壞了。
+   */
+  premium_series: PremiumSeries
   series: Series
   dividends: DividendRecord[]
+}
+
+/** 折溢價序列。格式與價格序列一致(起點 + 天數位移)。 */
+export interface PremiumSeries {
+  start: string | null
+  days: number[]
+  premium: number[]
 }
 
 /** 加權報酬指數序列,全站共用一份。 */

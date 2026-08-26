@@ -144,22 +144,62 @@ def parse_twse_total_return_legacy(payload: dict) -> list[tuple[date, float]]:
     return rows
 
 
-def parse_twse_nav(payload: list[dict], trade_date: date) -> list[NavRecord]:
-    """解析 ETF 淨值。淨值或市價缺失的列略過 —— 折溢價算不出來就不寫。
+def parse_twse_mis_etf(payload: dict) -> list[NavRecord]:
+    """解析 TWSE MIS 的 ETF 淨值揭露快照(`mis.twse.com.tw/stock/data/all_etf.txt`)。
 
-    註:Task 1 的勘查未找到任何官方免費的集中式 ETF 淨值 API。
-    本函式與 navs 資料表保留備用,但階段 1 不會有資料寫入,
-    折溢價一律輸出 null(ledger R12)。找到來源後只需改這一個 adapter。
-    欄位名因此是**未經實測的預期值**,接上真實來源時必須重新核對。
+    **欄位代號是實測解出來的,不是猜的**(2026-08-26,357 檔):
+
+    | 鍵 | 內容 | 判定依據 |
+    |---|---|---|
+    | `a` | 證券代號 | 與我方 codes 相符 |
+    | `b` | 基金全名 | |
+    | `c` | 已發行受益權單位數 | |
+    | `d` | 單位數當日增減 | |
+    | `e` | **市價** | 見下 |
+    | `f` | **淨值(預估)** | 見下 |
+    | `g` | **折溢價%** | `(e−f)/f×100` 與 `g` 在 357 筆中 99.7% 落在 0.06 以內,中位偏差 0.0029 |
+    | `h` | 前一日淨值 | 與 `f` 的差異在槓桿型上最大(00715L 5.18%),與 2 倍槓桿的單日淨值變動相符 |
+    | `i` `j` | 日期 `YYYYMMDD`、時間 | |
+    | `k` | 發行人分組 1–4 | |
+
+    我方不採用 `g`,而是由 NavRecord.premium_discount 自 nav 與 market_price
+    重算。理由是 `g` 在無成交時會回報 `0` —— 那不是「平價」而是「不知道」,
+    照收會讓一檔沒人交易的 ETF 在折溢價榜上顯示得比誰都健康。
+
+    **這是預估淨值,不是官方結算淨值。** 各投信的正式淨值於盤後另行公告,
+    此處取的是交易所揭露的估值。兩者通常極接近,但不是同一個數字,
+    docs/data-sources.md 已註明。
+
+    **此端點只有當日快照,沒有歷史。** 折溢價因此只能逐日累積,
+    而不是一次回補 —— 規格 §4.4 要求的 20 個交易日樣本需要二十個交易日。
     """
     rows: list[NavRecord] = []
-    for item in payload:
-        code = str(item.get("Code", "")).strip()
-        nav = to_float(item.get("NAV"))
-        market = to_float(item.get("ClosingPrice"))
-        if not code or nav is None or market is None or nav <= 0:
-            continue
-        rows.append(NavRecord(code=code, date=trade_date, nav=nav,
-                              market_price=market,
-                              fund_size=to_float(item.get("FundSize"))))
+    blocks = payload.get("a1") or []
+    for block in blocks:
+        for item in block.get("msgArray", []):
+            code = str(item.get("a", "")).strip()
+            nav = to_float(item.get("f"))
+            market = to_float(item.get("e"))
+            trade_date = _parse_mis_date(item.get("i"))
+            # 市價為 0 代表當日無成交。折溢價無從談起,整列略過 ——
+            # 寫成 0 會被讀成「完全貼合淨值」,那是最健康的狀態,
+            # 而實情是這檔今天沒有人買賣。
+            if not code or trade_date is None or nav is None or market is None:
+                continue
+            if nav <= 0 or market <= 0:
+                continue
+            rows.append(NavRecord(code=code, date=trade_date, nav=nav,
+                                  market_price=market,
+                                  fund_size=to_float(item.get("c"))))
     return rows
+
+
+def _parse_mis_date(raw: object) -> date | None:
+    """`"20260826"` → date。這個端點用西元年,與 openapi 的民國年不同。"""
+    text = str(raw or "").strip()
+    if len(text) != 8 or not text.isdigit():
+        return None
+    try:
+        return date(int(text[:4]), int(text[4:6]), int(text[6:]))
+    except ValueError:
+        return None

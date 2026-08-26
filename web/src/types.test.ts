@@ -14,7 +14,8 @@ describe('契約型別', () => {
     expect(Object.keys(row).sort()).toEqual([
       'annualized', 'avg_turnover', 'avg_volume', 'category', 'close', 'code',
       'data_start', 'dividend_yield', 'excess', 'is_inverse', 'is_leveraged',
-      'listing_date', 'name', 'premium_discount', 'region', 'returns', 'risk',
+      'listing_date', 'name', 'premium_days_ratio', 'premium_discount',
+      'premium_high', 'premium_low', 'premium_sample', 'region', 'returns', 'risk',
     ])
   })
 

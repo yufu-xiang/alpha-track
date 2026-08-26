@@ -35,6 +35,7 @@ export const fixtureRankings: RankingsData = {
       }),
       risk: { volatility: 0.1833, mdd: -0.3421, sharpe: 0.9187, beta: 1.0210 },
       premium_discount: 0.0012,
+      premium_low: -0.0031, premium_high: 0.0044, premium_days_ratio: 0.55, premium_sample: 60,
       avg_volume: 18_420_000, avg_turnover: 3_601_110_000, dividend_yield: 0.0231,
     },
     {
@@ -55,6 +56,7 @@ export const fixtureRankings: RankingsData = {
       }),
       risk: { volatility: 0.1521, mdd: -0.2988, sharpe: 0.7133, beta: 0.8422 },
       premium_discount: 0.0231,
+      premium_low: -0.0052, premium_high: 0.0288, premium_days_ratio: 0.78, premium_sample: 60,
       avg_volume: 42_310_000, avg_turnover: 1_709_324_000, dividend_yield: 0.0812,
     },
     {
@@ -72,6 +74,7 @@ export const fixtureRankings: RankingsData = {
       }),
       risk: { volatility: 0.2144, mdd: -0.1877, sharpe: 0.8632, beta: 1.1044 },
       premium_discount: -0.0044,
+      premium_low: 0.0012, premium_high: 0.0512, premium_days_ratio: 0.97, premium_sample: 42,
       avg_volume: 55_100_000, avg_turnover: 976_222_000, dividend_yield: 0.0904,
     },
     {
@@ -90,6 +93,7 @@ export const fixtureRankings: RankingsData = {
       }),
       risk: { volatility: 0.1211, mdd: -0.4522, sharpe: 0.1421, beta: 0.1033 },
       premium_discount: 0.0008,
+      premium_low: -0.0088, premium_high: 0.0021, premium_days_ratio: 0.14, premium_sample: 60,
       avg_volume: 8_930_000, avg_turnover: 246_048_000, dividend_yield: 0.0388,
     },
     {
@@ -110,6 +114,7 @@ export const fixtureRankings: RankingsData = {
       }),
       risk: { volatility: 0.3688, mdd: -0.6211, sharpe: 0.9922, beta: 2.0411 },
       premium_discount: 0.0055,
+      premium_low: -0.0104, premium_high: 0.0132, premium_days_ratio: 0.5, premium_sample: 60,
       avg_volume: 12_400_000, avg_turnover: 1_984_000_000, dividend_yield: null,
     },
     {
@@ -130,6 +135,7 @@ export const fixtureRankings: RankingsData = {
       }),
       risk: { volatility: 0.1822, mdd: -0.8433, sharpe: null, beta: -1.0122 },
       premium_discount: -0.0011,
+      premium_low: null, premium_high: null, premium_days_ratio: null, premium_sample: 8,
       avg_volume: 3_210_000, avg_turnover: 41_730_000, dividend_yield: null,
     },
     {
@@ -144,6 +150,7 @@ export const fixtureRankings: RankingsData = {
       }),
       risk: { volatility: null, mdd: null, sharpe: null, beta: null },
       premium_discount: null,
+      premium_low: null, premium_high: null, premium_days_ratio: null, premium_sample: 0,
       avg_volume: null, avg_turnover: null, dividend_yield: null,
     },
   ],

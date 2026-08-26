@@ -37,6 +37,16 @@ VOLATILITY_WINDOW_DAYS = 250
 不因此整欄留白。
 """
 
+PREMIUM_WINDOW_DAYS = 60
+"""折溢價區間與溢價天數佔比的取樣窗口。規格 §4.4。"""
+
+MIN_DAYS_FOR_PREMIUM_STATS = 20
+"""規格 §4.4:折溢價統計的最低樣本數。
+
+不足即留空。折溢價的意義在於「這檔是不是經常性偏離淨值」,
+而三、五天的樣本回答不了經常性 —— 一次除息前的搶購就能讓佔比變成 100%。
+"""
+
 LIQUIDITY_WINDOW_DAYS = 20
 """流動性取樣窗口(交易日),約一個月。
 
@@ -77,6 +87,14 @@ class EtfMetrics:
     sharpe: float | None = None
     beta: float | None = None
     premium_discount: float | None = None
+    premium_low: float | None = None
+    """近 PREMIUM_WINDOW_DAYS 日的折溢價最小值(最深折價)。"""
+    premium_high: float | None = None
+    """近 PREMIUM_WINDOW_DAYS 日的折溢價最大值(最高溢價)。"""
+    premium_days_ratio: float | None = None
+    """近 PREMIUM_WINDOW_DAYS 日中,折溢價為正(溢價)的天數佔比。"""
+    premium_sample: int = 0
+    """實際納入折溢價統計的天數。少於 MIN_DAYS_FOR_PREMIUM_STATS 時上面三項為 None。"""
     data_start: date | None = None
     """最早持有價格資料的日期。與掛牌日不同時,前端據此說明實際涵蓋範圍。"""
     avg_volume: float | None = None
@@ -206,9 +224,34 @@ def compute_etf_metrics(
         # 完全沒有配息紀錄 → None(不知道),兩者不可混為一談。
         m.dividend_yield = paid / latest_close
 
-    latest_nav = max((n for n in navs if n.date <= base_date),
-                     key=lambda n: n.date, default=None)
-    if latest_nav is not None:
-        m.premium_discount = latest_nav.premium_discount
+    m.premium_discount, m.premium_low, m.premium_high, m.premium_days_ratio, \
+        m.premium_sample = _premium_stats(navs, base_date)
 
     return m
+
+
+def _premium_stats(
+    navs: Sequence[NavRecord], base_date: date
+) -> tuple[float | None, float | None, float | None, float | None, int]:
+    """折溢價統計。規格 §4.4:當日值、近 60 日區間、溢價天數佔比。
+
+    當日折溢價與區間統計分開判定:剛開始累積時,今天的折溢價是已知的事實
+    (今天的市價與淨值都在手上),但「經常不經常偏離」還無從回答。
+    把兩者綁在一起會讓個股頁在頭二十個交易日連當日折溢價都顯示不出來,
+    而那個數字明明是對的。
+    """
+    usable = [n for n in navs if n.date <= base_date and n.premium_discount is not None]
+    if not usable:
+        return None, None, None, None, 0
+
+    usable.sort(key=lambda n: n.date)
+    latest = usable[-1].premium_discount
+
+    window = [n.premium_discount for n in usable[-PREMIUM_WINDOW_DAYS:]]
+    if len(window) < MIN_DAYS_FOR_PREMIUM_STATS:
+        return latest, None, None, None, len(window)
+
+    # 嚴格大於 0 才算溢價。恰好等於 0 是「與淨值一致」,歸進溢價會讓
+    # 佔比虛胖,而這個數字正是拿來判斷「這檔是不是長期溢價」的。
+    premium_days = sum(1 for x in window if x > 0)
+    return (latest, min(window), max(window), premium_days / len(window), len(window))

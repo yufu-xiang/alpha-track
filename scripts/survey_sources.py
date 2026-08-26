@@ -36,6 +36,14 @@ CANDIDATES = [
     # 排除項:嘗試尋找投信投顧公會(SITCA)ETF 淨值查詢頁面的猜測路徑,回應是自訂
     # 404 頁(HTTP 200,text/html)。保留在 CANDIDATES 供他人重現/接續搜尋正確路徑。
     ("sitca_in2328_probe", "https://www.sitca.org.tw/ROC/Industry/IN2328.aspx"),
+    # --- ETF 淨值與折溢價:2026-08-26 重新勘查後採用 ---
+    # 這個端點在 2026-08-21 的初次勘查中被列為「不可用」,理由是「盤中即時報價,
+    # 非 EOD 封存」。重新檢視後那個判斷只對了一半:它確實無法回補歷史,但實測
+    # 每一列的時間戳都在 13:15 之後(收盤 13:30),313 / 357 筆更是 16:30 之後 ——
+    # 收盤後抓到的就是當日最終值。無法回補歷史對本專案不是阻礙,SQLite 本來就
+    # 是累積式的真相來源。當初以瀏覽器 Network 追蹤驗證、未留 fixture,
+    # 這次以 httpx 直接取得並存檔。
+    ("twse_mis_all_etf", "https://mis.twse.com.tw/stock/data/all_etf.txt"),
     # --- 額外發現:TWSE 靜態 ETF 清單(非 openapi,rwd 舊站,經瀏覽器 Network 追蹤而非猜測)---
     ("twse_etf_list", "https://www.twse.com.tw/rwd/zh/ETF/list"),
     # --- TWSE 舊站「報酬指數」歷史查詢端點:接受 date 參數,一次回傳「當月」資料。

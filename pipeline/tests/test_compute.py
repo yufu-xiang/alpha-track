@@ -392,3 +392,78 @@ def test_no_dividend_record_yields_none_not_zero():
                             risk_free=0.0, bench_closes={}, navs=[],
                             listing_date=None, dividends=[])
     assert m.dividend_yield is None
+
+
+def _navs(code: str, premiums: list[float], nav: float = 100.0, start=date(2026, 1, 1)):
+    """依指定的折溢價序列產生 NavRecord。"""
+    from alpha_track.models import NavRecord
+    return [NavRecord(code=code, date=start + timedelta(days=i), nav=nav,
+                      market_price=nav * (1 + p))
+            for i, p in enumerate(premiums)]
+
+
+class TestPremiumStats:
+    """規格 §4.4:當日折溢價、近 60 日區間、溢價天數佔比,最低樣本 20 個交易日。"""
+
+    @staticmethod
+    def run(premiums: list[float]):
+        from alpha_track.compute import compute_etf_metrics
+        navs = _navs("0050", premiums)
+        prices = _prices_with_volume(len(premiums) + 5, close=100.0,)
+        base = navs[-1].date
+        return compute_etf_metrics(prices, base, risk_free=0.0, bench_closes={},
+                                   navs=navs, listing_date=None)
+
+    def test_current_premium_shows_even_before_the_window_is_full(self):
+        """今天的折溢價是已知事實,不該被「樣本不足」連坐。
+
+        市價與淨值今天都在手上;不確定的是「經常不經常偏離」,不是今天偏離多少。
+        綁在一起會讓個股頁在頭二十個交易日連當日折溢價都空著,而那個數字是對的。
+        """
+        m = self.run([0.01, -0.02, 0.015])
+        assert m.premium_discount == pytest.approx(0.015)
+        assert m.premium_low is None
+        assert m.premium_high is None
+        assert m.premium_days_ratio is None
+        assert m.premium_sample == 3
+
+    def test_range_and_ratio_appear_once_the_minimum_sample_is_reached(self):
+        from alpha_track.compute import MIN_DAYS_FOR_PREMIUM_STATS
+        premiums = [0.01] * 15 + [-0.03] * 5
+        assert len(premiums) == MIN_DAYS_FOR_PREMIUM_STATS
+        m = self.run(premiums)
+        assert m.premium_low == pytest.approx(-0.03)
+        assert m.premium_high == pytest.approx(0.01)
+        assert m.premium_days_ratio == pytest.approx(0.75)
+        assert m.premium_sample == 20
+
+    def test_window_is_capped_at_sixty_days(self):
+        from alpha_track.compute import PREMIUM_WINDOW_DAYS
+        # 前 40 天大幅溢價,近 60 天全部折價 —— 區間不該把舊的溢價算進來
+        premiums = [0.5] * 40 + [-0.01] * PREMIUM_WINDOW_DAYS
+        m = self.run(premiums)
+        assert m.premium_sample == PREMIUM_WINDOW_DAYS
+        assert m.premium_high == pytest.approx(-0.01)
+        assert m.premium_days_ratio == 0.0
+
+    def test_exactly_zero_is_not_counted_as_premium(self):
+        """恰好等於淨值是「一致」,不是溢價。歸進去會讓佔比虛胖。"""
+        m = self.run([0.0] * 20)
+        assert m.premium_days_ratio == 0.0
+
+    def test_no_navs_leaves_everything_none(self):
+        from alpha_track.compute import compute_etf_metrics
+        m = compute_etf_metrics(_prices_with_volume(30), date(2026, 1, 30),
+                                risk_free=0.0, bench_closes={}, navs=[],
+                                listing_date=None)
+        assert m.premium_discount is None
+        assert m.premium_sample == 0
+
+    def test_ignores_navs_dated_after_the_base_date(self):
+        """基準日之後的淨值不能算進來 —— 那是還沒發生的事。"""
+        from alpha_track.compute import compute_etf_metrics
+        navs = _navs("0050", [0.01] * 25)
+        base = navs[10].date
+        m = compute_etf_metrics(_prices_with_volume(30), base, risk_free=0.0,
+                                bench_closes={}, navs=navs, listing_date=None)
+        assert m.premium_sample == 11

@@ -625,3 +625,70 @@ def test_real_etf_list_fixture_has_no_none_string_anywhere():
         assert p.tracking_index != "None", p.code
         assert p.issuer != "None", p.code
         assert p.name != "None", p.code
+
+
+def load_fixture(name: str):
+    import json
+    from pathlib import Path
+    path = Path(__file__).parent / "fixtures" / name
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+class TestParseTwseMisEtf:
+    """TWSE MIS 的 ETF 淨值快照。欄位代號是實測解出來的,測試對著真實 fixture 跑。"""
+
+    def test_parses_the_real_snapshot(self):
+        from alpha_track.sources.twse import parse_twse_mis_etf
+        rows = parse_twse_mis_etf(load_fixture("twse_mis_all_etf.json"))
+        # fixture 共 357 檔,其中 00409A 當日無成交(市價 0)被剔除
+        assert len(rows) == 356
+        assert all(r.date == date(2026, 8, 26) for r in rows)
+
+    def test_field_letters_map_to_the_right_quantities(self):
+        """e=市價、f=淨值。對調的話折溢價會整批變號,而數值大小看起來仍然合理。"""
+        from alpha_track.sources.twse import parse_twse_mis_etf
+        rows = {r.code: r for r in parse_twse_mis_etf(load_fixture("twse_mis_all_etf.json"))}
+        r = rows["00715L"]
+        assert r.market_price == pytest.approx(46.36)
+        assert r.nav == pytest.approx(45.79)
+        assert r.premium_discount == pytest.approx(0.0124, abs=1e-4)
+
+    def test_our_premium_matches_the_exchange_own_figure(self):
+        """自 nav 與 market_price 重算的折溢價,須與端點自報的 g 欄一致。
+
+        這是解碼是否正確的實證:若 e/f 認錯欄位,兩者不可能對得上。
+        容忍 0.06 個百分點 —— e/f 是四捨五入後的顯示值,g 用未捨入的淨值算。
+        """
+        from alpha_track.sources.twse import parse_twse_mis_etf
+        payload = load_fixture("twse_mis_all_etf.json")
+        reported = {}
+        for block in payload["a1"]:
+            for item in block.get("msgArray", []):
+                try:
+                    reported[str(item["a"]).strip()] = float(str(item["g"]).replace(",", ""))
+                except (TypeError, ValueError):
+                    pass
+        rows = parse_twse_mis_etf(payload)
+        checked = 0
+        for r in rows:
+            theirs = reported.get(r.code)
+            if theirs is None or r.premium_discount is None:
+                continue
+            assert abs(r.premium_discount * 100 - theirs) < 0.06, r.code
+            checked += 1
+        assert checked > 300
+
+    def test_skips_untraded_etfs_instead_of_calling_them_fairly_priced(self):
+        """市價 0 代表當日無成交。
+
+        端點在這種情況下的 g 欄回報 0 —— 照收會讓一檔沒人交易的 ETF
+        在折溢價榜上顯示得比誰都健康。折溢價無從談起就不要寫。
+        """
+        from alpha_track.sources.twse import parse_twse_mis_etf
+        rows = parse_twse_mis_etf(load_fixture("twse_mis_all_etf.json"))
+        assert "00409A" not in {r.code for r in rows}
+
+    def test_empty_payload_returns_empty_not_error(self):
+        from alpha_track.sources.twse import parse_twse_mis_etf
+        assert parse_twse_mis_etf({}) == []
+        assert parse_twse_mis_etf({"a1": []}) == []

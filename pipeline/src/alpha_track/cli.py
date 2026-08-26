@@ -27,7 +27,7 @@ from .export import (build_benchmark_series, build_detail, build_meta,
                      build_rankings, write_json)
 from .models import DividendRecord, EtfProfile, NavRecord, PriceRecord
 from .storage import Database
-from .validation import validate_price_batch
+from .validation import validate_navs, validate_price_batch
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +56,17 @@ HTTP 200 帶 `stat` 錯誤訊息(見 docs/data-sources.md)。
 TWSE_DAILY_URL = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
 TWSE_ETF_LIST_URL = "https://www.twse.com.tw/rwd/zh/ETF/list"
 TPEX_DAILY_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes"
+TWSE_MIS_ETF_URL = "https://mis.twse.com.tw/stock/data/all_etf.txt"
+"""ETF 淨值與折溢價的唯一可用來源(2026-08-26 重新勘查)。
+
+初次勘查把它列為不可用,理由是「盤中即時報價」。那個判斷只對了一半:
+它確實**沒有歷史**,但每一列的時間戳都在收盤(13:30)之後,357 筆中
+313 筆在 16:30 之後 —— 排程跑在台北時間 18:00,抓到的是當日最終值。
+
+沒有歷史對本專案不構成阻礙:SQLite 本來就是累積式的真相來源。
+代價是折溢價要等二十個交易日才湊得出規格 §4.4 要求的樣本數,
+在那之前一律 null。
+"""
 FINMIND_DIVIDEND_URL = (
     "https://api.finmindtrade.com/api/v4/data"
     "?dataset=TaiwanStockDividend&data_id={code}&start_date=2015-01-01"
@@ -183,10 +194,11 @@ def run_export(
                 is_leveraged=cls.is_leveraged, is_inverse=cls.is_inverse,
             )
             dividends = db.get_dividends(code)
+            navs = db.get_navs(code)
             metrics = compute_etf_metrics(
                 prices, base_date,
                 risk_free=settings.risk_free_rate,
-                bench_closes=bench_closes, navs=db.get_navs(code),
+                bench_closes=bench_closes, navs=navs,
                 listing_date=profile.listing_date,
                 dividends=dividends,
             )
@@ -195,7 +207,7 @@ def run_export(
             # 個股頁的資料(規格 §5.2 ②、§5.3 的 lazy load 分層)。
             # 一檔一個檔案:全部價格序列合計約 12 MB,不能塞進 rankings.json。
             write_json(out_dir / "etf" / f"{code}.json",
-                       build_detail(profile, metrics, prices, dividends))
+                       build_detail(profile, metrics, prices, dividends, navs))
 
         # 基準線 351 檔共用,單獨匯出一次
         write_json(out_dir / "benchmark.json", build_benchmark_series(bench_closes))
@@ -245,7 +257,9 @@ def fetch_all_sources(settings: Settings) -> tuple[
     """
     from .sources.base import fetch_json
     from .sources.tpex import parse_tpex_daily, parse_tpex_profiles
-    from .sources.twse import parse_twse_daily, parse_twse_etf_list, parse_twse_profiles
+    from .sources.twse import (
+        parse_twse_daily, parse_twse_etf_list, parse_twse_mis_etf, parse_twse_profiles,
+    )
 
     today = date.today()
     prices: list[PriceRecord] = []
@@ -277,8 +291,12 @@ def fetch_all_sources(settings: Settings) -> tuple[
     except Exception as exc:
         logger.warning("TWSE ETF 靜態清單取得失敗:%s", exc)
 
-    # 淨值:Task 1 確認沒有任何官方免費的集中式來源,階段 1 不抓(R12)。
-    # navs 保持空清單,折溢價輸出 null。找到來源後在此加回一組。
+    # 淨值與折溢價。這是唯一找得到的來源,且只有當日快照 ——
+    # 漏抓一天就是永久少一天,補不回來(端點沒有日期參數)。
+    try:
+        navs.extend(parse_twse_mis_etf(fetch_json(TWSE_MIS_ETF_URL)))
+    except Exception as exc:
+        logger.warning("TWSE MIS ETF 淨值取得失敗:%s", exc)
 
     return prices, profiles, navs, dividends
 
@@ -451,7 +469,11 @@ def run_update(
 
         db.upsert_prices(result.accepted)
         db.upsert_profiles(profiles)
-        db.upsert_navs(navs)
+        # 淨值走自己的閘門(規格 §8.1:折溢價 |x| > 10% 寫入但標記)。
+        # 它的 flagged 併入價格的,一起送進 meta.json 的健康狀態列。
+        nav_result = validate_navs(navs)
+        db.upsert_navs(nav_result.accepted)
+        result.flagged.extend(nav_result.flagged)
         db.upsert_dividends(dividends)
 
     # 新掛牌或首次執行的代號只有一天資料,先回補再計算,

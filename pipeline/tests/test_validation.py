@@ -1,6 +1,6 @@
 from datetime import date
 
-from alpha_track.models import PriceRecord
+from alpha_track.models import NavRecord, PriceRecord
 from alpha_track.validation import validate_price_batch
 
 
@@ -87,3 +87,38 @@ def test_empty_batch_is_rejected_when_previous_data_existed():
     r = validate_price_batch([], previous_count=250,
                              previous_closes={}, dividend_ex_dates=set())
     assert r.batch_rejected is True
+
+
+class TestValidateNavs:
+    """規格 §8.1:折溢價 |x| > 10% **寫入但標記**,不可擋。"""
+
+    @staticmethod
+    def nav(code: str, nav: float, market: float) -> NavRecord:
+        return NavRecord(code=code, date=date(2026, 8, 26), nav=nav, market_price=market)
+
+    def test_large_premium_is_flagged_but_still_written(self):
+        """台股確實出現過超過 10% 的溢價。擋掉它等於把最該警示的那天藏起來。"""
+        from alpha_track.validation import validate_navs
+        r = validate_navs([self.nav("00940", 10.0, 11.5)])
+        assert [x.code for x in r.accepted] == ["00940"]
+        assert r.flagged and "折溢價" in r.flagged[0][1]
+
+    def test_normal_premium_is_not_flagged(self):
+        from alpha_track.validation import validate_navs
+        r = validate_navs([self.nav("0050", 100.0, 100.5)])
+        assert len(r.accepted) == 1
+        assert r.flagged == []
+
+    def test_non_positive_nav_is_dropped(self):
+        from alpha_track.validation import validate_navs
+        r = validate_navs([NavRecord(code="X", date=date(2026, 8, 26),
+                                     nav=0.0, market_price=10.0)])
+        assert r.accepted == []
+        assert r.flagged
+
+    def test_never_rejects_the_whole_batch(self):
+        """淨值來源只有當日快照,漏掉一天就永久少一天 —— 整批拒絕的代價太高。"""
+        from alpha_track.validation import validate_navs
+        r = validate_navs([self.nav(f"{i:05d}", 10.0, 20.0) for i in range(50)])
+        assert r.batch_rejected is False
+        assert len(r.accepted) == 50

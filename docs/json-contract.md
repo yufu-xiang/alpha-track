@@ -94,7 +94,11 @@
         "sharpe": 5.3256858795932365,
         "beta": null
       },
-      "premium_discount": null,
+      "premium_discount": -0.0031,
+      "premium_low": null,
+      "premium_high": null,
+      "premium_days_ratio": null,
+      "premium_sample": 1,
       "avg_volume": 18420000.0,
       "avg_turnover": 3601110000.0,
       "dividend_yield": 0.0231
@@ -126,6 +130,9 @@
 | `premium_discount` | `number \| null` | 折溢價率。**階段 1 一律為 `null`** —— 見下節。 |
 | `avg_volume` | `number \| null` | 近 20 個交易日的平均成交**股數**。 |
 | `avg_turnover` | `number \| null` | 近 20 個交易日的平均成交**金額**(股數 × 收盤價)。比較流動性要看金額:10 元與 100 元的 ETF 成交同樣股數,換手資金差十倍,只排成交量會讓低價 ETF 系統性看起來比較熱門。 |
+| `premium_low` / `premium_high` | `number \| null` | 近 60 日折溢價的最低 / 最高值。樣本不足 20 個交易日時為 `null`。 |
+| `premium_days_ratio` | `number \| null` | 近 60 日中折溢價**嚴格大於 0**(溢價)的天數佔比。恰好等於 0 是「與淨值一致」,不計入。 |
+| `premium_sample` | `number` | 實際納入折溢價統計的天數。它讓「為什麼區間是空的」有答案 —— 淨值來源只有當日快照、沒有歷史,折溢價只能逐日累積。沒有它,使用者只會看到一個沒有原因的破折號。 |
 | `dividend_yield` | `number \| null` | 近一年**實配**配息 ÷ 現價。不年化、不推估 —— 推估會把一次性特別配息當成常態,殖利率排行會被那種標的佔滿。無配息紀錄者為 `null`,不是 `0`:「沒有資料」與「這一年沒配」是兩件事。 |
 
 ### `PeriodCode`

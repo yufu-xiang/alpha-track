@@ -14,7 +14,15 @@ const detail = {
             Y1: 0.1105, Y3: null, Y5: null, Y10: null, INCEPTION: null },
   risk: { volatility: 0.2864, mdd: -0.3383, sharpe: 3.4, beta: 1.0495 },
   premium_discount: null,
-  series: { start: '2014-01-02', days: [0, 1, 2], adj: [100, 105, 110] },
+  series: {
+    start: '2014-01-02', days: [0, 1, 2],
+    adj: [100, 105, 110], close: [90, 94, 99],
+  },
+  premium_low: -0.003, premium_high: 0.004,
+  premium_days_ratio: 0.55, premium_sample: 60,
+  premium_series: {
+    start: '2026-06-01', days: [0, 1, 2], premium: [0.001, -0.002, 0.003],
+  },
   dividends: [{ ex_date: '2026-07-21', pay_date: '2026-08-10', amount: 0.6 }],
 }
 
@@ -94,5 +102,53 @@ describe('EtfDetail', () => {
   it('正報酬標 gain、負報酬標 loss', async () => {
     await renderLoaded()
     expect(screen.getByText('+98.83%')).toHaveClass('gain')
+  })
+})
+
+describe('折溢價(規格 §5.2 ②、§4.4)', () => {
+  async function renderDetail(overrides: Record<string, unknown> = {}) {
+    mockOk(overrides)
+    await renderLoaded()
+  }
+
+  it('顯示折溢價走勢圖與近 60 日統計', async () => {
+    await renderDetail()
+    expect(screen.getByRole('heading', { name: '折溢價走勢' })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: /折溢價走勢/ })).toBeInTheDocument()
+    expect(screen.getByText('溢價天數佔比')).toBeInTheDocument()
+  })
+
+  it('明示採用的是預估淨值而非正式結算淨值', async () => {
+    await renderDetail()
+    expect(screen.getByText(/預估淨值/)).toBeInTheDocument()
+  })
+
+  it('樣本不足時說明原因,不留一個沒有理由的破折號', async () => {
+    await renderDetail({
+      premium_low: null, premium_high: null,
+      premium_days_ratio: null, premium_sample: 3,
+    })
+    expect(screen.getByText(/需要 20 個交易日的樣本,目前累積 3 天/))
+      .toBeInTheDocument()
+  })
+
+  it('樣本足夠時不顯示那段說明 —— 常駐的說明等於雜訊', async () => {
+    await renderDetail()
+    expect(screen.queryByText(/需要 20 個交易日的樣本/)).not.toBeInTheDocument()
+  })
+
+  it('完全沒有折溢價資料時說明是逐日累積,不是壞掉', async () => {
+    await renderDetail({
+      premium_series: { start: null, days: [], premium: [] },
+      premium_days_ratio: null, premium_sample: 0,
+    })
+    expect(screen.getByText(/還沒有折溢價資料/)).toBeInTheDocument()
+  })
+
+  it('舊版快取缺 premium_series 時只少一張圖,不是整頁白畫面', async () => {
+    await renderDetail({ premium_series: undefined })
+    // 頁面主體仍在
+    expect(screen.getByRole('heading', { name: /0050/ })).toBeInTheDocument()
+    expect(screen.getByText(/還沒有折溢價資料/)).toBeInTheDocument()
   })
 })

@@ -38,6 +38,7 @@ def test_rankings_uses_exact_contract_field_names():
         "close", "listing_date", "data_start", "returns", "annualized",
         "excess", "risk", "premium_discount",
         "avg_volume", "avg_turnover", "dividend_yield",
+        "premium_low", "premium_high", "premium_days_ratio", "premium_sample",
     }
     assert set(etf["risk"].keys()) == {"volatility", "mdd", "sharpe", "beta"}
 
@@ -244,3 +245,27 @@ def test_benchmark_series_is_empty_when_there_is_no_data():
     from alpha_track.export import build_benchmark_series
     out = build_benchmark_series({})
     assert out["start"] is None and out["days"] == []
+
+
+def test_detail_carries_the_premium_series_separately_from_prices():
+    """折溢價與價格的起點不同 —— 淨值只能自接上來源那天開始累積。
+
+    共用同一組 days 會讓折溢價前面補上一長串 null,而那看起來像資料壞了。
+    """
+    from alpha_track.export import build_detail
+    from alpha_track.models import NavRecord
+    prices = price_series("0050", date(2020, 1, 1), [100.0] * 5)
+    navs = [NavRecord(code="0050", date=date(2026, 8, 25), nav=100.0, market_price=101.0),
+            NavRecord(code="0050", date=date(2026, 8, 26), nav=100.0, market_price=99.0)]
+    out = build_detail(profile(), metrics(), prices, dividends=[], navs=navs)
+    assert out["series"]["start"] == "2020-01-01"
+    assert out["premium_series"]["start"] == "2026-08-25"
+    assert out["premium_series"]["days"] == [0, 1]
+    assert out["premium_series"]["premium"] == pytest.approx([0.01, -0.01])
+
+
+def test_premium_series_is_empty_when_there_are_no_navs():
+    from alpha_track.export import build_detail
+    out = build_detail(profile(), metrics(),
+                       price_series("0050", date(2026, 8, 1), [1.0]), dividends=[])
+    assert out["premium_series"] == {"start": None, "days": [], "premium": []}

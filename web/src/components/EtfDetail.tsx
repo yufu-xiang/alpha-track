@@ -10,6 +10,7 @@ import { formatDate, formatNumber, formatPercent } from '../lib/format'
 import { hashFor } from '../lib/route'
 import { PERIODS, PERIOD_LABELS, RISK_LABELS, type PeriodCode } from '../types'
 import { MetricInfo } from './MetricInfo'
+import { PremiumChart } from './PremiumChart'
 import { PriceChart } from './PriceChart'
 
 interface Props {
@@ -103,6 +104,35 @@ export function EtfDetail({ code }: Props) {
           <Card label={RISK_LABELS.premium_discount} term="premium_discount"
                 value={formatPercent(d.premium_discount)} />
         </dl>
+      </section>
+
+      <section>
+        <h2>折溢價走勢</h2>
+        <PremiumChart series={d.premium_series} name={d.name} sample={d.premium_sample} />
+        <dl className="cards">
+          {/* 三格都指向同一條詞典條目:它們是折溢價的三個面向,不是三個指標,
+              而那條條目本來就把區間與佔比一起解釋了。 */}
+          <Card label="近 60 日最深折價" term="premium_discount"
+                value={formatPercent(d.premium_low)} />
+          <Card label="近 60 日最高溢價" term="premium_discount"
+                value={formatPercent(d.premium_high)} />
+          <Card label="溢價天數佔比" term="premium_discount"
+                value={d.premium_days_ratio === null ? '—'
+                     : formatPercent(d.premium_days_ratio, 0).replace('+', '')} />
+        </dl>
+        {d.premium_days_ratio == null && (
+          <p className="detail__caveat">
+            區間統計需要 20 個交易日的樣本,目前累積 {d.premium_sample} 天。
+            淨值來源只有當日快照、沒有歷史,因此只能逐日累積 ——
+            這幾格會在滿二十個交易日後出現,不是資料壞了。
+          </p>
+        )}
+        <p className="detail__caveat">
+          採用的是交易所揭露的<strong>預估淨值</strong>,不是各投信盤後公告的
+          正式結算淨值。兩者通常極接近,但不是同一個數字。
+          當日無成交時整列不寫入 —— 沒有市價就沒有折溢價,填 0 會讓它
+          看起來完美貼合淨值。
+        </p>
       </section>
 
       <section>

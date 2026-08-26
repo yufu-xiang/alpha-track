@@ -16,7 +16,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from .compute import EtfMetrics
-from .models import DividendRecord, EtfProfile, PriceRecord
+from .models import DividendRecord, EtfProfile, NavRecord, PriceRecord
 
 TAIPEI = ZoneInfo("Asia/Taipei")
 
@@ -64,6 +64,13 @@ def build_rankings(
                     "beta": m.beta,
                 },
                 "premium_discount": m.premium_discount,
+                # 規格 §4.4:折溢價的近 60 日區間與溢價天數佔比。
+                # 樣本不足 20 個交易日時為 null —— 三、五天回答不了
+                # 「這檔是不是經常性偏離淨值」,而那正是這幾個數字的用途。
+                "premium_low": m.premium_low,
+                "premium_high": m.premium_high,
+                "premium_days_ratio": m.premium_days_ratio,
+                "premium_sample": m.premium_sample,
             }
             for p, m, close in rows
         ],
@@ -115,6 +122,7 @@ def build_detail(
     metrics: EtfMetrics,
     prices: Sequence[PriceRecord],
     dividends: Sequence[DividendRecord],
+    navs: Sequence[NavRecord] = (),
 ) -> dict:
     """組裝單一 ETF 的個股頁資料(規格 §5.2 ②)。
 
@@ -151,6 +159,14 @@ def build_detail(
             "beta": metrics.beta,
         },
         "premium_discount": metrics.premium_discount,
+        "premium_low": metrics.premium_low,
+        "premium_high": metrics.premium_high,
+        "premium_days_ratio": metrics.premium_days_ratio,
+        "premium_sample": metrics.premium_sample,
+        # 折溢價走勢(規格 §5.2 ②)。與價格序列分開,因為兩者的起點不同:
+        # 淨值只能自接上來源的那天開始逐日累積,價格則有多年歷史。
+        # 硬塞進同一組 days 會讓折溢價前面補上一長串 null。
+        "premium_series": _premium_series(navs),
         "series": {
             "start": start,
             "days": days,
@@ -164,6 +180,19 @@ def build_detail(
              "amount": d.amount}
             for d in sorted(dividends, key=lambda x: x.ex_date, reverse=True)
         ],
+    }
+
+
+def _premium_series(navs: Sequence[NavRecord]) -> dict:
+    """折溢價的時間序列,格式與價格序列一致(起點 + 天數位移)。"""
+    usable = sorted(
+        (n for n in navs if n.premium_discount is not None), key=lambda n: n.date
+    )
+    start, days = _day_offsets([n.date for n in usable])
+    return {
+        "start": start,
+        "days": days,
+        "premium": [round(n.premium_discount, 6) for n in usable],
     }
 
 

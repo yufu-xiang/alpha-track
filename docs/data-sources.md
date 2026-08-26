@@ -1,7 +1,7 @@
 # 資料源實測記錄
 
 > 本文件記錄實際呼叫結果,是 pipeline adapter 的欄位映射依據。
-> 最後驗證日期:2026-08-21
+> 最後驗證日期:2026-08-26(ETF 淨值端點;其餘為 2026-08-21)
 > 產生方式:`python scripts/survey_sources.py`(所有 `CANDIDATES` 內的端點皆可由此腳本重跑覆核;
 > 唯一例外是 TWSE MIS 的 ETF 淨值揭露頁面,該項以瀏覽器載入頁面並追蹤 Network 請求驗證,
 > 不是 httpx 呼叫、也不在 `CANDIDATES` 中,已在「不可用端點」表內明確標註),
@@ -203,12 +203,36 @@
 - Fixture: `pipeline/tests/fixtures/finmind_price_adj_free_tier_check.json`
 - 注意事項:免費層**無法取得** FinMind 的還原股價資料集,只能用 `TaiwanStockPrice`(原始價)+ `TaiwanStockDividend`(股利)自行計算還原價,或改用 Yahoo(但 Yahoo 對 0050 只回溯到 2009)。
 
+### TWSE MIS — ETF 淨值揭露快照(折溢價的唯一來源)
+- URL: `https://mis.twse.com.tw/stock/data/all_etf.txt`
+- 方法: GET,無需金鑰(實測 httpx 可直接取得,HTTP 200,61 KB)
+- 回應結構: `dict`,`a1` 為 list of block,每個 block 可能有 `msgArray`(**並非每個 block 都有,解析時必須用 `.get`**);實測 357 檔
+- Fixture: `pipeline/tests/fixtures/twse_mis_all_etf.json`(2026-08-26 收盤後取得)
+- 欄位(**代號是實測解出來的,不是猜的**):
+  | 鍵 | 內容 | 判定依據 |
+  |---|---|---|
+  | `a` | 證券代號 | 與我方 codes 相符 |
+  | `b` | 基金全名 | |
+  | `c` | 已發行受益權單位數 | |
+  | `d` | 單位數當日增減 | |
+  | `e` | **市價** | 見下 |
+  | `f` | **淨值(預估)** | 見下 |
+  | `g` | **折溢價%** | `(e−f)/f×100` 與 `g` 在 357 筆中 99.7% 落在 0.06 個百分點內,中位偏差 0.0029 —— 這是 e/f 認對欄位的實證,認錯的話兩者不可能對得上 |
+  | `h` | 前一日淨值 | 與 `f` 的差異在槓桿型上最大(00715L 5.18%),與 2 倍槓桿的單日淨值變動相符 |
+  | `i` / `j` | 日期 `YYYYMMDD`(**西元年**,與 openapi 的民國年不同)/ 時間 | |
+  | `k` | 發行人分組 1–4 | |
+- 注意事項:
+  - **此端點在 2026-08-21 的初次勘查中被列為「不可用」,理由是「盤中即時報價,非 EOD 封存」。** 2026-08-26 重新檢視後,那個判斷只對了一半:它確實**沒有歷史**(無日期參數),但實測每一列的時間戳都在收盤(13:30)之後,357 筆中 313 筆在 16:30 之後。排程跑在台北時間 18:00,抓到的是當日最終值。沒有歷史對本專案不構成阻礙 —— SQLite 本來就是累積式的真相來源。
+  - **這是預估淨值,不是各投信盤後公告的正式結算淨值。** 兩者通常極接近,但不是同一個數字。前端已明示。
+  - **市價為 0 代表當日無成交**(實測 357 筆中有 1 筆,00409A)。此時端點的 `g` 欄回報 `0` —— 照收會讓一檔沒人交易的 ETF 在折溢價榜上顯示得比誰都健康。我方不採用 `g`,而是自 `e`/`f` 重算,並整列略過無成交者。
+  - **漏抓一天就是永久少一天。** 端點沒有日期參數,補不回來。因此淨值的驗證閘門沒有「整批拒絕」這個動作(規格 §8.1 的整批拒絕只適用於價格)。
+
 ## 不可用端點 / 已排除
 
 | 端點 | 失敗原因 / 排除理由 | 驗證日期 |
 |---|---|---|
 | ETF 每日淨值與折溢價(遍尋 TWSE openapi、TPEx openapi) | 兩份 swagger 索引(143 / 225 條路徑)逐條檢查,**沒有任何路徑同時具備「ETF」與「淨值」語意**;TPEx `tpex_opfund_latest`(開放式基金當日行情)雖有 `PreNAV`/`EstimatedNAV` 欄位,但實測只回傳 3 筆「上櫃受益憑證」(如 `T1001Y` 富邦FB),屬於興櫃受益憑證,非一般 ETF,且 `EstimatedNAV` 欄位實測回傳一個 URL 字串(`https://www.fubon.com/asset-management/Home/EmergingStockAdvert`)而非數字,資料品質不可靠,判定不適用。已加入 `scripts/survey_sources.py` 的 `CANDIDATES`(名稱 `tpex_opfund_latest`),原始回應存於 `pipeline/tests/fixtures/tpex_opfund_latest.json`,可重跑覆核 | 2026-08-21 |
-| ETF 淨值揭露頁面(TWSE MIS)`mis.twse.com.tw/stock/various-areas/etf-price/indicator-disclosure-etf`、`.../value-disclosure-etf` | 以瀏覽器實際載入頁面並追蹤 Network 請求,兩頁背後實際呼叫的是同一份即時報價快照 `mis.twse.com.tw/stock/data/all_etf.txt`(依發行人分組,`refURL` 指向各投信自家的「預估淨值」頁面,如 `https://www.jkoam.com/etf/predict`);此為**盤中即時報價**,非官方 EOD 淨值封存資料,且沒有統一欄位格式(淨值揭露實際委由各投信自行網站呈現)。**此列以瀏覽器 Network 追蹤驗證,非 httpx 呼叫,不在 `CANDIDATES` 清單中,也沒有 fixture 檔**——只能靠重新用瀏覽器載入頁面重現,已在此明確標註 | 2026-08-21 |
+| ~~ETF 淨值揭露頁面(TWSE MIS)~~ **已於 2026-08-26 改判為可用,見上方「可用端點」** —— 原判斷「非 EOD 封存」只對了一半:確實沒有歷史,但時間戳都在收盤後,收盤後抓即為當日最終值 `mis.twse.com.tw/stock/various-areas/etf-price/indicator-disclosure-etf`、`.../value-disclosure-etf` | 以瀏覽器實際載入頁面並追蹤 Network 請求,兩頁背後實際呼叫的是同一份即時報價快照 `mis.twse.com.tw/stock/data/all_etf.txt`(依發行人分組,`refURL` 指向各投信自家的「預估淨值」頁面,如 `https://www.jkoam.com/etf/predict`);此為**盤中即時報價**,非官方 EOD 淨值封存資料,且沒有統一欄位格式(淨值揭露實際委由各投信自行網站呈現)。**此列以瀏覽器 Network 追蹤驗證,非 httpx 呼叫,不在 `CANDIDATES` 清單中,也沒有 fixture 檔**——只能靠重新用瀏覽器載入頁面重現,已在此明確標註 | 2026-08-21 |
 | `https://www.sitca.org.tw/ROC/Industry/IN2328.aspx`(投信投顧公會,猜測路徑) | HTTP 200 但回傳「網頁不存在」的自訂 404 頁面;僅為初步嘗試,**未進一步找出投信投顧公會正確的 ETF 淨值查詢路徑**,列為待確認項而非確認不可得。已加入 `CANDIDATES`(名稱 `sitca_in2328_probe`),原始 HTML 回應存於 `pipeline/tests/fixtures/sitca_in2328_probe.json`(內容其實是 HTML,非 JSON;`probe()` 對非 200 以外的 JSON parse 失敗會在存檔後才拋例外,所以檔案仍完整保留原始 bytes) | 2026-08-21 |
 | TPEx 報酬指數逐月歷史查詢端點 | 未找到 TWSE `rwd/zh/TAIEX/MFI94U` 對應的 TPEx 舊站別名;僅測試了 TPEx openapi 版本(`tpex_reward_index`,只有 14 天滾動),**未窮盡搜尋**,列為待確認項 | 2026-08-21 |
 | `twse_etf_report`(`ETFReport/ETFRank`) | 端點本身可用(HTTP 200,20 筆),但內容是「定期定額交易戶數統計排行月報表」(ETF 與其成分股的定期定額開戶數排行),與收盤價/淨值/報酬指數皆無關,判定對本專案四類需求皆不適用 | 2026-08-21 |
