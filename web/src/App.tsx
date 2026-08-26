@@ -11,14 +11,22 @@ import { ColumnPicker } from './components/ColumnPicker'
 import { Filters } from './components/Filters'
 import { HealthBar } from './components/HealthBar'
 import { PeriodTabs } from './components/PeriodTabs'
+import { EtfDetail } from './components/EtfDetail'
 import { RankingTable } from './components/RankingTable'
 import { loadData, type LoadResult } from './data/loader'
 import { applyFilters, collectCategories, collectRegions } from './lib/filtering'
 import { formatPercent } from './lib/format'
 import { loadPrefs, savePrefs } from './lib/prefs'
+import { useRoute } from './lib/route'
 import { PERIODS, type PeriodCode } from './types'
 
 export function App() {
+  const route = useRoute()
+  if (route.name === 'detail') return <EtfDetail code={route.code} />
+  return <Rankings />
+}
+
+function Rankings() {
   const [result, setResult] = useState<LoadResult | null>(null)
   const [prefs, setPrefs] = useState(() => loadPrefs())
   const [sortBy, setSortBy] = useState<PeriodCode>('Y1')

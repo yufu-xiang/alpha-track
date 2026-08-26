@@ -4,7 +4,7 @@
  * 規格 §8.2:載入失敗時顯示明確錯誤,絕不呈現空白表格 ——
  * 空表格會被誤讀為「今天沒有任何 ETF」。
  */
-import type { MetaData, RankingsData } from '../types'
+import type { BenchmarkSeries, EtfDetail, MetaData, RankingsData } from '../types'
 
 const BASE = import.meta.env.BASE_URL ?? '/'
 
@@ -31,6 +31,30 @@ export async function loadData(): Promise<LoadResult> {
     const detail = err instanceof Error ? err.message : String(err)
     return { ok: false, error: `資料載入失敗:${detail}` }
   }
+}
+
+export type DetailResult =
+  | { ok: true; detail: EtfDetail; benchmark: BenchmarkSeries | null }
+  | { ok: false; error: string }
+
+/**
+ * 個股頁資料。基準線失敗不影響主體 —— 少一條疊加線,不是少一頁。
+ */
+export async function loadDetail(code: string): Promise<DetailResult> {
+  let detail: EtfDetail
+  try {
+    detail = await fetchJson<EtfDetail>(`etf/${encodeURIComponent(code)}.json`)
+  } catch (err) {
+    const detailMsg = err instanceof Error ? err.message : String(err)
+    return { ok: false, error: `找不到 ${code} 的資料:${detailMsg}` }
+  }
+  let benchmark: BenchmarkSeries | null = null
+  try {
+    benchmark = await fetchJson<BenchmarkSeries>('benchmark.json')
+  } catch {
+    // 基準線是加分項,拿不到就不疊加,不要因此讓整頁失敗。
+  }
+  return { ok: true, detail, benchmark }
 }
 
 export function daysSince(iso: string, now: Date = new Date()): number {

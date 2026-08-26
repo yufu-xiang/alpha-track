@@ -87,6 +87,47 @@ export interface EtfRow {
   premium_discount: number | null
 }
 
+/** 價格序列:起點 + 天數位移 + 平行陣列。見 docs/json-contract.md 的說明。 */
+export interface Series {
+  start: string | null
+  days: number[]
+  /** 還原價 —— 走勢圖比的是含息報酬。 */
+  adj: number[]
+}
+
+export interface DividendRecord {
+  ex_date: string
+  pay_date: string | null
+  amount: number
+}
+
+/** 個股頁資料。lazy load `data/etf/{代號}.json`。 */
+export interface EtfDetail {
+  code: string
+  name: string
+  category: string | null
+  region: string | null
+  exchange: string
+  issuer: string | null
+  tracking_index: string | null
+  listing_date: string | null
+  data_start: string | null
+  returns: Record<PeriodCode, number | null>
+  annualized: Record<PeriodCode, number | null>
+  excess: Record<PeriodCode, number | null>
+  risk: RiskMetrics
+  premium_discount: number | null
+  series: Series
+  dividends: DividendRecord[]
+}
+
+/** 加權報酬指數序列,全站共用一份。 */
+export interface BenchmarkSeries {
+  start: string | null
+  days: number[]
+  value: number[]
+}
+
 export interface RankingsData {
   data_date: string
   etfs: EtfRow[]

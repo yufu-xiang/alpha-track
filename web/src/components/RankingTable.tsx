@@ -66,7 +66,9 @@ export function RankingTable({
     const base = [
       helper.accessor('code', {
         header: '代號',
-        cell: (c) => c.getValue(),
+        // 連結而非 onClick:可以中鍵開新分頁、可以複製網址、鍵盤能 Tab 到,
+        // 而 onClick 綁在 <td> 上這三件事都做不到。
+        cell: (c) => <a href={`#/etf/${c.getValue()}`}>{c.getValue()}</a>,
         enableSorting: false,
       }),
       helper.accessor('name', {

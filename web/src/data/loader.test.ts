@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { daysSince, loadData } from './loader'
+import { daysSince, loadData, loadDetail } from './loader'
 import { fixtureMeta, fixtureRankings } from './fixture'
 
 afterEach(() => {
@@ -63,5 +63,59 @@ describe('daysSince', () => {
 
   it('當天為 0', () => {
     expect(daysSince('2026-08-21', new Date('2026-08-21T20:00:00+08:00'))).toBe(0)
+  })
+})
+
+describe('loadDetail', () => {
+  const detail = { code: '0050', name: '元大台灣50', series: { start: '2014-01-02', days: [0], adj: [9.27] }, dividends: [] }
+  const bench = { start: '2016-08-01', days: [0], value: [1000] }
+
+  it('個股與基準線都成功時一起回傳', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => ({
+      ok: true, json: async () => (url.includes('benchmark') ? bench : detail),
+    })))
+    const r = await loadDetail('0050')
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.detail.code).toBe('0050')
+      expect(r.benchmark?.value).toEqual([1000])
+    }
+  })
+
+  it('基準線拿不到時仍回傳個股資料 —— 少一條疊加線,不是少一頁', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+      url.includes('benchmark')
+        ? { ok: false, status: 404 }
+        : { ok: true, json: async () => detail }))
+    const r = await loadDetail('0050')
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.benchmark).toBeNull()
+  })
+
+  it('個股資料拿不到時回傳明確錯誤,含代號', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 404 })))
+    const r = await loadDetail('00999')
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toContain('00999')
+  })
+
+  it('代號會做 URL 編碼,不能直接串進路徑', async () => {
+    const seen: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      seen.push(url)
+      return { ok: true, json: async () => detail }
+    }))
+    await loadDetail('../../etc/passwd')
+    expect(seen[0]).not.toContain('../../etc')
+  })
+
+  it('基準線抓的是全站共用的那一份,不在 etf/ 底下', async () => {
+    const seen: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      seen.push(url)
+      return { ok: true, json: async () => (url.includes('benchmark') ? bench : detail) }
+    }))
+    await loadDetail('0050')
+    expect(seen.some((u) => u.endsWith('data/benchmark.json'))).toBe(true)
   })
 })
