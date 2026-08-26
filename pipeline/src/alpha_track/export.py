@@ -114,7 +114,11 @@ def build_detail(
     數字要另外載入 264 KB 的 rankings.json。
 
     走勢用**還原價**:走勢圖比的是含息報酬,用原始收盤價會讓高配息 ETF
-    看起來一路走跌。原始收盤價在排行榜的「現價」欄已有,這裡不重複。
+    看起來一路走跌。
+
+    未還原的 `close` 也一併送出,因為「配息再投入 vs 不再投入」的比較
+    非它不可 —— 還原價**本身就已假設配息再投入**,拿它去算再投入會把
+    配息計算兩次,而且兩條線會完全重疊,看起來像是程式壞了。
     """
     start, days = _day_offsets([p.date for p in prices])
     return {
@@ -143,6 +147,7 @@ def build_detail(
             "start": start,
             "days": days,
             "adj": [round(p.adj_close, 4) for p in prices],
+            "close": [round(p.close, 4) for p in prices],
         },
         # 新到舊:配息表最常看的是「最近配了多少」。
         "dividends": [

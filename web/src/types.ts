@@ -93,6 +93,12 @@ export interface Series {
   days: number[]
   /** 還原價 —— 走勢圖比的是含息報酬。 */
   adj: number[]
+  /**
+   * 未還原收盤價。不是 adj 的備份:「配息再投入 vs 不再投入」的比較
+   * 非它不可 —— 還原價本身就已假設配息再投入,拿它去算再投入會把配息
+   * 算兩次,而且兩條線會完全重疊,看起來像程式壞了。
+   */
+  close: number[]
 }
 
 export interface DividendRecord {

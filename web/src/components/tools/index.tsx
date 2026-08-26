@@ -10,6 +10,7 @@ import { Dca } from './Dca'
 import { Fire } from './Fire'
 import { Margin } from './Margin'
 import { MonteCarlo } from './MonteCarlo'
+import { Reinvest } from './Reinvest'
 import { Withdrawal } from './Withdrawal'
 
 interface ToolEntry {
@@ -37,6 +38,12 @@ export const TOOLS: ToolEntry[] = [
     title: '單筆 vs 定期定額',
     blurb: '用某檔 ETF 的真實歷史月收盤,回測兩種投入方式的差異。',
     Component: Dca,
+  },
+  {
+    id: 'reinvest',
+    title: '股息再投入試算',
+    blurb: '用真實配息紀錄比較「再投入」與「領現金」的長期差異。',
+    Component: Reinvest,
   },
   {
     id: 'margin',

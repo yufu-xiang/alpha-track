@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { alignBenchmark, commonWindow, normalize, normalizeWithin,
          sliceSeries, toAbsoluteDays, toPath } from './chart'
 
-const series = { start: '2026-01-01', days: [0, 1, 2, 3], adj: [100, 110, 90, 120] }
+// close 與 adj 相同 = 一檔從未配息的基金。這些測試只看走勢,
+// 但型別要求兩者都在,填一個一致的值比填空陣列誠實。
+const series = {
+  start: '2026-01-01', days: [0, 1, 2, 3],
+  adj: [100, 110, 90, 120], close: [100, 110, 90, 120],
+}
 
 describe('sliceSeries', () => {
   it('null 代表全部', () => {
@@ -14,7 +19,7 @@ describe('sliceSeries', () => {
   })
 
   it('空序列不炸', () => {
-    expect(sliceSeries({ start: null, days: [], adj: [] }, 30).days).toEqual([])
+    expect(sliceSeries({ start: null, days: [], adj: [], close: [] }, 30).days).toEqual([])
   })
 })
 
@@ -96,8 +101,9 @@ describe('toPath', () => {
 describe('多檔疊圖的共同區間', () => {
   // 2020 是閏年:2020-01-01 + 1096 天才是 2023-01-01
   const old = { start: '2020-01-01', days: [0, 366, 731, 1096, 1461],
-                adj: [100, 105, 110, 120, 130] }
-  const young = { start: '2023-01-01', days: [0, 365], adj: [50, 60] }
+                adj: [100, 105, 110, 120, 130],
+                close: [100, 105, 110, 120, 130] }
+  const young = { start: '2023-01-01', days: [0, 365], adj: [50, 60], close: [50, 60] }
 
   it('絕對日數讓不同起點的序列落在同一條軸上', () => {
     // 各自的 days 都從 0 開始,直接畫會落在不同水平區段而完全不重疊。
@@ -117,8 +123,8 @@ describe('多檔疊圖的共同區間', () => {
   })
 
   it('完全沒有重疊區間時回傳 null,而不是畫出無意義的圖', () => {
-    const past = { start: '2010-01-01', days: [0, 1], adj: [1, 2] }
-    const future = { start: '2026-01-01', days: [0, 1], adj: [1, 2] }
+    const past = { start: '2010-01-01', days: [0, 1], adj: [1, 2], close: [1, 2] }
+    const future = { start: '2026-01-01', days: [0, 1], adj: [1, 2], close: [1, 2] }
     expect(commonWindow([past, future], null)).toBeNull()
   })
 

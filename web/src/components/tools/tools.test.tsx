@@ -200,3 +200,59 @@ describe('FIRE', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/自相矛盾/)
   })
 })
+
+describe('股息再投入', () => {
+  /** 價格自 2008 年、配息只回溯到 2015 年 —— 0056 的真實情況。 */
+  function mockPartialDividends() {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const body =
+        url.includes('meta') ? fixtureMeta
+        : url.includes('benchmark') ? benchmark(20)
+        : url.includes('etf/') ? {
+            ...fixtureRankings.etfs[0],
+            exchange: 'TWSE', issuer: null, tracking_index: null, listing_date: null,
+            annualized: {}, excess: {},
+            dividends: [{ ex_date: '2015-01-01', pay_date: null, amount: 1 }],
+            series: {
+              start: '2008-01-01',
+              days: [0, 2557, 3653],
+              adj: [10, 20, 30],
+              close: [10, 20, 30],
+            },
+          }
+        : fixtureRankings
+      return { ok: true, json: async () => body }
+    }))
+  }
+
+  it('配息紀錄比價格短時顯著警告,並改從配息起算', async () => {
+    mockPartialDividends()
+    render(<Tools tool="reinvest" />)
+    await waitFor(() => {
+      const alert = screen.getByRole('alert')
+      expect(alert).toHaveTextContent(/配息紀錄只回溯到 2015-01-01/)
+      expect(alert).toHaveTextContent(/系統性低估/)
+    })
+    // 起算日改用配息的起點,而不是最早的價格
+    expect(screen.getByText(/涵蓋 2015-01-01 至/)).toBeInTheDocument()
+  })
+
+  it('沒有配息的標的直說兩種做法沒有差別,不印一組看似有意義的數字', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const body =
+        url.includes('meta') ? fixtureMeta
+        : url.includes('benchmark') ? benchmark(20)
+        : url.includes('etf/') ? {
+            ...fixtureRankings.etfs[0],
+            exchange: 'TWSE', issuer: null, tracking_index: null, listing_date: null,
+            annualized: {}, excess: {}, dividends: [],
+            series: { start: '2024-01-01', days: [0, 1], adj: [10, 20], close: [10, 20] },
+          }
+        : fixtureRankings
+      return { ok: true, json: async () => body }
+    }))
+    render(<Tools tool="reinvest" />)
+    await waitFor(() =>
+      expect(screen.getByText(/沒有配息紀錄,兩種做法沒有差別/)).toBeInTheDocument())
+  })
+})

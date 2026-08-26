@@ -10,7 +10,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { fixtureMeta, fixtureRankings } from './data/fixture'
-import { PERIODS } from './types'
+import { PERIODS, type Series } from './types'
 
 // 由 pipeline/src/alpha_track/export.py 的實際輸出取得,見 docs/json-contract.md
 const BACKEND_TOP_LEVEL_KEYS = ['data_date', 'etfs']
@@ -20,6 +20,7 @@ const BACKEND_ROW_KEYS = [
   'region', 'returns', 'risk',
 ]
 const BACKEND_RISK_KEYS = ['beta', 'mdd', 'sharpe', 'volatility']
+const BACKEND_SERIES_KEYS = ['adj', 'close', 'days', 'start']
 const BACKEND_META_KEYS = [
   'anomalies', 'benchmark_return_1y', 'data_date', 'etf_count', 'generated_at',
   'is_stale', 'risk_free_rate', 'unclassified',
@@ -43,6 +44,14 @@ describe('與後端 export.py 的契約', () => {
     for (const row of fixtureRankings.etfs) {
       expect(Object.keys(row.risk).sort()).toEqual(BACKEND_RISK_KEYS)
     }
+  })
+
+  it('個股頁的 series 同時送出還原價與未還原價', () => {
+    // close 很容易被當成「adj 的備份」而在瘦身時刪掉。它不是備份:
+    // 股息再投入試算非它不可,而用 adj 代替不會報錯,只會安靜地
+    // 把配息算兩次。
+    const series: Series = { start: '2026-01-01', days: [0], adj: [1], close: [1] }
+    expect(Object.keys(series).sort()).toEqual(BACKEND_SERIES_KEYS)
   })
 
   it('meta 的鍵一致', () => {

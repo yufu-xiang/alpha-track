@@ -177,6 +177,19 @@ def test_detail_series_is_the_adjusted_price():
     assert out["series"]["adj"][0] == pytest.approx(90.0)
 
 
+def test_detail_also_carries_the_unadjusted_close():
+    """「配息再投入 vs 不再投入」的比較非未還原價不可。
+
+    還原價本身就已假設配息再投入,拿它去算再投入等於把配息算兩次,
+    而且兩條線會完全重疊 —— 看起來像程式壞了,實際上是資料用錯。
+    """
+    from alpha_track.export import build_detail
+    prices = price_series("0050", date(2026, 8, 1), [100.0, 110.0])
+    out = build_detail(profile(), metrics(), prices, dividends=[])
+    assert out["series"]["close"] == [100.0, 110.0]
+    assert out["series"]["adj"] != out["series"]["close"]
+
+
 def test_detail_carries_the_profile_fields_the_page_shows():
     from alpha_track.export import build_detail
     p = profile(issuer="元大投信", tracking_index="臺灣50指數")

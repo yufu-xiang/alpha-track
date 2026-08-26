@@ -7,6 +7,7 @@ const series = {
   start: '2020-01-01',
   days: Array.from({ length: 2000 }, (_, i) => i),
   adj: Array.from({ length: 2000 }, (_, i) => 100 + i * 0.05),
+  close: Array.from({ length: 2000 }, (_, i) => 100 + i * 0.05),
 }
 const benchmark = {
   start: '2020-01-01',
@@ -63,13 +64,13 @@ describe('PriceChart', () => {
   })
 
   it('沒有資料時說明原因,而不是畫一張空圖', () => {
-    render(<PriceChart series={{ start: null, days: [], adj: [] }} name="X" />)
+    render(<PriceChart series={{ start: null, days: [], adj: [], close: [] }} name="X" />)
     expect(screen.getByText(/沒有足夠的價格資料/)).toBeInTheDocument()
   })
 
   it('起點價為零時不畫出 NaN 的路徑', () => {
     const { container } = render(
-      <PriceChart series={{ start: '2026-01-01', days: [0, 1], adj: [0, 10] }} name="X" />)
+      <PriceChart series={{ start: '2026-01-01', days: [0, 1], adj: [0, 10], close: [0, 10] }} name="X" />)
     expect(container.querySelector('.chart__line--main')).toBeNull()
   })
 })
