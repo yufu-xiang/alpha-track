@@ -23,7 +23,8 @@ import yaml
 
 from .categories import UNCLASSIFIED, classify, is_etf_code, load_category_map
 from .compute import compute_etf_metrics
-from .export import build_meta, build_rankings, write_json
+from .export import (build_benchmark_series, build_detail, build_meta,
+                     build_rankings, write_json)
 from .models import DividendRecord, EtfProfile, NavRecord, PriceRecord
 from .storage import Database
 from .validation import validate_price_batch
@@ -168,6 +169,13 @@ def run_export(
             )
             rows.append((profile, metrics, prices[-1].close))
 
+            # 個股頁的資料(規格 §5.2 ②、§5.3 的 lazy load 分層)。
+            # 一檔一個檔案:全部價格序列合計約 12 MB,不能塞進 rankings.json。
+            write_json(out_dir / "etf" / f"{code}.json",
+                       build_detail(profile, metrics, prices, db.get_dividends(code)))
+
+        # 基準線 351 檔共用,單獨匯出一次
+        write_json(out_dir / "benchmark.json", build_benchmark_series(bench_closes))
         write_json(out_dir / "rankings.json", build_rankings(base_date, rows))
         write_json(out_dir / "meta.json", build_meta(
             data_date=base_date, etf_count=len(rows),

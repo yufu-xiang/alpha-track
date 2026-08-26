@@ -10,13 +10,13 @@ null 的意義固定為「資料不足」,前端據此把該列排到最末並�
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from .compute import EtfMetrics
-from .models import EtfProfile
+from .models import DividendRecord, EtfProfile, PriceRecord
 
 TAIPEI = ZoneInfo("Asia/Taipei")
 
@@ -88,6 +88,81 @@ def build_meta(
         "risk_free_rate": risk_free_rate,
         "benchmark_return_1y": benchmark_return_1y,
     }
+
+
+def _day_offsets(dates: Sequence[date]) -> tuple[str | None, list[int]]:
+    """把日期序列壓成「起點 + 天數位移」。
+
+    完整日期字串每點要 13 位元組。實測 0050 的 3081 點:物件陣列 93 KB、
+    平行陣列 63 KB、日期位移 35 KB —— 差近三倍,而全站有 351 檔。
+    """
+    if not dates:
+        return None, []
+    start = dates[0]
+    return start.isoformat(), [(d - start).days for d in dates]
+
+
+def build_detail(
+    profile: EtfProfile,
+    metrics: EtfMetrics,
+    prices: Sequence[PriceRecord],
+    dividends: Sequence[DividendRecord],
+) -> dict:
+    """組裝單一 ETF 的個股頁資料(規格 §5.2 ②)。
+
+    帶著該檔的報酬與風險指標,個股頁因此只需要一個請求 —— 否則為了幾個
+    數字要另外載入 264 KB 的 rankings.json。
+
+    走勢用**還原價**:走勢圖比的是含息報酬,用原始收盤價會讓高配息 ETF
+    看起來一路走跌。原始收盤價在排行榜的「現價」欄已有,這裡不重複。
+    """
+    start, days = _day_offsets([p.date for p in prices])
+    return {
+        "code": profile.code,
+        "name": profile.name,
+        "category": profile.category,
+        "region": profile.region,
+        "exchange": profile.exchange,
+        "issuer": profile.issuer,
+        "tracking_index": profile.tracking_index,
+        "listing_date": (profile.listing_date.isoformat()
+                         if profile.listing_date else None),
+        "data_start": (metrics.data_start.isoformat()
+                       if metrics.data_start else None),
+        "returns": dict(metrics.returns),
+        "annualized": dict(metrics.annualized),
+        "excess": dict(metrics.excess),
+        "risk": {
+            "volatility": metrics.volatility,
+            "mdd": metrics.mdd,
+            "sharpe": metrics.sharpe,
+            "beta": metrics.beta,
+        },
+        "premium_discount": metrics.premium_discount,
+        "series": {
+            "start": start,
+            "days": days,
+            "adj": [round(p.adj_close, 4) for p in prices],
+        },
+        # 新到舊:配息表最常看的是「最近配了多少」。
+        "dividends": [
+            {"ex_date": d.ex_date.isoformat(),
+             "pay_date": d.pay_date.isoformat() if d.pay_date else None,
+             "amount": d.amount}
+            for d in sorted(dividends, key=lambda x: x.ex_date, reverse=True)
+        ],
+    }
+
+
+def build_benchmark_series(bench_closes: Mapping[date, float]) -> dict:
+    """加權報酬指數的序列,供個股頁疊加基準線。
+
+    351 檔共用同一條線,故單獨匯出一次 —— 放進每一檔等於複製 351 份。
+    """
+    dates = sorted(bench_closes)
+    start, days = _day_offsets(dates)
+    return {"start": start, "days": days,
+            "value": [round(bench_closes[d], 2) for d in dates]}
 
 
 def write_json(path: Path, data: object) -> None:

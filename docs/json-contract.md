@@ -16,6 +16,24 @@
 |---|---|---|
 | `web/public/data/rankings.json` | 全市場 ETF 的績效與風險指標 | `build_rankings` |
 | `web/public/data/meta.json` | 資料健康狀態,驅動前端的警告列 | `build_meta` |
+| `web/public/data/etf/{代號}.json` | 個股頁:完整價格序列、配息紀錄、基本資料(每檔 4–60 KB,**lazy load**) | `build_detail` |
+| `web/public/data/benchmark.json` | 加權報酬指數序列,供個股頁疊加基準線(約 36 KB,全站共用) | `build_benchmark_series` |
+
+### 為什麼價格序列用「起點 + 天數位移」
+
+完整日期字串每點要 13 位元組。實測 0050 的 3081 點:物件陣列 93 KB、
+平行陣列 63 KB、**日期位移 35 KB** —— 差近三倍,而全站有 351 檔。
+
+```json
+"series": { "start": "2014-01-02", "days": [0, 1, 4, 5], "adj": [9.27, 9.16, 9.14, 9.15] }
+```
+
+`adj` 是**還原價**:走勢圖比的是含息報酬,用原始收盤價會讓高配息 ETF
+看起來一路走跌。原始收盤價在 `rankings.json` 的 `close` 已有,不重複。
+
+實測全站 351 檔合計 6.3 MB。每日更新只在陣列尾端追加一筆,git 的 delta
+壓縮下**單日只增加 40 KB**(實測),一年約 9 MB —— 因此保留完整每日精度,
+不做降取樣。
 
 ## 兩條貫穿全域的規則
 

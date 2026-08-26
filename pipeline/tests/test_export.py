@@ -1,10 +1,12 @@
 import json
+
+import pytest
 from datetime import date
 from pathlib import Path
 
 from alpha_track.compute import EtfMetrics
 from alpha_track.export import build_meta, build_rankings, write_json
-from alpha_track.models import EtfProfile
+from alpha_track.models import EtfProfile, PriceRecord
 
 
 def profile(code="0050", **kw) -> EtfProfile:
@@ -147,3 +149,84 @@ def test_meta_benchmark_return_is_null_without_data():
                    anomalies=[], is_stale=False, risk_free_rate=0.015,
                    benchmark_return_1y=None)
     assert m["benchmark_return_1y"] is None
+
+
+def price_series(code: str, start: date, closes: list[float]) -> list[PriceRecord]:
+    from datetime import timedelta
+    return [PriceRecord(code=code, date=start + timedelta(days=i), open=c, high=c,
+                        low=c, close=c, volume=1000, adj_close=c * 0.9)
+            for i, c in enumerate(closes)]
+
+
+def test_detail_uses_day_offsets_not_repeated_date_strings():
+    """完整日期字串每點要 13 位元組。3081 點的 0050 用物件陣列是 93 KB、
+    平行陣列 63 KB、日期位移 35 KB —— 差三倍,而全站有 351 檔。"""
+    from alpha_track.export import build_detail
+    prices = price_series("0050", date(2026, 8, 1), [100.0, 101.0, 102.0])
+    out = build_detail(profile(), metrics(), prices, dividends=[])
+    assert out["series"]["start"] == "2026-08-01"
+    assert out["series"]["days"] == [0, 1, 2]
+    assert len(out["series"]["adj"]) == 3
+
+
+def test_detail_series_is_the_adjusted_price():
+    """走勢圖比的是含息報酬。用原始收盤價會讓高配息 ETF 看起來一路走跌。"""
+    from alpha_track.export import build_detail
+    prices = price_series("0050", date(2026, 8, 1), [100.0])
+    out = build_detail(profile(), metrics(), prices, dividends=[])
+    assert out["series"]["adj"][0] == pytest.approx(90.0)
+
+
+def test_detail_carries_the_profile_fields_the_page_shows():
+    from alpha_track.export import build_detail
+    p = profile(issuer="元大投信", tracking_index="臺灣50指數")
+    out = build_detail(p, metrics(), price_series("0050", date(2026, 8, 1), [1.0]),
+                       dividends=[])
+    assert out["issuer"] == "元大投信"
+    assert out["tracking_index"] == "臺灣50指數"
+    assert out["listing_date"] == "2003-06-30"
+    assert out["category"] == "市值型"
+
+
+def test_detail_includes_returns_and_risk_so_the_page_needs_one_request():
+    """個股頁若要另外去 rankings.json 撈同一檔的數字,等於為了幾個欄位
+    載入 264 KB。這裡帶著,一個請求就夠。"""
+    from alpha_track.export import build_detail
+    out = build_detail(profile(), metrics(), price_series("0050", date(2026, 8, 1), [1.0]),
+                       dividends=[])
+    assert out["returns"]["Y1"] == 0.1834
+    assert out["risk"]["sharpe"] == 0.9
+    assert out["excess"]["Y1"] == 0.0421
+
+
+def test_detail_includes_dividend_records_newest_first():
+    from alpha_track.export import build_detail
+    from alpha_track.models import DividendRecord
+    divs = [DividendRecord(code="0050", ex_date=date(2025, 7, 21), pay_date=date(2025, 8, 10), amount=0.5),
+            DividendRecord(code="0050", ex_date=date(2026, 7, 21), pay_date=date(2026, 8, 10), amount=0.6)]
+    out = build_detail(profile(), metrics(),
+                       price_series("0050", date(2026, 8, 1), [1.0]), dividends=divs)
+    assert [d["ex_date"] for d in out["dividends"]] == ["2026-07-21", "2025-07-21"]
+    assert out["dividends"][0]["amount"] == 0.6
+
+
+def test_detail_on_empty_price_history_still_produces_a_valid_file():
+    from alpha_track.export import build_detail
+    out = build_detail(profile(), metrics(), [], dividends=[])
+    assert out["series"]["start"] is None
+    assert out["series"]["days"] == []
+
+
+def test_benchmark_series_is_exported_once_not_per_etf():
+    """基準線 351 檔共用。放進每一檔等於同一份資料複製 351 次。"""
+    from alpha_track.export import build_benchmark_series
+    out = build_benchmark_series({date(2026, 8, 1): 100.0, date(2026, 8, 3): 102.0})
+    assert out["start"] == "2026-08-01"
+    assert out["days"] == [0, 2]
+    assert out["value"] == [100.0, 102.0]
+
+
+def test_benchmark_series_is_empty_when_there_is_no_data():
+    from alpha_track.export import build_benchmark_series
+    out = build_benchmark_series({})
+    assert out["start"] is None and out["days"] == []

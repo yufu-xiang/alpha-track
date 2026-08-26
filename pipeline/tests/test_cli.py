@@ -647,3 +647,25 @@ def test_one_failing_dividend_fetch_does_not_stop_the_rest(tmp_path: Path):
         assert len(db.get_dividends("0056")) == 1
         # 失敗的那檔不記錄抓取時間,下次會再試
         assert "0050" in db.codes_needing_dividends(30, today=date(2026, 8, 25))
+
+
+def test_export_writes_one_file_per_etf_plus_a_shared_benchmark(tmp_path: Path):
+    """規格 §5.3:個股頁 lazy load `etf/{代號}.json`。
+    全部價格序列合計約 12 MB,塞不進 rankings.json。"""
+    db_path = tmp_path / "t.db"
+    with Database(db_path) as db:
+        db.init_schema()
+        for code in ("0050", "0056"):
+            db.upsert_prices([price_at(code, date(2026, 8, 20) + timedelta(days=i))
+                              for i in range(3)])
+        db.upsert_benchmark("TAIEX_TR", [(date(2026, 8, 20), 1000.0)])
+
+    out = tmp_path / "out"
+    run_export(settings_for(tmp_path, db_path), is_stale=False, anomalies=[])
+
+    assert (out / "etf" / "0050.json").exists()
+    assert (out / "etf" / "0056.json").exists()
+    assert (out / "benchmark.json").exists()
+    d = json.loads((out / "etf" / "0050.json").read_text("utf-8"))
+    assert d["code"] == "0050"
+    assert d["series"]["days"] == [0, 1, 2]
