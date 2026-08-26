@@ -144,6 +144,7 @@
   | indicators.adjclose[0].adjclose[i] | float | `20.34...` | 還原收盤價,對舊日期會**低於** close(符合股利回溯調整邏輯);對最新一筆會等於 close |
   | events.dividends.{ts}.amount | float | `1.35` | 每股配息金額 |
   | meta.firstTradeDate | int (unix) | `1230771600` | 該代號在 Yahoo 資料庫中的**實際最早資料日期**,務必先讀這個欄位再決定回補起點 |
+- **收盤價與官方不一定一致(2026-08-26,建立 Golden test 時發現)**:Yahoo 對 `0050.TW` 在 **2026-08-21** 回報收盤價 **104.35**,而證交所 `STOCK_DAY` 與元大投信官網皆為 **104.65**(相差 0.29%)。fixture 於 2026-08-24 取得,當時該日早已收盤結算,不是「尚未更新」。這使規格 §3.1「Yahoo 僅用於歷史回補,每日增量以官方 TWSE/TPEx 為主」不只是可用性考量,也是**正確性**考量 —— 若當初以 Yahoo 做每日增量,0050 近一年報酬會少 0.58 個百分點。另一方面,Yahoo 的**還原係數**經查證完全正確(見 `pipeline/tests/test_golden.py`):2025-08-26 的 `adjclose/close = 0.980118`,恰等於證交所公告的 `(1−0.600/99.20)×(1−1.000/71.85)`,分毫不差。
 - **關鍵陷阱(務必寫入 adapter 實作說明)**:brief 範例的呼叫方式 `range=max&interval=1d` 對 `0050.TW` 這類長歷史標的,Yahoo 會**靜默降頻**為月線 —— 回應 `meta.dataGranularity` 變成 `"1mo"`,`timestamp` 只有 213 筆(每月一筆),而不是逐日資料。HTTP 狀態碼仍是 200,不會報錯,非常容易被忽略。**正確作法是用 `period1=0&period2=9999999999&interval=1d` 明確指定區間**,才能拿到真正逐日資料(實測 0050.TW 得到 4322 筆逐日資料,`dataGranularity="1d"`)。
 - 注意事項:
   - `close` 與 `adjclose` **確認是兩個不同欄位**,數值也确实不同(見判定 A)。
