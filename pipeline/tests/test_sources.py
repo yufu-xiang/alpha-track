@@ -1,5 +1,7 @@
 import json
 import ssl
+
+import certifi
 from datetime import date
 from pathlib import Path
 
@@ -522,13 +524,30 @@ def test_relaxing_strict_does_not_disable_certificate_verification():
     assert ctx.verify_mode == ssl.CERT_REQUIRED
 
 
-def test_other_hosts_keep_the_strict_default():
-    """只有確認有問題的網域降規格,其餘維持最嚴設定。"""
+def test_other_hosts_get_the_platform_default_untouched():
+    """只有確認有問題的網域降規格,其餘一個位元都不動。
+
+    刻意比對「與平台預設相同」而不是「含有 VERIFY_X509_STRICT」:
+    那個旗標是否預設開啟**因 Python 版本而異** —— 3.14 有、3.12 沒有。
+    斷言旗標存在等於把某個版本的行為寫死成普世真理,實測 CI(3.12)因此
+    整批失敗,而本機(3.14)全綠。要測的是我的函式做了什麼,不是平台預設是什麼。
+    """
+    default = ssl.create_default_context(cafile=certifi.where())
     for url in ("https://openapi.twse.com.tw/v1/x",
                 "https://query1.finance.yahoo.com/v8/x",
                 "https://api.finmindtrade.com/api/v4/data"):
-        ctx = ssl_context_for(url)
-        assert ctx.verify_flags & ssl.VERIFY_X509_STRICT, url
+        assert ssl_context_for(url).verify_flags == default.verify_flags, url
+
+
+def test_tpex_context_differs_from_the_default_only_by_the_strict_flag():
+    """對 TPEx 也只清掉那一個旗標,其餘原封不動。
+
+    平台預設沒有該旗標時(Python 3.12),這個式子等於「與預設相同」,
+    測試照樣成立 —— 表達的是「有就清掉」,而不是「一定有」。
+    """
+    default = ssl.create_default_context(cafile=certifi.where())
+    ctx = ssl_context_for("https://www.tpex.org.tw/openapi/v1/x")
+    assert ctx.verify_flags == default.verify_flags & ~ssl.VERIFY_X509_STRICT
 
 
 def _chart(closes: list[float], volumes: list[int] | None = None) -> dict:

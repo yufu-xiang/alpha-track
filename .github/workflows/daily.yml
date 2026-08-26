@@ -20,6 +20,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 刻意不跟本機的 Python 版本一致。2026-08-25 的首班排程就是靠這個
+      # 落差抓到一個 bug:某個 TLS 測試斷言 ssl 的預設含 VERIFY_X509_STRICT,
+      # 但那個旗標 3.14 有、3.12 沒有 —— 本機全綠而 CI 整批失敗。
+      # 對齊版本只會讓這種假設繼續藏著。
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
