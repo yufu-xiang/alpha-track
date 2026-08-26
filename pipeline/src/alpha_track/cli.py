@@ -190,6 +190,13 @@ def run_export(
                 # 不知道就是 None,compute 會據此照常計算 INCEPTION。
                 listing_date=base.listing_date if base else None,
                 exchange=base.exchange if base else "TWSE",
+                # 發行商與追蹤指數來自 TWSE 靜態清單,已存在資料庫裡。
+                # 漏掉這兩行的話,它們會被安靜地換成 None —— 資料抓到了、
+                # 存進去了、讀出來了,卻在重建 EtfProfile 時掉了,
+                # 而畫面上只會看到兩個沒有理由的破折號。
+                issuer=base.issuer if base else None,
+                tracking_index=base.tracking_index if base else None,
+                expense_ratio=base.expense_ratio if base else None,
                 category=cls.category, region=cls.region,
                 is_leveraged=cls.is_leveraged, is_inverse=cls.is_inverse,
             )

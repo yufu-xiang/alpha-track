@@ -692,3 +692,30 @@ def test_settings_keep_absolute_paths_unchanged(tmp_path):
     cfg = tmp_path / "settings.yaml"
     cfg.write_text(f"db_path: {tmp_path / 'x.db'}\n", encoding="utf-8")
     assert cli.load_settings(cfg).db_path == str(tmp_path / "x.db")
+
+
+def test_export_keeps_issuer_and_tracking_index_from_the_database(tmp_path: Path):
+    """發行商與追蹤指數已存在資料庫,重建 EtfProfile 時不可漏掉。
+
+    漏掉不會報錯:資料抓到了、存進去了、讀出來了,卻在重建時被換成 None,
+    畫面上只剩兩個沒有理由的破折號。這正是先前發生過的事。
+    """
+    db_path = tmp_path / "t.db"
+    out = tmp_path / "out"
+    with Database(db_path) as db:
+        db.init_schema()
+        db.upsert_profiles([EtfProfile(
+            code="0050", name="元大台灣50", listing_date=date(2003, 6, 30),
+            exchange="TWSE", issuer="元大證券投資信託股份有限公司",
+            tracking_index="富時臺灣證券交易所臺灣50指數",
+        )])
+        db.upsert_prices([PriceRecord(
+            code="0050", date=date(2026, 8, 26), open=100.0, high=100.0,
+            low=100.0, close=100.0, volume=1000, adj_close=100.0)])
+
+    run_export(Settings(db_path=str(db_path), output_dir=str(out)),
+               is_stale=False, anomalies=[])
+
+    detail = json.loads((out / "etf" / "0050.json").read_text(encoding="utf-8"))
+    assert detail["issuer"] == "元大證券投資信託股份有限公司"
+    assert detail["tracking_index"] == "富時臺灣證券交易所臺灣50指數"
