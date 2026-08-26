@@ -104,3 +104,54 @@ export function toPath(
     })
     .join(' ')
 }
+
+/** 把序列的天數位移換算成絕對日數(自 1970 起),讓不同起點的序列可比。 */
+export function toAbsoluteDays(series: Series): { days: number[]; values: number[] } {
+  if (!series.start || series.days.length === 0) return { days: [], values: [] }
+  const base = Math.round(Date.parse(`${series.start}T00:00:00Z`) / 86_400_000)
+  return { days: series.days.map((d) => d + base), values: [...series.adj] }
+}
+
+/**
+ * 多檔疊圖的共同區間。
+ *
+ * 每檔的 days 是相對**自己** start 的位移 —— 直接畫在同一條軸上,
+ * 各檔會落在不同的水平區段而完全不重疊。而且「標準化為 100」必須發生在
+ * **同一個日期**,否則各檔的起點是不同天,比較本身就沒有意義。
+ *
+ * 共同起點取「最晚的那一檔的起點」與「視窗起點」中較晚者:
+ * 拿 2023 才掛牌的 ETF 和 2014 就有的比十年,只能從 2023 比起。
+ */
+export function commonWindow(
+  seriesList: Series[],
+  windowDays: number | null,
+): { from: number; to: number } | null {
+  const abs = seriesList.map(toAbsoluteDays).filter((s) => s.days.length > 0)
+  if (abs.length === 0) return null
+  const latestStart = Math.max(...abs.map((s) => s.days[0]!))
+  const earliestEnd = Math.min(...abs.map((s) => s.days[s.days.length - 1]!))
+  const to = Math.max(...abs.map((s) => s.days[s.days.length - 1]!))
+  const from = windowDays === null
+    ? latestStart
+    : Math.max(latestStart, to - windowDays)
+  if (from > earliestEnd) return null
+  return { from, to }
+}
+
+/** 取絕對日數落在 [from, to] 內的點,並以區間第一點標準化為 100。 */
+export function normalizeWithin(
+  series: Series,
+  from: number,
+  to: number,
+): ChartPoint[] {
+  const abs = toAbsoluteDays(series)
+  const days: number[] = []
+  const values: number[] = []
+  abs.days.forEach((d, i) => {
+    if (d >= from && d <= to) { days.push(d); values.push(abs.values[i]!) }
+  })
+  if (days.length === 0) return []
+  const base = values[0]!
+  if (!(base > 0)) return []
+  return days.map((day, i) => ({ day, value: (values[i]! / base) * 100 }))
+}

@@ -452,3 +452,71 @@ footer { margin-top: 1.5rem; font-size: 0.8125rem; color: var(--fg-muted); }
   font-variant-numeric: tabular-nums;
 }
 .chart-empty { padding: 2rem; text-align: center; color: var(--fg-muted); }
+
+/* ── 比較圖 ───────────────────────────────────────────────────
+   五個顏色來自 Okabe-Ito(色覺障礙友善調色盤),深色模式重新取階以落在
+   該底色的亮度帶(L 0.48–0.67)。這組是量出來的:參考調色盤的 8 個插槽
+   取 5,56 組全部無法在兩種主題下通過 all-pairs 檢查。
+   虛線樣式是**合規條件**不是裝飾 —— 驗證器的 CVD separation 落在 floor
+   (ΔE 7.2 deutan),僅在搭配非顏色編碼時合法。 */
+:root {
+  --s0: #0072B2; --s1: #D55E00; --s2: #009E73; --s3: #CC79A7; --s4: #E69F00;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --s0: #006ba7; --s1: #954200; --s2: #00956c; --s3: #c0729d; --s4: #bd8200;
+  }
+}
+.chart__line--s0 { stroke: var(--s0); }
+.chart__line--s1 { stroke: var(--s1); }
+.chart__line--s2 { stroke: var(--s2); }
+.chart__line--s3 { stroke: var(--s3); }
+.chart__line--s4 { stroke: var(--s4); }
+.chart__key--s0::before { background: var(--s0); }
+.chart__key--s1::before { background: var(--s1); }
+.chart__key--s2::before { background: var(--s2); }
+.chart__key--s3::before { background: var(--s3); }
+.chart__key--s4::before { background: var(--s4); }
+
+/* 比較列:選了才出現,浮在底部 */
+.compare-bar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+  margin-top: 0.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+}
+.compare-bar__codes { color: var(--fg-muted); }
+.compare-bar a, .compare-bar button {
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  text-decoration: none;
+}
+.compare-bar button.is-ghost {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--fg-muted);
+}
+.col-pick { width: 2.2rem; text-align: center; }
+
+/* 只給螢幕閱讀器的文字:視覺上隱藏但仍被朗讀。
+   直接 display:none 會讓它從無障礙樹消失,等於沒寫。 */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

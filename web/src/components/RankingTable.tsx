@@ -45,11 +45,16 @@ interface Props {
   onSortChange: (period: PeriodCode) => void
   /** 要顯示哪些風險指標。規格 §5.2:由欄位選單控制,勾選即顯示。 */
   visibleRisk?: RiskColumn[]
+  /** 已選入比較的代號。未提供則不顯示選取欄。 */
+  compareSelected?: string[]
+  onCompareToggle?: (code: string) => void
 }
 
 export function RankingTable({
   rows, visibleColumns, sortBy, onSortChange, visibleRisk = [],
+  compareSelected, onCompareToggle,
 }: Props) {
+  const picking = compareSelected !== undefined && onCompareToggle !== undefined
   const [sorting, setSorting] = useState<SortingState>(
     sortBy ? [{ id: sortBy, desc: true }] : [],
   )
@@ -160,6 +165,7 @@ export function RankingTable({
         <thead>
           {table.getHeaderGroups().map((hg) => (
             <tr key={hg.id}>
+              {picking && <th className="col-pick"><span className="sr-only">比較</span></th>}
               <th className="col-rank">名次</th>
               {hg.headers.map((header) => {
                 const canSort = header.column.getCanSort()
@@ -202,6 +208,16 @@ export function RankingTable({
         <tbody>
           {displayRows.map((row) => (
             <tr key={row.id}>
+              {picking && (
+                <td className="col-pick">
+                  <input
+                    type="checkbox"
+                    aria-label={`比較 ${row.original.code}`}
+                    checked={compareSelected!.includes(row.original.code)}
+                    onChange={() => onCompareToggle!(row.original.code)}
+                  />
+                </td>
+              )}
               <td className="col-rank">{ranks.get(row.id) ?? '—'}</td>
               {row.getVisibleCells().map((cell) => (
                 <td key={cell.id}>

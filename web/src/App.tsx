@@ -11,18 +11,21 @@ import { ColumnPicker } from './components/ColumnPicker'
 import { Filters } from './components/Filters'
 import { HealthBar } from './components/HealthBar'
 import { PeriodTabs } from './components/PeriodTabs'
+import { Compare } from './components/Compare'
 import { EtfDetail } from './components/EtfDetail'
 import { RankingTable } from './components/RankingTable'
 import { loadData, type LoadResult } from './data/loader'
 import { applyFilters, collectCategories, collectRegions } from './lib/filtering'
 import { formatPercent } from './lib/format'
 import { loadPrefs, savePrefs } from './lib/prefs'
-import { useRoute } from './lib/route'
+import { MAX_COMPARE, toggleCompare } from './lib/compare'
+import { hashFor, useRoute } from './lib/route'
 import { PERIODS, type PeriodCode } from './types'
 
 export function App() {
   const route = useRoute()
   if (route.name === 'detail') return <EtfDetail code={route.code} />
+  if (route.name === 'compare') return <Compare codes={route.codes} />
   return <Rankings />
 }
 
@@ -32,6 +35,7 @@ function Rankings() {
   const [sortBy, setSortBy] = useState<PeriodCode>('Y1')
   const [categories, setCategories] = useState<string[]>([])
   const [regions, setRegions] = useState<string[]>([])
+  const [compare, setCompare] = useState<string[]>([])
   const [query, setQuery] = useState('')
 
   useEffect(() => {
@@ -139,7 +143,26 @@ function Rankings() {
         sortBy={sortBy}
         onSortChange={setSortBy}
         visibleRisk={prefs.visibleRisk}
+        compareSelected={compare}
+        onCompareToggle={(code) => setCompare((s) => toggleCompare(s, code))}
       />
+
+      {compare.length > 0 && (
+        <div className="compare-bar">
+          <span className="compare-bar__codes">
+            已選 {compare.length} / {MAX_COMPARE}:{compare.join('、')}
+            {compare.length >= MAX_COMPARE && '(已達上限)'}
+          </span>
+          {compare.length >= 2 ? (
+            <a href={hashFor({ name: 'compare', codes: compare })}>比較這 {compare.length} 檔</a>
+          ) : (
+            <span className="compare-bar__codes">再選一檔即可比較</span>
+          )}
+          <button type="button" className="is-ghost" onClick={() => setCompare([])}>
+            清除
+          </button>
+        </div>
+      )}
 
       <footer>
         {/* 組成單一字串:拆成多個 JSX 節點會讓 getByText 的正則比對不到,

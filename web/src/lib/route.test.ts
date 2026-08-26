@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { hashFor, parseHash } from './route'
+import { hashFor, parseHash, type Route } from './route'
 
 describe('hash 路由', () => {
   it('空的 hash 是排行榜', () => {
@@ -23,6 +23,33 @@ describe('hash 路由', () => {
 
   it('產生的連結可被自己解析回來', () => {
     const r = { name: 'detail', code: '00631L' } as const
+    expect(parseHash(hashFor(r))).toEqual(r)
+  })
+})
+
+describe('比較頁路由', () => {
+  it('辨識比較頁', () => {
+    expect(parseHash('#/compare/0050,0056'))
+      .toEqual({ name: 'compare', codes: ['0050', '0056'] })
+  })
+
+  it('代號轉大寫', () => {
+    expect(parseHash('#/compare/00679b')).toEqual({ name: 'compare', codes: ['00679B'] })
+  })
+
+  it('超過上限時只取前五個 —— 網址可被手動編輯', () => {
+    const r = parseHash('#/compare/a,b,c,d,e,f,g')
+    expect(r.name).toBe('compare')
+    if (r.name === 'compare') expect(r.codes).toHaveLength(5)
+  })
+
+  it('沒有有效代號時回排行榜,而非空白比較頁', () => {
+    expect(parseHash('#/compare/')).toEqual({ name: 'rankings' })
+    expect(parseHash('#/compare/,,,')).toEqual({ name: 'rankings' })
+  })
+
+  it('產生的連結可被自己解析回來', () => {
+    const r: Route = { name: 'compare', codes: ['0050', '00631L'] }
     expect(parseHash(hashFor(r))).toEqual(r)
   })
 })

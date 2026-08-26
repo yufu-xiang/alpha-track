@@ -6,18 +6,29 @@
  * 重新整理與分享連結都正常,而且不必多裝一個路由套件。
  */
 import { useEffect, useState } from 'react'
+import { parseCodes, serializeCodes } from './compare'
 
 export type Route =
   | { name: 'rankings' }
   | { name: 'detail'; code: string }
+  | { name: 'compare'; codes: string[] }
 
 export function parseHash(hash: string): Route {
-  const m = /^#\/etf\/([A-Za-z0-9]+)$/.exec(hash)
-  return m ? { name: 'detail', code: m[1]!.toUpperCase() } : { name: 'rankings' }
+  const detail = /^#\/etf\/([A-Za-z0-9]+)$/.exec(hash)
+  if (detail) return { name: 'detail', code: detail[1]!.toUpperCase() }
+
+  const compare = /^#\/compare\/([A-Za-z0-9,]+)$/.exec(hash)
+  if (compare) {
+    const codes = parseCodes(compare[1]!)
+    if (codes.length > 0) return { name: 'compare', codes }
+  }
+  return { name: 'rankings' }
 }
 
 export function hashFor(route: Route): string {
-  return route.name === 'detail' ? `#/etf/${route.code}` : '#/'
+  if (route.name === 'detail') return `#/etf/${route.code}`
+  if (route.name === 'compare') return `#/compare/${serializeCodes(route.codes)}`
+  return '#/'
 }
 
 export function useRoute(): Route {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { alignBenchmark, normalize, sliceSeries, toPath } from './chart'
+import { alignBenchmark, commonWindow, normalize, normalizeWithin,
+         sliceSeries, toAbsoluteDays, toPath } from './chart'
 
 const series = { start: '2026-01-01', days: [0, 1, 2, 3], adj: [100, 110, 90, 120] }
 
@@ -89,5 +90,50 @@ describe('toPath', () => {
   it('值域為零寬時不除以零', () => {
     const flat = { minDay: 0, maxDay: 0, minValue: 5, maxValue: 5 }
     expect(toPath([{ day: 0, value: 5 }], box, flat)).not.toContain('NaN')
+  })
+})
+
+describe('多檔疊圖的共同區間', () => {
+  // 2020 是閏年:2020-01-01 + 1096 天才是 2023-01-01
+  const old = { start: '2020-01-01', days: [0, 366, 731, 1096, 1461],
+                adj: [100, 105, 110, 120, 130] }
+  const young = { start: '2023-01-01', days: [0, 365], adj: [50, 60] }
+
+  it('絕對日數讓不同起點的序列落在同一條軸上', () => {
+    // 各自的 days 都從 0 開始,直接畫會落在不同水平區段而完全不重疊。
+    const a = toAbsoluteDays(old)
+    const b = toAbsoluteDays(young)
+    expect(b.days[0]! - a.days[0]!).toBe(1096)   // 2020-01-01 -> 2023-01-01
+  })
+
+  it('共同起點取最晚掛牌的那一檔 —— 標準化必須在同一天', () => {
+    const w = commonWindow([old, young], null)!
+    expect(w.from).toBe(toAbsoluteDays(young).days[0])
+  })
+
+  it('視窗較短時取視窗起點', () => {
+    const w = commonWindow([old, young], 200)!
+    expect(w.to - w.from).toBe(200)
+  })
+
+  it('完全沒有重疊區間時回傳 null,而不是畫出無意義的圖', () => {
+    const past = { start: '2010-01-01', days: [0, 1], adj: [1, 2] }
+    const future = { start: '2026-01-01', days: [0, 1], adj: [1, 2] }
+    expect(commonWindow([past, future], null)).toBeNull()
+  })
+
+  it('兩檔都自共同起點的 100 出發', () => {
+    const w = commonWindow([old, young], null)!
+    const a = normalizeWithin(old, w.from, w.to)
+    const b = normalizeWithin(young, w.from, w.to)
+    expect(a[0]!.value).toBe(100)
+    expect(b[0]!.value).toBe(100)
+    expect(a[0]!.day).toBe(b[0]!.day)
+  })
+
+  it('標準化後的漲幅正確 —— 老的那檔自 2023 起只漲到 130/120', () => {
+    const w = commonWindow([old, young], null)!
+    const a = normalizeWithin(old, w.from, w.to)
+    expect(a[a.length - 1]!.value).toBeCloseTo((130 / 120) * 100)
   })
 })

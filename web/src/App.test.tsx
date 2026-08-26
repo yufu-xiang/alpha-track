@@ -209,3 +209,39 @@ describe('App 地區篩選', () => {
     })
   })
 })
+
+describe('App 比較選取', () => {
+  it('每一列都有比較用的勾選框', async () => {
+    await renderLoaded()
+    expect(screen.getByRole('checkbox', { name: '比較 0050' })).toBeInTheDocument()
+  })
+
+  it('選一檔時提示還要再選,選兩檔才給比較連結', async () => {
+    const user = userEvent.setup()
+    await renderLoaded()
+    await user.click(screen.getByRole('checkbox', { name: '比較 0050' }))
+    expect(screen.getByText(/再選一檔即可比較/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('checkbox', { name: '比較 0056' }))
+    const link = await screen.findByRole('link', { name: /比較這 2 檔/ })
+    expect(link).toHaveAttribute('href', '#/compare/0050,0056')
+  })
+
+  it('達到上限時明確告知,而不是靜默忽略點擊', async () => {
+    const user = userEvent.setup()
+    await renderLoaded()
+    for (const c of ['0050', '0056', '00929', '00679B', '00999']) {
+      const box = screen.queryByRole('checkbox', { name: `比較 ${c}` })
+      if (box) await user.click(box)
+    }
+    expect(screen.getByText(/已達上限/)).toBeInTheDocument()
+  })
+
+  it('清除會收起比較列', async () => {
+    const user = userEvent.setup()
+    await renderLoaded()
+    await user.click(screen.getByRole('checkbox', { name: '比較 0050' }))
+    await user.click(screen.getByRole('button', { name: '清除' }))
+    expect(screen.queryByText(/已選/)).not.toBeInTheDocument()
+  })
+})
