@@ -4,7 +4,7 @@ import {
   loadPortfolio, needsExportReminder, savePortfolio, toExportFile,
 } from './portfolioStore'
 import { DEFAULT_FEE_CONFIG } from './fees'
-import type { Transaction } from './portfolio'
+import type { Transaction, TxType } from './portfolio'
 
 const good: Transaction = {
   id: 'a', type: 'buy', code: '0050', date: '2025-01-01',
@@ -114,5 +114,28 @@ describe('匯出提醒', () => {
   it('剛好第 30 天就提醒', () => {
     expect(daysSinceExport(withTx('2026-07-27'), '2026-08-26')).toBe(30)
     expect(needsExportReminder(withTx('2026-07-27'), '2026-08-26')).toBe(true)
+  })
+})
+
+describe('交易類型白名單', () => {
+  it('分割能存活過存檔與讀取', () => {
+    // 漏掉白名單的話,分割在畫面上加得進去、重新整理就消失,
+    // 而且不會有任何錯誤訊息。這條測試就是為了那次而寫的。
+    const split = {
+      id: 's1', type: 'split' as const, code: '0050', date: '2025-06-11',
+      shares: 0, price: 4, fee: 0, tax: 0,
+    }
+    savePortfolio({ ...loadPortfolio(), transactions: [split] })
+    expect(loadPortfolio().transactions).toEqual([split])
+  })
+
+  it('白名單涵蓋 TxType 的每一個值 —— 新增類型時不會漏改', () => {
+    const all: TxType[] = ['buy', 'sell', 'dividend', 'split']
+    const txs = all.map((type, i) => ({
+      id: `t${i}`, type, code: '0050', date: '2025-01-01',
+      shares: 1, price: 1, fee: 0, tax: 0,
+    }))
+    savePortfolio({ ...loadPortfolio(), transactions: txs })
+    expect(loadPortfolio().transactions.map((t) => t.type)).toEqual(all)
   })
 })

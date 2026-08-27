@@ -34,7 +34,8 @@ export function TransactionForm({ fees, rows, onAdd }: Props) {
   // 使用者手動改過就不再覆蓋 —— 自動試算不該把人打的字吃掉
   useEffect(() => {
     if (touched.fee) return
-    setFee(type === 'dividend' ? '0' : String(commission(amount, fees)))
+    setFee(type === 'dividend' || type === 'split'
+      ? '0' : String(commission(amount, fees)))
   }, [amount, type, fees, touched.fee])
 
   useEffect(() => {
@@ -47,7 +48,9 @@ export function TransactionForm({ fees, rows, onAdd }: Props) {
     setTax(String(Math.round(amount * rate)))
   }, [amount, type, row, date, touched.tax])
 
-  const valid = code.trim() !== '' && nShares > 0 && nPrice > 0 && date !== ''
+  // 分割不需要股數,但需要倍率。用同一條規則會讓分割永遠送不出去。
+  const valid = code.trim() !== '' && nPrice > 0 && date !== ''
+    && (type === 'split' || nShares > 0)
 
   function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -55,7 +58,7 @@ export function TransactionForm({ fees, rows, onAdd }: Props) {
     onAdd({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       type, code: code.toUpperCase().trim(), date,
-      shares: nShares, price: nPrice,
+      shares: type === 'split' ? 0 : nShares, price: nPrice,
       fee: Number(fee) || 0, tax: Number(tax) || 0,
     })
     setShares(''); setPrice('')
@@ -69,6 +72,7 @@ export function TransactionForm({ fees, rows, onAdd }: Props) {
           <option value="buy">買進</option>
           <option value="sell">賣出</option>
           <option value="dividend">配息</option>
+          <option value="split">分割</option>
         </select>
       </label>
       <label>代號
@@ -83,13 +87,19 @@ export function TransactionForm({ fees, rows, onAdd }: Props) {
       <label>日期
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
       </label>
-      <label>{type === 'dividend' ? '配息股數' : '股數'}
-        <input type="number" min="1" step="1" value={shares}
-               onChange={(e) => setShares(e.target.value)} required />
-      </label>
-      <label>{type === 'dividend' ? '每股配息' : '價格'}
-        <input type="number" min="0" step="0.001" value={price}
-               onChange={(e) => setPrice(e.target.value)} required />
+      {/* 分割沒有股數也沒有價格 —— 只有倍率。硬留著那兩格會讓人以為
+          要填「分割了幾股」,而那個問題沒有答案。 */}
+      {type !== 'split' && (
+        <label>{type === 'dividend' ? '配息股數' : '股數'}
+          <input type="number" min="1" step="1" value={shares}
+                 onChange={(e) => setShares(e.target.value)} required />
+        </label>
+      )}
+      <label>
+        {type === 'split' ? '倍率(1:4 分割填 4)'
+          : type === 'dividend' ? '每股配息' : '價格'}
+        <input type="number" min="0" step={type === 'split' ? '0.01' : '0.001'}
+               value={price} onChange={(e) => setPrice(e.target.value)} required />
       </label>
       <label>手續費
         <input type="number" min="0" step="1" value={fee}

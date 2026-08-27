@@ -28,7 +28,12 @@ export const EMPTY_PORTFOLIO: PortfolioData = {
   lastExport: null,
 }
 
-const TYPES = new Set(['buy', 'sell', 'dividend'])
+const TYPES = new Set(['buy', 'sell', 'dividend', 'split'])
+/**
+ * 新增交易類型時**必須同步這一行**。漏掉的話,那個類型會在存檔後
+ * 被靜默濾掉:畫面上加得進去、重新整理就消失,而且不會有任何錯誤 ——
+ * 使用者只會覺得「剛剛加的東西不見了」。分割就發生過這件事。
+ */
 
 /** 逐筆檢查。匯入的檔案可能來自舊版本或被手動編輯過。 */
 function isTransaction(v: unknown): v is Transaction {

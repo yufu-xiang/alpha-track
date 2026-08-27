@@ -159,3 +159,57 @@ describe('toCashFlows', () => {
     expect(flows).toHaveLength(1)
   })
 })
+
+describe('股票分割(規格 §6.1 未涵蓋,但不處理會讓數字錯掉)', () => {
+  const buy = {
+    id: 'b1', type: 'buy' as const, code: '0050', date: '2025-01-06',
+    shares: 1000, price: 194, fee: 276, tax: 0,
+  }
+  const split = {
+    id: 's1', type: 'split' as const, code: '0050', date: '2025-06-11',
+    shares: 0, price: 4, fee: 0, tax: 0,
+  }
+
+  it('股數乘上倍率,平均成本除以倍率,總成本不變', () => {
+    const before = buildHoldings([buy]).get('0050')!
+    const after = buildHoldings([buy, split]).get('0050')!
+    expect(after.shares).toBe(4000)
+    expect(after.avgCost).toBeCloseTo(before.avgCost / 4)
+    expect(after.shares * after.avgCost).toBeCloseTo(before.shares * before.avgCost)
+  })
+
+  it('分割不產生已實現損益,也不動已領配息', () => {
+    const h = buildHoldings([buy, split]).get('0050')!
+    expect(h.realized).toBe(0)
+    expect(h.dividends).toBe(0)
+  })
+
+  it('反分割(4:1)填 0.25,股數變四分之一', () => {
+    const reverse = { ...split, price: 0.25 }
+    const h = buildHoldings([buy, reverse]).get('0050')!
+    expect(h.shares).toBe(250)
+    expect(h.avgCost).toBeCloseTo((1000 * 194 + 276) / 1000 * 4)
+  })
+
+  it('分割之後賣出,依新的股數與新的平均成本結算', () => {
+    const sell = {
+      id: 'x', type: 'sell' as const, code: '0050', date: '2025-08-01',
+      shares: 4000, price: 52, fee: 296, tax: 156,
+    }
+    const h = buildHoldings([buy, split, sell]).get('0050')!
+    expect(h.shares).toBe(0)
+    // 4000 × 52 − 原始總成本 − 費用
+    expect(h.realized).toBeCloseTo(4000 * 52 - (1000 * 194 + 276) - 296 - 156)
+  })
+
+  it('分割不進 XIRR 的現金流 —— price 欄存的是倍率不是金額', () => {
+    const flows = toCashFlows([buy, split], 0, '2026-08-27')
+    expect(flows).toHaveLength(1)
+    expect(flows[0]!.amount).toBeCloseTo(-(1000 * 194 + 276))
+  })
+
+  it('倍率為 0 或負數時不動作 —— 那會讓持股歸零或變成負的', () => {
+    const h = buildHoldings([buy, { ...split, price: 0 }]).get('0050')!
+    expect(h.shares).toBe(1000)
+  })
+})

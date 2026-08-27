@@ -17,9 +17,10 @@ import type { EtfRow } from '../types'
 import { AllocationPie } from './AllocationPie'
 import { MetricInfo } from './MetricInfo'
 import { DividendEstimates } from './DividendEstimates'
+import { SplitNotice } from './SplitNotice'
 import { TransactionForm } from './TransactionForm'
 
-const TYPE_LABEL = { buy: '買進', sell: '賣出', dividend: '配息' } as const
+const TYPE_LABEL = { buy: '買進', sell: '賣出', dividend: '配息', split: '分割' } as const
 
 export function Portfolio() {
   const [data, setData] = useState<PortfolioData>(() => loadPortfolio())
@@ -130,6 +131,8 @@ export function Portfolio() {
         </p>
       )}
 
+      <SplitNotice transactions={data.transactions} onAdd={addTx} />
+
       <section>
         <h2>總覽</h2>
         <dl className="cards">
@@ -195,8 +198,14 @@ export function Portfolio() {
                         {t.estimated && <span className="tx-estimated">推估</span>}
                       </td>
                       <td>{t.code}</td>
-                      <td>{formatNumber(t.shares, 0)}</td>
-                      <td>{formatNumber(t.price, 2)}</td>
+                      {/* 分割沒有股數,price 欄存的是倍率 —— 照原樣印會變成
+                          「0 股、單價 4.00」,那讀起來像一筆壞掉的交易。 */}
+                      <td>{t.type === 'split' ? '—' : formatNumber(t.shares, 0)}</td>
+                      <td>
+                        {t.type === 'split'
+                          ? `1:${formatNumber(t.price, t.price >= 1 ? 0 : 2)}`
+                          : formatNumber(t.price, 2)}
+                      </td>
                       <td>{formatNumber(t.fee, 0)}</td>
                       <td>{formatNumber(t.tax, 0)}</td>
                       <td>

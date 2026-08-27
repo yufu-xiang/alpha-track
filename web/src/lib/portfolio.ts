@@ -7,7 +7,7 @@
 import type { CashFlow } from './xirr'
 import { xirr } from './xirr'
 
-export type TxType = 'buy' | 'sell' | 'dividend'
+export type TxType = 'buy' | 'sell' | 'dividend' | 'split'
 
 export interface Transaction {
   id: string
@@ -15,9 +15,12 @@ export interface Transaction {
   code: string
   /** ISO 日期 */
   date: string
-  /** 配息時為 0(金額直接記在 amount) */
+  /** 配息時為 0(金額直接記在 amount);分割時為 0 */
   shares: number
-  /** 每股價格;配息時為每股配息金額 */
+  /**
+   * 每股價格;配息時為每股配息金額;**分割時為分割倍率**
+   * (1:4 分割填 4,反分割 4:1 填 0.25)。
+   */
   price: number
   fee: number
   tax: number
@@ -67,6 +70,17 @@ export function buildHoldings(txs: Transaction[]): Map<string, Holding> {
       h.realized += sold * tx.price - sold * h.avgCost - tx.fee - tx.tax
       h.shares -= sold
       if (h.shares === 0) h.avgCost = 0
+    } else if (tx.type === 'split') {
+      // 股票分割不是一筆交易 —— 沒有錢進出,只是同一筆資產被切成更多份。
+      // 因此股數乘、平均成本除,總成本不變,已實現損益與已領配息都不動。
+      //
+      // 沒有這一項的話,分割前買進的紀錄會讓持股數停在舊值:
+      // 0050 在 2025-06-11 做 1:4 分割,少了這筆的人市值會少算四分之三,
+      // 而畫面上不會有任何異常 —— 那是最糟的錯法。
+      if (tx.price > 0) {
+        h.shares *= tx.price
+        h.avgCost /= tx.price
+      }
     } else {
       h.dividends += tx.shares * tx.price - tx.fee - tx.tax
     }
@@ -144,11 +158,15 @@ export function toCashFlows(
   marketValue: number,
   today: string,
 ): CashFlow[] {
-  const flows: CashFlow[] = txs.map((t) => {
-    if (t.type === 'buy') return { date: t.date, amount: -(t.shares * t.price + t.fee) }
-    if (t.type === 'sell') return { date: t.date, amount: t.shares * t.price - t.fee - t.tax }
-    return { date: t.date, amount: t.shares * t.price - t.fee - t.tax }
-  })
+  const flows: CashFlow[] = txs
+    // 分割沒有現金進出。混進去的話,price 欄位存的是**倍率**,
+    // 會被當成一筆 4 元的現金流,把 XIRR 算歪。
+    .filter((t) => t.type !== 'split')
+    .map((t) => {
+      if (t.type === 'buy') return { date: t.date, amount: -(t.shares * t.price + t.fee) }
+      if (t.type === 'sell') return { date: t.date, amount: t.shares * t.price - t.fee - t.tax }
+      return { date: t.date, amount: t.shares * t.price - t.fee - t.tax }
+    })
   // 期末市值當成「今天全部賣掉會拿回多少」,讓未實現的部分也計入年化
   if (marketValue > 0) flows.push({ date: today, amount: marketValue })
   return flows
