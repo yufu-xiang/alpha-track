@@ -1,9 +1,11 @@
 /**
  * 報酬相關性矩陣。
  *
- * 這是規格 §7.2「ETF 成分股重疊度分析」的**替代**,不是等價實作 ——
- * 成分股明細沒有任何公開的統一來源(見 docs/data-sources.md 的勘查紀錄)。
- * 差別必須寫在畫面上,不能讓使用者以為看到的是持股重疊。
+ * 原本這是規格 §7.2「成分股重疊度」找不到資料來源時的替代品。
+ * 後來在投信投顧公會找到了成分股(見 tools/Overlap),兩者因此並存 ——
+ * 而它們的**差異本身就是資訊**:0050 與 0056 的前十大只重疊 1.2%,
+ * 報酬相關性卻有 0.82。持股幾乎不同卻一起漲跌,那是相關性抓得到、
+ * 成分股比對抓不到的事。畫面上互相指路,不要讓使用者以為兩者該一致。
  */
 import { useEffect, useMemo, useState } from 'react'
 import { loadData, loadDetail } from '../../data/loader'
@@ -83,12 +85,13 @@ export function Correlation() {
 
   return (
     <ToolPage title="ETF 報酬相關性">
-      <p role="alert" className="portfolio__remind">
-        <strong>這不是成分股重疊度。</strong>
-        ETF 的持股明細由各投信自行公告,沒有任何公開的統一來源,
-        指數編製公司的成分股則是付費商品 —— 因此本站無法比對持股。
+      <p className="tool-mode" role="note">
         這裡比的是<strong>報酬走勢</strong>:兩檔一起漲一起跌的程度。
-        它看不出「我是不是重複持有同一檔股票」,但看得出「一起買能不能分散風險」。
+        想看「是不是重複持有同一批股票」請用
+        <a href="#/tools/overlap">成分股重疊度</a> —— 兩者會給出不同的答案,
+        而那個差異本身就是資訊:0050 與 0056 的前十大只重疊 1.2%,
+        報酬相關性卻有 0.82。持股幾乎不同卻一起漲跌,
+        代表分散的效果比「持股不重複」看起來的少。
       </p>
 
       <div className="tool-form">

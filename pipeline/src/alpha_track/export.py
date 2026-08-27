@@ -123,6 +123,7 @@ def build_detail(
     prices: Sequence[PriceRecord],
     dividends: Sequence[DividendRecord],
     navs: Sequence[NavRecord] = (),
+    holdings: Sequence[dict] = (),
 ) -> dict:
     """組裝單一 ETF 的個股頁資料(規格 §5.2 ②)。
 
@@ -169,6 +170,17 @@ def build_detail(
         # 淨值只能自接上來源的那天開始逐日累積,價格則有多年歷史。
         # 硬塞進同一組 days 會讓折溢價前面補上一長串 null。
         "premium_series": _premium_series(navs),
+        # 成分股(公會月報,前十大)。weight 是小數。
+        # 這**不是完整持股** —— 權重加總遠小於 1,UI 必須說明,
+        # 否則使用者會把「前十大重疊 30%」讀成「整體重疊 30%」。
+        "holdings": {
+            "year_month": holdings[0]["year_month"] if holdings else None,
+            "items": [
+                {"code": h["security_code"], "name": h["security_name"],
+                 "weight": h["weight"]}
+                for h in holdings
+            ],
+        },
         "series": {
             "start": start,
             "days": days,

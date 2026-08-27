@@ -12,6 +12,7 @@ import { Fire } from './Fire'
 import { Lohas } from './Lohas'
 import { Margin } from './Margin'
 import { MonteCarlo } from './MonteCarlo'
+import { Overlap } from './Overlap'
 import { LiquidityRanking, YieldRanking } from './Ranking'
 import { Reinvest } from './Reinvest'
 import { Withdrawal } from './Withdrawal'
@@ -53,6 +54,12 @@ export const TOOLS: ToolEntry[] = [
     title: '融資維持率計算',
     blurb: '依持股市值與融資金額算維持率與追繳價位。',
     Component: Margin,
+  },
+  {
+    id: 'overlap',
+    title: 'ETF 成分股重疊度',
+    blurb: '前十大持股的共同質量。資料來自公會月報,不是完整持股。',
+    Component: Overlap,
   },
   {
     id: 'correlation',

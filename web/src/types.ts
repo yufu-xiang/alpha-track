@@ -189,6 +189,13 @@ export interface EtfDetail {
   premium_series: PremiumSeries
   /** 基金規模(新台幣元)= 已發行受益權單位數 × 每單位淨值。 */
   fund_size: number | null
+  /**
+   * 成分股。來源是投信投顧公會的**月報**,而且**只有前十大**——
+   * items 的權重加總遠小於 1(0050 實測 80.4%,高股息型更低)。
+   * 任何以此計算的重疊度都必須寫明這一點,否則「前十大重疊 30%」
+   * 會被讀成「整體重疊 30%」。
+   */
+  holdings: Holdings
   series: Series
   dividends: DividendRecord[]
 }
@@ -198,6 +205,12 @@ export interface PremiumSeries {
   start: string | null
   days: number[]
   premium: number[]
+}
+
+export interface Holdings {
+  /** 資料所屬月份 `YYYYMM`;沒有資料時為 null。 */
+  year_month: string | null
+  items: { code: string; name: string; weight: number | null }[]
 }
 
 /** 加權報酬指數序列,全站共用一份。 */

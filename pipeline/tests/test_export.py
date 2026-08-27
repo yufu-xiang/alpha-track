@@ -354,3 +354,33 @@ def test_reciprocal_tolerance_is_relative_not_scaled():
     assert _snap_split_factor(4.0) == pytest.approx(4.0)
     assert _snap_split_factor(1.0) == pytest.approx(1.0)
     assert _snap_split_factor(2.6) is None
+
+
+def test_detail_carries_holdings_with_the_month_they_came_from():
+    """成分股是**月報**,不是當日快照。沒有月份的話,使用者無從判斷新舊 ——
+
+    而季度換股之後,舊的成分股會與現況差很多。
+    """
+    from alpha_track.export import build_detail
+    rows = [
+        {"code": "0050", "year_month": "202607", "rank": 1,
+         "security_code": "2330", "security_name": "台積電",
+         "security_type": "國內上市", "amount": 1e12, "weight": 0.6059},
+        {"code": "0050", "year_month": "202607", "rank": 2,
+         "security_code": "2454", "security_name": "聯發科",
+         "security_type": "國內上市", "amount": 1e11, "weight": 0.0535},
+    ]
+    out = build_detail(profile(), metrics(),
+                       price_series("0050", date(2026, 8, 1), [1.0]),
+                       dividends=[], holdings=rows)
+    assert out["holdings"]["year_month"] == "202607"
+    assert [i["code"] for i in out["holdings"]["items"]] == ["2330", "2454"]
+    assert out["holdings"]["items"][0]["weight"] == pytest.approx(0.6059)
+
+
+def test_no_holdings_gives_an_empty_list_and_null_month():
+    """空清單與 null 月份要分得出「沒有資料」與「有資料但沒持股」。"""
+    from alpha_track.export import build_detail
+    out = build_detail(profile(), metrics(),
+                       price_series("0050", date(2026, 8, 1), [1.0]), dividends=[])
+    assert out["holdings"] == {"year_month": None, "items": []}

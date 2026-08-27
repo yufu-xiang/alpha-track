@@ -433,11 +433,15 @@ describe('報酬相關性', () => {
     await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument())
   }
 
-  it('顯著說明這不是成分股重疊度 —— 不能讓人以為看到的是持股比對', async () => {
+  it('指路到成分股重疊度,並說明兩者為何會給出不同答案', async () => {
+    // 這兩個工具並存,而差異本身就是資訊。讓使用者以為它們該一致
+    // 才是誤導 —— 0050 與 0056 前十大只重疊 1.2%,相關性卻有 0.82。
     await renderCorr()
-    const alert = screen.getByRole('alert')
-    expect(alert).toHaveTextContent(/這不是成分股重疊度/)
-    expect(alert).toHaveTextContent(/沒有任何公開的統一來源/)
+    const note = screen.getByRole('note')
+    expect(note).toHaveTextContent(/成分股重疊度/)
+    expect(note).toHaveTextContent(/不同的答案/)
+    expect(within(note).getByRole('link', { name: '成分股重疊度' }))
+      .toHaveAttribute('href', '#/tools/overlap')
   })
 
   it('對角線為 1,矩陣對稱', async () => {
@@ -475,5 +479,95 @@ describe('報酬相關性', () => {
   it('說明相關性會隨市況改變 —— 崩盤時往往一起跌', async () => {
     await renderCorr()
     expect(screen.getByText(/崩盤時往往一起跌/)).toBeInTheDocument()
+  })
+})
+
+describe('成分股重疊度', () => {
+  function mockHoldings(map: Record<string, [string, number][]>) {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const m = /etf\/([A-Z0-9]+)\.json/.exec(url)
+      if (!m) {
+        return { ok: true, json: async () =>
+          (url.includes('meta') ? fixtureMeta : fixtureRankings) }
+      }
+      const code = m[1]!
+      return {
+        ok: true,
+        json: async () => ({
+          ...fixtureRankings.etfs[0], code, name: `測試${code}`,
+          exchange: 'TWSE', issuer: null, tracking_index: null, listing_date: null,
+          annualized: {}, excess: {}, dividends: [],
+          premium_series: { start: null, days: [], premium: [] },
+          series: { start: null, days: [], adj: [], close: [] },
+          holdings: {
+            year_month: '202607',
+            items: (map[code] ?? []).map(([c, w]) =>
+              ({ code: c, name: `名稱${c}`, weight: w })),
+          },
+        }),
+      }
+    }))
+  }
+
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
+
+  it('顯著說明這是前十大之間的重疊,不是整體重疊', async () => {
+    mockHoldings({ '0050': [['2330', 0.6]], '006208': [['2330', 0.6]], '0056': [] })
+    render(<Tools tool="overlap" />)
+    await waitFor(() => {
+      const alert = screen.getByRole('alert')
+      expect(alert).toHaveTextContent(/不是整體重疊/)
+      expect(alert).toHaveTextContent(/前十大以外的部分/)
+    })
+  })
+
+  it('用真實比例算共同質量:同追蹤指數的兩檔應該極高', async () => {
+    mockHoldings({
+      '0050': [['2330', 0.606], ['2454', 0.053]],
+      '006208': [['2330', 0.606], ['2454', 0.053]],
+      '0056': [['2891', 0.05]],
+    })
+    render(<Tools tool="overlap" />)
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/最高的一組/))
+    expect(screen.getByRole('status')).toHaveTextContent(/幾乎是同一批股票/)
+  })
+
+  it('把涵蓋率與重疊度放在同一列 —— 沒有分母的數字會被誤讀', async () => {
+    mockHoldings({ '0050': [['2330', 0.6]], '006208': [['2330', 0.6]], '0056': [] })
+    render(<Tools tool="overlap" />)
+    await waitFor(() =>
+      expect(screen.getByRole('columnheader', { name: '前十大合計' }))
+        .toBeInTheDocument())
+  })
+
+  it('沒有成分股的標的明說查不到,並解釋原因', async () => {
+    mockHoldings({ '0050': [['2330', 0.6]], '006208': [['2330', 0.6]], '0056': [] })
+    render(<Tools tool="overlap" />)
+    await waitFor(() =>
+      expect(screen.getByRole('note')).toHaveTextContent(/查不到 0056 的成分股/))
+  })
+
+  it('列出共同持股,依重疊貢獻排序', async () => {
+    mockHoldings({
+      '0050': [['A', 0.1], ['B', 0.5]],
+      '006208': [['A', 0.4], ['B', 0.2]],
+      '0056': [],
+    })
+    render(<Tools tool="overlap" />)
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: /共同持股/ })).toBeInTheDocument())
+    const tables = screen.getAllByRole('table')
+    const rows = within(tables[tables.length - 1]!).getAllByRole('row').slice(1)
+    // min(0.1,0.4)=0.1 對 min(0.5,0.2)=0.2 → B 在前
+    expect(within(rows[0]!).getAllByRole('cell')[0]!.textContent).toBe('B')
+  })
+
+  it('說明這是月報而非當日持股', async () => {
+    mockHoldings({ '0050': [['2330', 0.6]], '006208': [['2330', 0.6]], '0056': [] })
+    render(<Tools tool="overlap" />)
+    await waitFor(() =>
+      expect(screen.getByText(/資料月份:202607/)).toBeInTheDocument())
+    // 「月報」被 <strong> 包起來,所以比對不含它的那一段
+    expect(screen.getByText(/不是當日持股/)).toBeInTheDocument()
   })
 })

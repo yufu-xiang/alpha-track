@@ -251,7 +251,8 @@ def run_export(
             # 個股頁的資料(規格 §5.2 ②、§5.3 的 lazy load 分層)。
             # 一檔一個檔案:全部價格序列合計約 12 MB,不能塞進 rankings.json。
             write_json(out_dir / "etf" / f"{code}.json",
-                       build_detail(profile, metrics, prices, dividends, navs))
+                       build_detail(profile, metrics, prices, dividends, navs,
+                                    db.get_holdings(code)))
 
         # 基準線 351 檔共用,單獨匯出一次
         write_json(out_dir / "benchmark.json", build_benchmark_series(bench_closes))
