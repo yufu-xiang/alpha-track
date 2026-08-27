@@ -5,6 +5,7 @@
  * 空表格會被誤讀為「今天沒有任何 ETF」。
  */
 import type { BenchmarkSeries, EtfDetail, MetaData, RankingsData } from '../types'
+import { validateBenchmark, validateDetail, validateMeta, validateRankings } from './contract'
 
 const BASE = import.meta.env.BASE_URL ?? '/'
 
@@ -23,10 +24,22 @@ export async function loadData(): Promise<LoadResult> {
     // 兩份都要成功才算成功:只有 meta 而沒有 rankings 會渲染成一張空表,
     // 而空表會被讀成「今天沒有任何 ETF」。
     const [rankings, meta] = await Promise.all([
-      fetchJson<RankingsData>('rankings.json'),
-      fetchJson<MetaData>('meta.json'),
+      fetchJson<unknown>('rankings.json'),
+      fetchJson<unknown>('meta.json'),
     ])
-    return { ok: true, rankings, meta }
+    const checkedRankings = validateRankings(rankings)
+    const checkedMeta = validateMeta(meta)
+    if (checkedRankings.data_date !== checkedMeta.data_date) {
+      throw new Error(
+        `資料版本不一致:rankings=${checkedRankings.data_date},meta=${checkedMeta.data_date}`,
+      )
+    }
+    if (checkedRankings.etfs.length !== checkedMeta.etf_count) {
+      throw new Error(
+        `ETF 數量不一致:rankings=${checkedRankings.etfs.length},meta=${checkedMeta.etf_count}`,
+      )
+    }
+    return { ok: true, rankings: checkedRankings, meta: checkedMeta }
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err)
     return { ok: false, error: `資料載入失敗:${detail}` }
@@ -43,14 +56,16 @@ export type DetailResult =
 export async function loadDetail(code: string): Promise<DetailResult> {
   let detail: EtfDetail
   try {
-    detail = await fetchJson<EtfDetail>(`etf/${encodeURIComponent(code)}.json`)
+    detail = validateDetail(
+      await fetchJson<unknown>(`etf/${encodeURIComponent(code)}.json`),
+    )
   } catch (err) {
     const detailMsg = err instanceof Error ? err.message : String(err)
     return { ok: false, error: `找不到 ${code} 的資料:${detailMsg}` }
   }
   let benchmark: BenchmarkSeries | null = null
   try {
-    benchmark = await fetchJson<BenchmarkSeries>('benchmark.json')
+    benchmark = validateBenchmark(await fetchJson<unknown>('benchmark.json'))
   } catch {
     // 基準線是加分項,拿不到就不疊加,不要因此讓整頁失敗。
   }

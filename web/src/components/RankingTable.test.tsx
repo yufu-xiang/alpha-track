@@ -132,8 +132,11 @@ describe('RankingTable', () => {
     // TanStack 會把「對應欄位不存在」的排序狀態濾掉,結果是回到原始順序。
     // 這裡把行為記錄下來:避免的責任在 App —— 選了某期間就該讓該欄可見
     // (見 App 的 ensureSortedColumnVisible)。
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
     renderTable({ sortBy: 'M6', visibleColumns: ['D1', 'Y1'] })
     expect(bodyRowCodes()).toEqual(ROWS.map((r) => r.code))
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("Column with id 'M6'"))
+    error.mockRestore()
   })
 
   it('空資料時顯示提示而非空白表格', () => {

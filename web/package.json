@@ -2,12 +2,18 @@
   "name": "alpha-track-web",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20 <21"
+  },
+  "packageManager": "npm@10.8.2",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "typecheck": "tsc -b",
+    "validate:data": "vite-node scripts/validate-data.ts",
     "fixture": "vite-node scripts/write-fixture.ts"
   },
   "dependencies": {

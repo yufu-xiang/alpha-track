@@ -18,6 +18,7 @@
 | `web/public/data/meta.json` | 資料健康狀態,驅動前端的警告列 | `build_meta` |
 | `web/public/data/etf/{代號}.json` | 個股頁:完整價格序列、配息紀錄、基本資料(每檔 4–60 KB,**lazy load**) | `build_detail` |
 | `web/public/data/benchmark.json` | 加權報酬指數序列,供個股頁疊加基準線(約 36 KB,全站共用) | `build_benchmark_series` |
+| `web/public/data/recovery.json` | 不可向上游回補的歷史淨值,供 Actions cache 遺失時復原 | `build_recovery` |
 
 ### 為什麼價格序列用「起點 + 天數位移」
 
@@ -39,7 +40,7 @@
 不再投入」的比較非它不可:還原價本身就已假設配息再投入,拿它去算再投入
 等於把配息算兩次,而且兩條線會完全重疊,看起來像程式壞了。
 
-實測全站 351 檔合計 6.3 MB(加上 `close` 後約 9 MB)。每日更新只在陣列
+實測全站 354 檔匯出約 9.8 MB，其中 ETF 明細約 9.3 MB。每日更新只在陣列
 尾端追加一筆,git 的 delta 壓縮下**單日只增加 40 KB**(實測),
 一年約 9 MB —— 因此保留完整每日精度,不做降取樣。
 
@@ -168,7 +169,7 @@
 | `risk.mdd` | `number \| null` | 最大回撤,**負數**。最低樣本 60 個交易日。 |
 | `risk.sharpe` | `number \| null` | (一年報酬 − 無風險利率) ÷ 年化波動度。波動為零時 `null`。 |
 | `risk.beta` | `number \| null` | 對加權報酬指數迴歸。與基準的日期交集不足一年時 `null`。 |
-| `premium_discount` | `number \| null` | 折溢價率。**階段 1 一律為 `null`** —— 見下節。 |
+| `premium_discount` | `number \| null` | 基準日預估淨值的折溢價率。當日無淨值、無成交或驗證失敗時為 `null`。 |
 | `avg_volume` | `number \| null` | 近 20 個交易日的平均成交**股數**。 |
 | `avg_turnover` | `number \| null` | 近 20 個交易日的平均成交**金額**(股數 × 收盤價)。比較流動性要看金額:10 元與 100 元的 ETF 成交同樣股數,換手資金差十倍,只排成交量會讓低價 ETF 系統性看起來比較熱門。 |
 | `premium_low` / `premium_high` | `number \| null` | 近 60 日折溢價的最低 / 最高值。樣本不足 20 個交易日時為 `null`。 |
@@ -199,12 +200,28 @@ D1  W1  M1  M3  M6  YTD  Y1  Y3  Y5  Y10  INCEPTION
 (見 `docs/data-sources.md` 的 Yahoo 段落與 1a ledger 的 R14 / R24)。
 `Y5`、`Y10` 完全落在分割之後,不受影響。
 
-### `premium_discount` 在階段 1 一律是 `null`
+### 折溢價是逐日累積的預估淨值
 
-資料源勘查逐條檢查了 TWSE 與 TPEx 的兩份 swagger 索引(143 + 225 條路徑),
-**沒有任何免費的官方端點提供集中式的 ETF 淨值**。折溢價算不出來就是 `null`,
-不填替代值。整條管線(`NavRecord`、`navs` 資料表、`parse_twse_nav`、
-本欄位、UI 欄位)都保留著,找到來源後只需改一個 adapter。
+來源為 TWSE MIS 的收盤後 ETF 淨值揭露快照。它是當日最終的
+**預估淨值**，不是各投信的盤後正式結算淨值；端點也沒有歷史查詢參數。
+pipeline 因此每日寫入 SQLite 並在 `recovery.json` 保留可攜快照。
+近 60 日統計需要至少 20 個樣本，未累積足夠時回傳 `null`，並用
+`premium_sample` 告訴 UI 目前的實際涵蓋日數。
+
+## `recovery.json`
+
+```json
+{
+  "version": 1,
+  "navs": [
+    {"code":"0050","date":"2026-08-26","nav":104.2,
+     "market_price":104.35,"fund_size":2369400000000.0}
+  ]
+}
+```
+
+快照只收錄無法重抓的 `navs`，價格、配息與大盤基準仍以上游回補。
+`version` 不相符或任一列格式錯誤時，復原指令會直接失敗，不會猜測或部分匯入。
 
 ## `meta.json`
 

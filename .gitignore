@@ -5,12 +5,15 @@ __pycache__/
 venv/
 .pytest_cache/
 .ruff_cache/
+.coverage
+coverage.xml
 
 # Node
 node_modules/
 dist/
 .vite/
 *.tsbuildinfo
+coverage/
 
 # 資料(由 pipeline 產生,不進版控)
 data/raw/

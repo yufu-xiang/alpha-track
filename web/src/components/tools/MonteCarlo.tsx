@@ -11,7 +11,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { loadData, loadDetail } from '../../data/loader'
 import { formatMoney, formatNumber, formatPercent } from '../../lib/format'
 import {
-  annualReturnsFrom, bootstrapSampler, monteCarlo, normalSampler,
+  annualizedExcess, annualReturnsFrom, bootstrapSampler, monteCarlo, normalSampler,
 } from '../../lib/retirement'
 import type { BenchmarkSeries, EtfRow } from '../../types'
 import { ModeSwitch, Num, Pct, Stat, ToolPage } from './shared'
@@ -56,7 +56,9 @@ export function MonteCarlo() {
   const etf = rows.find((r) => r.code === code) ?? null
   const beta = etf?.risk.beta ?? null
   // 超額報酬取三年期:一年期會被單一年份的市況主導,而十年期多數 ETF 沒有。
-  const alpha = etf?.excess.Y3 ?? null
+  const alpha = annualizedExcess(
+    etf?.returns.Y3 ?? null, etf?.excess.Y3 ?? null, 3,
+  )
   const canAdjust = beta !== null
 
   const result = useMemo(() => {
@@ -70,7 +72,7 @@ export function MonteCarlo() {
       // 相對特性(Beta、超額報酬)。直接拿某檔 ETF 的五年歷史抽三十年,
       // 正是這一節要避免的錯誤。
       draw = canAdjust
-        ? () => beta! * market() + (alpha ?? 0) / 3
+        ? () => beta! * market() + (alpha ?? 0)
         : market
     }
     return monteCarlo({

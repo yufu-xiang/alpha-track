@@ -4,6 +4,7 @@
   python -m alpha_track.cli update    # 抓取 → 驗證 → 儲存 → 回補 → 計算 → 匯出
   python -m alpha_track.cli export    # 只重新計算並匯出(不連網)
   python -m alpha_track.cli backfill  # 只補歷史與大盤基準
+  python -m alpha_track.cli restore   # 從版控快照復原不可回補的淨值
 
 抓取一律以參數注入(fetch_all / fetch_history / fetch_benchmark),
 流程才能在不連網的情況下測試。預設值是真的會連網的那些函式。
@@ -28,6 +29,7 @@ from .compute import compute_etf_metrics
 from .export import (build_benchmark_series, build_detail, build_meta,
                      build_rankings, write_json)
 from .models import DividendRecord, EtfProfile, NavRecord, PriceRecord
+from .recovery import build_recovery, restore_recovery
 from .storage import Database
 from .validation import validate_navs, validate_price_batch
 
@@ -197,7 +199,7 @@ def run_export(
 
     with Database(Path(settings.db_path)) as db:
         db.init_schema()
-        base_date = db.latest_price_date()
+        base_date = db.latest_complete_price_date()
         if base_date is None:
             write_json(out_dir / "meta.json", build_meta(
                 data_date=date.today(), etf_count=0, unclassified=[],
@@ -208,15 +210,22 @@ def run_export(
 
         stored = db.get_profiles()
         bench_closes = db.get_benchmark(BENCHMARK_NAME)
+        published_bench_closes = {
+            day: close for day, close in bench_closes.items() if day <= base_date
+        }
         # 來源健康檢查。走 anomalies 管道,因此會出現在前端的健康狀態列 ——
         # 而不是只留在沒人看的 CI 日誌裡。
         anomalies = list(anomalies) + check_sources(db, base_date)
         rows = []
+        published_codes: set[str] = set()
         unclassified: list[str] = []
         for code in db.all_codes():
-            prices = db.get_prices(code)
+            # 完整市場基準日之後的少數價格是部分批次，不得混入
+            # 收盤價或走勢圖，否則同一份 JSON 會有兩個不同基準日。
+            prices = [p for p in db.get_prices(code) if p.date <= base_date]
             if not prices:
                 continue
+            published_codes.add(code)
             cls = classify(code, category_map)
             if cls.category == UNCLASSIFIED:
                 unclassified.append(code)
@@ -242,11 +251,11 @@ def run_export(
                 is_leveraged=cls.is_leveraged, is_inverse=cls.is_inverse,
             )
             dividends = db.get_dividends(code)
-            navs = db.get_navs(code)
+            navs = [n for n in db.get_navs(code) if n.date <= base_date]
             metrics = compute_etf_metrics(
                 prices, base_date,
                 risk_free=settings.risk_free_rate,
-                bench_closes=bench_closes, navs=navs,
+                bench_closes=published_bench_closes, navs=navs,
                 listing_date=profile.listing_date,
                 dividends=dividends,
             )
@@ -259,14 +268,39 @@ def run_export(
                                     db.get_holdings(code)))
 
         # 基準線 351 檔共用,單獨匯出一次
-        write_json(out_dir / "benchmark.json", build_benchmark_series(bench_closes))
+        # 移除已不在資料庫的舊明細，避免直接 URL 仍讀到幽靈檔案。
+        detail_dir = out_dir / "etf"
+        if detail_dir.exists():
+            for path in detail_dir.glob("*.json"):
+                if path.stem not in published_codes:
+                    path.unlink()
+
+        write_json(out_dir / "benchmark.json",
+                   build_benchmark_series(published_bench_closes))
         write_json(out_dir / "rankings.json", build_rankings(base_date, rows))
         write_json(out_dir / "meta.json", build_meta(
             data_date=base_date, etf_count=len(rows),
             unclassified=sorted(unclassified), anomalies=anomalies,
             is_stale=is_stale, risk_free_rate=settings.risk_free_rate,
-            benchmark_return_1y=_benchmark_year_return(bench_closes, base_date),
+            benchmark_return_1y=_benchmark_year_return(
+                published_bench_closes, base_date),
         ))
+        # Actions cache 遺失時，只有 navs 無法向來源回補。快照跟其他 JSON 一起
+        # 進版控，cache 因此只是加速層，不再是唯一真相來源。
+        write_json(out_dir / "recovery.json", build_recovery(db))
+
+
+def run_restore(settings: Settings) -> int:
+    """從已提交的 recovery.json 還原不可回補的淨值歷史。"""
+    path = Path(settings.output_dir) / "recovery.json"
+    if not path.exists():
+        logger.info("%s 不存在，略過復原", path)
+        return 0
+    with Database(Path(settings.db_path)) as db:
+        db.init_schema()
+        count = restore_recovery(path, db)
+    logger.info("自 %s 復原 %d 筆淨值", path, count)
+    return count
 
 
 def _benchmark_year_return(
@@ -604,13 +638,12 @@ def run_update(
     db_path = Path(settings.db_path)
     with Database(db_path) as db:
         db.init_schema()
-        prev_date = db.latest_price_date()
-        prev_closes: dict[str, float] = {}
-        if prev_date is not None:
-            for code in db.all_codes():
-                rows = [p for p in db.get_prices(code) if p.date == prev_date]
-                if rows:
-                    prev_closes[code] = rows[-1].close
+        # 用最近一個「完整市場日」，不可用資料庫的 MAX(date)。來源更新途中
+        # 常只有十幾檔先出現新日期；拿那天當基準會讓筆數閘門形同失效。
+        prev_date = db.latest_complete_price_date()
+        prev_closes = (
+            db.latest_closes_on_or_before(prev_date) if prev_date is not None else {}
+        )
         prev_count = len(prev_closes)
 
         ex_dates = {(d.code, d.ex_date) for d in dividends}
@@ -643,7 +676,7 @@ def run_update(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="alpha-track")
-    parser.add_argument("command", choices=["update", "export", "backfill"])
+    parser.add_argument("command", choices=["update", "export", "backfill", "restore"])
     parser.add_argument("--config", default=str(ROOT / "config" / "settings.yaml"))
     args = parser.parse_args(argv)
 
@@ -653,7 +686,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     settings = load_settings(Path(args.config))
 
-    if args.command == "export":
+    if args.command == "restore":
+        run_restore(settings)
+    elif args.command == "export":
         run_export(settings, is_stale=False, anomalies=[])
     elif args.command == "backfill":
         run_backfill(settings)
@@ -661,10 +696,6 @@ def main(argv: list[str] | None = None) -> int:
     else:
         run_update(settings)
     return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
 
 
 def _holdings_target_month(today: date) -> str:
@@ -698,3 +729,10 @@ def _twse_fund_full_names() -> dict[str, str]:
         if code and name:
             out[code] = name
     return out
+
+
+# 入口必須放在所有 helper 之後。`python -m alpha_track.cli update`
+# 會在模組尚未繼續走到下方定義時立刻執行 main；放在中間會讓
+# run_backfill 取用未定義的 helper。
+if __name__ == "__main__":
+    sys.exit(main())

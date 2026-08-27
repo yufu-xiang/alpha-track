@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import atexit
 import re
 import ssl
 import time
@@ -17,6 +18,18 @@ import certifi
 import httpx
 
 USER_AGENT = "alpha-track/0.1 (personal ETF tracker)"
+
+_CLIENTS: dict[str, httpx.Client] = {}
+
+
+def close_http_clients() -> None:
+    """關閉共用連線池；公開函式也方便測試隔離。"""
+    for client in _CLIENTS.values():
+        client.close()
+    _CLIENTS.clear()
+
+
+atexit.register(close_http_clients)
 
 RFC5280_NONCONFORMING_HOSTS = frozenset({"www.tpex.org.tw", "www.sitca.org.tw"})
 """憑證鏈不符 RFC 5280 格式要求、需要放寬 VERIFY_X509_STRICT 的網域。
@@ -42,6 +55,21 @@ def ssl_context_for(url: str) -> ssl.SSLContext:
     return context
 
 
+def _client_for(url: str) -> httpx.Client:
+    """每個 host 共用一個連線池，避免數百次回補反覆做 DNS/TLS 握手。"""
+    host = urlsplit(url).hostname
+    if not host:
+        raise ValueError(f"URL 缺少 host:{url}")
+    client = _CLIENTS.get(host)
+    if client is None:
+        client = httpx.Client(
+            headers={"User-Agent": USER_AGENT}, follow_redirects=True,
+            verify=ssl_context_for(url),
+        )
+        _CLIENTS[host] = client
+    return client
+
+
 def fetch_json(url: str, *, retries: int = 3, timeout: float = 30.0) -> object:
     """取得 JSON,失敗時指數退避重試。
 
@@ -52,12 +80,14 @@ def fetch_json(url: str, *, retries: int = 3, timeout: float = 30.0) -> object:
     last_exc: Exception | None = None
     for attempt in range(retries):
         try:
-            resp = httpx.get(url, timeout=timeout,
-                             headers={"User-Agent": USER_AGENT},
-                             follow_redirects=True,
-                             verify=ssl_context_for(url))
+            resp = _client_for(url).get(url, timeout=timeout)
             if resp.status_code == 429:
-                time.sleep(delay * 4)
+                # 來源明確給 Retry-After 時尊重它；格式不合法才退回指數退避。
+                try:
+                    retry_after = float(resp.headers.get("Retry-After", "0"))
+                except ValueError:
+                    retry_after = 0
+                time.sleep(max(delay * 4, retry_after))
                 delay *= 2
                 continue
             resp.raise_for_status()

@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import math
 import sqlite3
 from collections.abc import Iterable
 from datetime import date, timedelta
@@ -234,6 +235,16 @@ class Database:
             for r in cur.fetchall()
         ]
 
+    def get_all_navs(self) -> list[NavRecord]:
+        """依日期、代號排序的全部淨值，供可重現的 recovery.json 使用。"""
+        cur = self.conn.execute("SELECT * FROM navs ORDER BY date, code")
+        return [
+            NavRecord(code=r["code"], date=date.fromisoformat(r["date"]),
+                      nav=r["nav"], market_price=r["market_price"],
+                      fund_size=r["fund_size"])
+            for r in cur.fetchall()
+        ]
+
     def get_dividends(self, code: str) -> list[DividendRecord]:
         cur = self.conn.execute(
             "SELECT * FROM dividends WHERE code = ? ORDER BY ex_date", (code,)
@@ -339,6 +350,42 @@ class Database:
         cur = self.conn.execute("SELECT MAX(date) AS d FROM prices")
         row = cur.fetchone()
         return date.fromisoformat(row["d"]) if row and row["d"] else None
+
+    def latest_complete_price_date(self, min_coverage: float = 0.90) -> date | None:
+        """最近一個具代表性的全市場日期。
+
+        不能直接取 ``MAX(date)``：行情端點可能在更新途中只先出現少數標的，
+        新掛牌 ETF 的歷史回補也可能比官方全市場批次多一天。若讓那幾筆推進
+        全站基準日，絕大多數 ETF 的 D1 會變成空值，驗證閘門也只剩幾筆基準。
+
+        完整度以資料庫曾出現過的最高單日檔數為母體。這比 etfs 表總數穩健：
+        etfs 可能含已下市或尚未拿到價格的標的，而最高單日檔數會隨市場成長。
+        """
+        if not 0 < min_coverage <= 1:
+            raise ValueError("min_coverage 必須介於 0 與 1 之間")
+        rows = self.conn.execute(
+            """SELECT date, COUNT(DISTINCT code) AS n
+               FROM prices GROUP BY date ORDER BY date DESC"""
+        ).fetchall()
+        if not rows:
+            return None
+        high_water = max(r["n"] for r in rows)
+        required = max(1, math.ceil(high_water * min_coverage))
+        chosen = next((r["date"] for r in rows if r["n"] >= required), None)
+        return date.fromisoformat(chosen) if chosen else None
+
+    def latest_closes_on_or_before(self, day: date) -> dict[str, float]:
+        """每檔在指定日期以前的最近收盤價，一次查完避免逐檔 N+1 查詢。"""
+        cur = self.conn.execute(
+            """SELECT p.code, p.close
+               FROM prices p
+               JOIN (
+                 SELECT code, MAX(date) AS date
+                 FROM prices WHERE date <= ? GROUP BY code
+               ) latest ON latest.code = p.code AND latest.date = p.date""",
+            (day.isoformat(),),
+        )
+        return {r["code"]: r["close"] for r in cur.fetchall()}
 
     def get_profiles(self) -> dict[str, EtfProfile]:
         cur = self.conn.execute("SELECT * FROM etfs")

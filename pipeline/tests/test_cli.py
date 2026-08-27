@@ -1,4 +1,7 @@
 import json
+import os
+import subprocess
+import sys
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -6,7 +9,9 @@ import pytest
 import yaml
 
 from alpha_track import cli
-from alpha_track.cli import Settings, load_settings, run_backfill, run_export, run_update
+from alpha_track.cli import (
+    Settings, load_settings, run_backfill, run_export, run_restore, run_update,
+)
 from alpha_track.models import EtfProfile, PriceRecord
 from alpha_track.storage import Database
 
@@ -76,6 +81,72 @@ def test_run_export_writes_both_json_files(tmp_path: Path):
     row = json.loads((out / "rankings.json").read_text("utf-8"))["etfs"][0]
     assert row["name"] == "元大台灣50", "名稱須來自資料庫,不得退化成代號"
     assert row["category"] == "市值型", "分類須由 classify 判定"
+    assert (out / "recovery.json").exists()
+
+
+def test_run_restore_is_a_noop_before_the_first_snapshot(tmp_path: Path):
+    db_path = tmp_path / "t.db"
+    assert run_restore(settings_for(tmp_path, db_path)) == 0
+
+
+def test_module_entrypoint_can_run_export_as_a_real_process(tmp_path: Path):
+    """測試不只 import main：helper 若被寫在 __main__ 入口之後，
+    import 測試會全綠，實際 `python -m` 卻可能在模組定義完前就執行。
+    """
+    config = tmp_path / "settings.yaml"
+    config.write_text(
+        f"db_path: {tmp_path / 'empty.db'}\noutput_dir: {tmp_path / 'out'}\n",
+        encoding="utf-8",
+    )
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(Path(__file__).parents[1] / "src")
+    result = subprocess.run(
+        [sys.executable, "-m", "alpha_track.cli", "export", "--config", str(config)],
+        check=False, capture_output=True, text=True, env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "out" / "meta.json").exists()
+
+
+def test_export_does_not_let_a_partial_new_day_advance_the_market_date(tmp_path: Path):
+    """少數先更新的標的不可讓整張排行榜提前，否則多數 D1 都會消失。"""
+    db_path = tmp_path / "t.db"
+    older, complete, partial = (date(2026, 8, 19), date(2026, 8, 20),
+                                date(2026, 8, 21))
+    with Database(db_path) as db:
+        db.init_schema()
+        for i in range(20):
+            code = f"00{i:02d}"
+            db.upsert_prices([price_at(code, older, 100),
+                              price_at(code, complete, 101)])
+        db.upsert_prices([price_at("0000", partial, 102)])
+
+    run_export(settings_for(tmp_path, db_path), is_stale=False, anomalies=[])
+    rankings = json.loads((tmp_path / "out" / "rankings.json").read_text("utf-8"))
+    assert rankings["data_date"] == complete.isoformat()
+    assert sum(e["returns"]["D1"] is not None for e in rankings["etfs"]) == 20
+    first = next(e for e in rankings["etfs"] if e["code"] == "0000")
+    assert first["close"] == 101
+    detail = json.loads(
+        (tmp_path / "out" / "etf" / "0000.json").read_text("utf-8")
+    )
+    assert detail["series"]["close"][-1] == 101
+
+
+def test_export_removes_stale_detail_files(tmp_path: Path):
+    db_path = tmp_path / "t.db"
+    out = tmp_path / "out"
+    stale = out / "etf" / "DELISTED.json"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("{}", encoding="utf-8")
+    with Database(db_path) as db:
+        db.init_schema()
+        db.upsert_prices([price_at("0050", date(2026, 8, 20), 100)])
+
+    run_export(settings_for(tmp_path, db_path), is_stale=False, anomalies=[])
+
+    assert not stale.exists()
+    assert (out / "etf" / "0050.json").exists()
 
 
 def test_run_export_uses_the_real_listing_date_not_a_proxy(tmp_path: Path):

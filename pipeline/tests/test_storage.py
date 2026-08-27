@@ -71,6 +71,34 @@ def test_latest_price_date_returns_max(db):
     assert db.latest_price_date() == date(2026, 8, 21)
 
 
+def test_latest_complete_price_date_ignores_a_partial_newer_day(db):
+    complete = date(2026, 8, 20)
+    partial = date(2026, 8, 21)
+    db.upsert_prices([price(code=f"00{i:02d}", d=complete) for i in range(20)])
+    db.upsert_prices([price(code="0050", d=partial)])
+    assert db.latest_price_date() == partial
+    assert db.latest_complete_price_date() == complete
+
+
+def test_latest_complete_price_date_accepts_a_small_normal_coverage_gap(db):
+    older = date(2026, 8, 20)
+    newer = date(2026, 8, 21)
+    db.upsert_prices([price(code=f"00{i:02d}", d=older) for i in range(20)])
+    db.upsert_prices([price(code=f"00{i:02d}", d=newer) for i in range(18)])
+    assert db.latest_complete_price_date() == newer
+
+
+def test_latest_closes_on_or_before_uses_each_codes_own_latest_day(db):
+    db.upsert_prices([
+        price(code="0050", d=date(2026, 8, 20), close=100),
+        price(code="0050", d=date(2026, 8, 21), close=101),
+        price(code="0056", d=date(2026, 8, 20), close=40),
+    ])
+    assert db.latest_closes_on_or_before(date(2026, 8, 21)) == {
+        "0050": 101, "0056": 40,
+    }
+
+
 def test_nav_roundtrip_preserves_premium_discount(db):
     db.upsert_navs([NavRecord(code="0056", date=date(2026, 8, 21), nav=40.0,
                               market_price=40.4, fund_size=1e9)])

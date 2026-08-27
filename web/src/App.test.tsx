@@ -31,6 +31,7 @@ function tabs() {
 
 describe('App', () => {
   it('載入中顯示提示', () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
     render(<App />)
     expect(screen.getByText(/載入中/)).toBeInTheDocument()
   })

@@ -2,7 +2,7 @@
 
 - 日期:2026-08-21
 - 專案代號:alpha-track
-- 狀態:設計已確認,待撰寫實作計畫
+- 狀態:已實作；本文保留設計脈絡，實際契約以 `docs/json-contract.md` 為準
 
 ## 1. 目標與範圍
 
@@ -17,7 +17,7 @@
 | 資料即時性 | 每日收盤後更新,不做盤中即時報價 |
 | 技術棧 | Python 抓資料與計算 + TypeScript 前端 |
 | 架構 | 靜態預算:Python pipeline → SQLite → 匯出 JSON → 純靜態前端 |
-| 部署 | GitHub Actions 每日排程 + Cloudflare Pages,零伺服器成本 |
+| 部署 | GitHub Actions 每日排程 + GitHub Pages,零伺服器成本 |
 
 ### MVP 範圍
 
@@ -50,7 +50,8 @@
 
 ```
 Python pipeline (GitHub Actions 每日排程)
-  ├─ TWSE OpenAPI    → 上市 ETF 收盤、淨值、折溢價、規模
+  ├─ TWSE OpenAPI    → 上市 ETF 收盤與基本資料
+  ├─ TWSE MIS        → 當日預估淨值、折溢價與規模
   ├─ TPEx OpenAPI    → 上櫃 ETF
   ├─ Yahoo Finance   → 還原權值歷史股價(歷史回補)
   └─ FinMind         → 配息紀錄、價格備援
@@ -88,7 +89,8 @@ SQLite 會保留,日後若需要動態查詢可再往上疊 API 層,資料模型
 
 | 來源 | 負責資料 | 選用理由 |
 |---|---|---|
-| TWSE OpenAPI | 上市 ETF 每日收盤、淨值、折溢價、基金規模 | 官方、免金鑰、權威;折溢價僅官方提供 |
+| TWSE OpenAPI | 上市 ETF 每日收盤與基本資料 | 官方、免金鑰、權威 |
+| TWSE MIS | 收盤後預估淨值、折溢價、基金規模 | 當日快照，無歷史查詢，由 SQLite 逐日累積 |
 | TPEx OpenAPI | 上櫃 ETF(部分債券型) | 上櫃標的 TWSE 查不到 |
 | Yahoo Finance | 還原權值歷史股價 | 唯一能低成本取得長期含息報酬的來源 |
 | FinMind | 配息紀錄、價格備援 | 用於交叉驗證還原股價正確性 |
@@ -251,7 +253,7 @@ UI 於 Sharpe 欄位旁標示「無風險利率 1.5%」使數字可被檢驗。
 
 ### 5.1 技術
 
-Vite + React + TypeScript,表格用 TanStack Table,圖表用 ECharts。
+Vite + React + TypeScript，表格用 TanStack Table，圖表以輕量的原生 SVG 元件實作。
 250 筆資料在瀏覽器內排序篩選為毫秒級,不需虛擬化或後端查詢。
 
 **撰寫任何圖表程式碼前,先載入 `dataviz` skill。**

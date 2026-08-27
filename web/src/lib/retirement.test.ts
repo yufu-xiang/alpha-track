@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  annualReturnsFrom, bootstrapSampler, monteCarlo, normalSampler,
+  annualizedExcess, annualReturnsFrom, bootstrapSampler, monteCarlo, normalSampler,
   simulateWithdrawal, yearsUntilDepleted,
 } from './retirement'
 
@@ -73,6 +73,32 @@ describe('monteCarlo', () => {
   it('耗盡的路徑餘額停在 0,不會拉低百分位到負值', () => {
     const r = mc({ annualWithdrawal: 3_000_000 })
     expect(r.percentiles.every((p) => p.p10 >= 0)).toBe(true)
+  })
+
+  it('低於 -100% 的抽樣最多歸零,最後一年也不得算成功', () => {
+    const r = mc({ years: 1, runs: 10, drawReturn: () => -1.5 })
+    expect(r.successRate).toBe(0)
+    expect(r.percentiles[0]).toMatchObject({ p10: 0, p50: 0, p90: 0 })
+  })
+
+  it('非有限報酬不會污染百分位或被算成成功', () => {
+    const r = mc({ years: 1, runs: 1, drawReturn: () => Number.NaN })
+    expect(r.successRate).toBe(0)
+    expect(r.percentiles[0]!.p50).toBe(0)
+  })
+})
+
+describe('annualizedExcess', () => {
+  it('先還原大盤總報酬再分別年化,不直接把三年累積值除以三', () => {
+    // ETF 三年 +100%、大盤 +50% → 年化差約 11.5%，不是 50% / 3。
+    expect(annualizedExcess(1, 0.5, 3)).toBeCloseTo(
+      2 ** (1 / 3) - 1.5 ** (1 / 3),
+    )
+  })
+
+  it('資料不足或無法做 CAGR 時不硬湊數字', () => {
+    expect(annualizedExcess(null, 0.2, 3)).toBeNull()
+    expect(annualizedExcess(-1, 0, 3)).toBeNull()
   })
 })
 

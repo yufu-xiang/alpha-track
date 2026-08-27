@@ -1,10 +1,9 @@
 import json
 import ssl
-
-import certifi
 from datetime import date
 from pathlib import Path
 
+import certifi
 import pytest
 
 from alpha_track.sources.base import (
@@ -14,6 +13,40 @@ from alpha_track.sources.base import (
     parse_roc_slash,
     to_float,
 )
+
+
+def test_fetch_json_reuses_a_connection_pool_per_host(monkeypatch):
+    """數百檔回補不應每次重做 DNS 與 TLS 握手。"""
+    from alpha_track.sources import base
+
+    created = []
+
+    class Response:
+        status_code = 200
+        headers = {}
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"ok": True}
+
+    class Client:
+        def __init__(self, **kwargs):
+            created.append(kwargs)
+
+        def get(self, url, timeout):
+            return Response()
+
+        def close(self):
+            pass
+
+    base.close_http_clients()
+    monkeypatch.setattr(base.httpx, "Client", Client)
+    base.fetch_json("https://example.com/a")
+    base.fetch_json("https://example.com/b")
+    assert len(created) == 1
+    base.close_http_clients()
 from alpha_track.sources.finmind import parse_finmind_dividends
 from alpha_track.sources.tpex import parse_tpex_daily, parse_tpex_profiles
 from alpha_track.sources.twse import (

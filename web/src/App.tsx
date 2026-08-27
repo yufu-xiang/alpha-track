@@ -6,17 +6,12 @@
  * 移到仍看得見的欄位。任一方向漏掉,使用者都會看到榜單莫名亂掉
  * (TanStack 會把對應欄位不存在的排序狀態直接濾掉)。
  */
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { ColumnPicker } from './components/ColumnPicker'
 import { Filters } from './components/Filters'
 import { HealthBar } from './components/HealthBar'
 import { PeriodTabs } from './components/PeriodTabs'
-import { Compare } from './components/Compare'
-import { EtfDetail } from './components/EtfDetail'
-import { Glossary } from './components/Glossary'
-import { Portfolio } from './components/Portfolio'
 import { RankingTable } from './components/RankingTable'
-import { Tools } from './components/tools'
 import { loadData, type LoadResult } from './data/loader'
 import { applyFilters, collectCategories, collectRegions } from './lib/filtering'
 import { formatPercent } from './lib/format'
@@ -25,13 +20,24 @@ import { MAX_COMPARE, toggleCompare } from './lib/compare'
 import { hashFor, useRoute } from './lib/route'
 import { PERIODS, type PeriodCode } from './types'
 
+// 排行榜是首屏；個股、比較、組合與工具頁依路由載入，避免使用者只看排行
+// 時也下載十一個試算工具和所有圖表程式。
+const EtfDetail = lazy(() => import('./components/EtfDetail').then((m) => ({ default: m.EtfDetail })))
+const Compare = lazy(() => import('./components/Compare').then((m) => ({ default: m.Compare })))
+const Portfolio = lazy(() => import('./components/Portfolio').then((m) => ({ default: m.Portfolio })))
+const Glossary = lazy(() => import('./components/Glossary').then((m) => ({ default: m.Glossary })))
+const Tools = lazy(() => import('./components/tools').then((m) => ({ default: m.Tools })))
+
 export function App() {
   const route = useRoute()
-  if (route.name === 'detail') return <EtfDetail code={route.code} />
-  if (route.name === 'compare') return <Compare codes={route.codes} />
-  if (route.name === 'portfolio') return <Portfolio />
-  if (route.name === 'glossary') return <Glossary />
-  if (route.name === 'tools') return <Tools tool={route.tool} />
+  if (route.name !== 'rankings') {
+    const page = route.name === 'detail' ? <EtfDetail code={route.code} />
+      : route.name === 'compare' ? <Compare codes={route.codes} />
+      : route.name === 'portfolio' ? <Portfolio />
+      : route.name === 'glossary' ? <Glossary />
+      : <Tools tool={route.tool} />
+    return <Suspense fallback={<main className="app"><p>載入頁面中…</p></main>}>{page}</Suspense>
+  }
   return <Rankings />
 }
 

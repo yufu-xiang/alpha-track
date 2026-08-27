@@ -9,7 +9,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fixtureMeta, fixtureRankings } from '../../data/fixture'
+import { fixtureDetail, fixtureMeta, fixtureRankings } from '../../data/fixture'
 import { Tools, TOOLS } from './index'
 
 /**
@@ -34,12 +34,12 @@ function mockFetch(years: number) {
     const body =
       url.includes('meta') ? fixtureMeta
       : url.includes('benchmark') ? benchmark(years)
-      : url.includes('etf/') ? {
-          ...fixtureRankings.etfs[0],
+      : url.includes('etf/') ? fixtureDetail({
           exchange: 'TWSE', issuer: null, tracking_index: null, listing_date: null,
-          annualized: {}, excess: {}, dividends: [],
-          series: { start: '2024-01-01', days: [0, 31, 60, 91], adj: [100, 90, 110, 120] },
-        }
+          dividends: [],
+          series: { start: '2024-01-01', days: [0, 31, 60, 91],
+                    adj: [100, 90, 110, 120], close: [100, 90, 110, 120] },
+        })
       : fixtureRankings
     return { ok: true, json: async () => body }
   }))
@@ -87,6 +87,7 @@ describe('蒙地卡羅(規格 §7.3)', () => {
   })
 
   it('基準線載入前不謊報「僅有 0 年歷史資料」—— 那是還沒到,不是不足', () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
     render(<Tools tool="monte-carlo" />)
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent(/載入/)
@@ -216,10 +217,8 @@ describe('股息再投入', () => {
       const body =
         url.includes('meta') ? fixtureMeta
         : url.includes('benchmark') ? benchmark(20)
-        : url.includes('etf/') ? {
-            ...fixtureRankings.etfs[0],
+        : url.includes('etf/') ? fixtureDetail({
             exchange: 'TWSE', issuer: null, tracking_index: null, listing_date: null,
-            annualized: {}, excess: {},
             dividends: [{
               ex_date: '2015-01-01', pay_date: null,
               amount: 1, amount_adj: 1, scale_known: true,
@@ -230,7 +229,7 @@ describe('股息再投入', () => {
               adj: [10, 20, 30],
               close: [10, 20, 30],
             },
-          }
+          })
         : fixtureRankings
       return { ok: true, json: async () => body }
     }))
@@ -254,10 +253,8 @@ describe('股息再投入', () => {
       const body =
         url.includes('meta') ? fixtureMeta
         : url.includes('benchmark') ? benchmark(20)
-        : url.includes('etf/') ? {
-            ...fixtureRankings.etfs[0],
+        : url.includes('etf/') ? fixtureDetail({
             exchange: 'TWSE', issuer: null, tracking_index: null, listing_date: null,
-            annualized: {}, excess: {},
             dividends: [{
               ex_date: '2024-01-01', pay_date: null,
               amount: 3.0, amount_adj: 0.75, scale_known: true,
@@ -266,7 +263,7 @@ describe('股息再投入', () => {
               start: '2024-01-01', days: [0, 30, 60],
               adj: [30, 31, 32], close: [30, 31, 32],
             },
-          }
+          })
         : fixtureRankings
       return { ok: true, json: async () => body }
     }))
@@ -283,10 +280,8 @@ describe('股息再投入', () => {
       const body =
         url.includes('meta') ? fixtureMeta
         : url.includes('benchmark') ? benchmark(20)
-        : url.includes('etf/') ? {
-            ...fixtureRankings.etfs[0],
+        : url.includes('etf/') ? fixtureDetail({
             exchange: 'TWSE', issuer: null, tracking_index: null, listing_date: null,
-            annualized: {}, excess: {},
             dividends: [{
               ex_date: '2024-01-01', pay_date: null,
               amount: 3.0, amount_adj: 3.0, scale_known: false,
@@ -295,7 +290,7 @@ describe('股息再投入', () => {
               start: '2024-01-01', days: [0, 30, 60],
               adj: [30, 31, 32], close: [30, 31, 32],
             },
-          }
+          })
         : fixtureRankings
       return { ok: true, json: async () => body }
     }))
@@ -312,12 +307,11 @@ describe('股息再投入', () => {
       const body =
         url.includes('meta') ? fixtureMeta
         : url.includes('benchmark') ? benchmark(20)
-        : url.includes('etf/') ? {
-            ...fixtureRankings.etfs[0],
+        : url.includes('etf/') ? fixtureDetail({
             exchange: 'TWSE', issuer: null, tracking_index: null, listing_date: null,
-            annualized: {}, excess: {}, dividends: [],
+            dividends: [],
             series: { start: '2024-01-01', days: [0, 1], adj: [10, 20], close: [10, 20] },
-          }
+          })
         : fixtureRankings
       return { ok: true, json: async () => body }
     }))
@@ -373,7 +367,11 @@ describe('排行的涵蓋率', () => {
     // 用專屬資料驗門檻:五檔裡只有一檔查得到殖利率。
     // 這正是配息逐日分批回補期間的真實狀態(上線初期是 14 / 351)。
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-      const body = url.includes('meta') ? fixtureMeta : {
+      const body = url.includes('meta') ? {
+        ...fixtureMeta,
+        data_date: '2026-08-25',
+        etf_count: 5,
+      } : {
         data_date: '2026-08-25',
         etfs: fixtureRankings.etfs.slice(0, 5).map((r, i) => ({
           ...r, is_leveraged: false, is_inverse: false,
@@ -414,10 +412,10 @@ describe('報酬相關性', () => {
       }
       return {
         ok: true,
-        json: async () => ({
-          ...fixtureRankings.etfs[0], code, name: `測試${code}`,
+        json: async () => fixtureDetail({
+          code, name: `測試${code}`,
           exchange: 'TWSE', issuer: null, tracking_index: null, listing_date: null,
-          annualized: {}, excess: {}, dividends: [],
+          dividends: [],
           premium_low: null, premium_high: null, premium_days_ratio: null,
           premium_sample: 0, premium_series: { start: null, days: [], premium: [] },
           series: { start: '2025-01-01', days: adj.map((_, i) => i), adj, close: adj },
@@ -493,10 +491,10 @@ describe('成分股重疊度', () => {
       const code = m[1]!
       return {
         ok: true,
-        json: async () => ({
-          ...fixtureRankings.etfs[0], code, name: `測試${code}`,
+        json: async () => fixtureDetail({
+          code, name: `測試${code}`,
           exchange: 'TWSE', issuer: null, tracking_index: null, listing_date: null,
-          annualized: {}, excess: {}, dividends: [],
+          dividends: [],
           premium_series: { start: null, days: [], premium: [] },
           series: { start: null, days: [], adj: [], close: [] },
           holdings: {

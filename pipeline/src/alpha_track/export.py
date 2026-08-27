@@ -289,9 +289,15 @@ def build_benchmark_series(bench_closes: Mapping[date, float]) -> dict:
 
 
 def write_json(path: Path, data: object) -> None:
-    """寫出 JSON。中文不轉義,避免檔案體積膨脹近三倍。"""
+    """原子寫出 JSON。中文不轉義,避免檔案體積膨脹近三倍。
+
+    先寫同目錄暫存檔再 replace，前端或 Git 永遠只會看到完整舊檔
+    或完整新檔，不會在排程中斷時收到半截 JSON。
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_text(
         json.dumps(data, ensure_ascii=False, separators=(",", ":")),
         encoding="utf-8",
     )
+    temporary.replace(path)

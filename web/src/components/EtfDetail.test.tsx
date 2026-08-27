@@ -24,6 +24,7 @@ const detail = {
   premium_series: {
     start: '2026-06-01', days: [0, 1, 2], premium: [0.001, -0.002, 0.003],
   },
+  holdings: { year_month: null, items: [] },
   dividends: [{
     ex_date: '2026-07-21', pay_date: '2026-08-10',
     amount: 0.6, amount_adj: 0.6, scale_known: true,
@@ -149,11 +150,12 @@ describe('折溢價(規格 §5.2 ②、§4.4)', () => {
     expect(screen.getByText(/還沒有折溢價資料/)).toBeInTheDocument()
   })
 
-  it('舊版快取缺 premium_series 時只少一張圖,不是整頁白畫面', async () => {
-    await renderDetail({ premium_series: undefined })
-    // 頁面主體仍在
-    expect(screen.getByRole('heading', { name: /0050/ })).toBeInTheDocument()
-    expect(screen.getByText(/還沒有折溢價資料/)).toBeInTheDocument()
+  it('舊版快取缺 premium_series 時顯示明確契約錯誤,不渲染半殘頁面', async () => {
+    mockOk({ premium_series: undefined })
+    render(<EtfDetail code="0050" />)
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/premium_series/)
+    })
   })
 })
 

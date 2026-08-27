@@ -9,6 +9,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Transaction } from '../lib/portfolio'
+import { fixtureDetail } from '../data/fixture'
 import { SplitNotice } from './SplitNotice'
 
 /** 我方序列(已還原):0050 在這段期間一直是 48–52 的尺度。 */
@@ -17,15 +18,14 @@ function mockSeries(close = 48.51) {
     ok: true,
     json: async () => (url.includes('benchmark')
       ? { start: null, days: [], value: [] }
-      : {
-          code: '0050', name: '元大台灣50', dividends: [],
+      : fixtureDetail({
           series: {
             start: '2025-01-01',
             days: Array.from({ length: 400 }, (_, i) => i),
             adj: Array.from({ length: 400 }, () => close),
             close: Array.from({ length: 400 }, () => close),
           },
-        }),
+        })),
   })))
 }
 

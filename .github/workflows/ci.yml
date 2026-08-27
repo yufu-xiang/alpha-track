@@ -1,0 +1,67 @@
+name: 程式品質檢查
+
+on:
+  pull_request:
+    paths:
+      - 'pipeline/**'
+      - 'web/**'
+      - 'config/**'
+      - '.github/workflows/**'
+      - '.node-version'
+      - '.python-version'
+  push:
+    branches: [main]
+    paths:
+      - 'pipeline/**'
+      - 'web/**'
+      - 'config/**'
+      - '.github/workflows/**'
+      - '.node-version'
+      - '.python-version'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: '.python-version'
+      - name: 依鎖定檔安裝
+        run: |
+          pip install uv==0.11.27
+          uv sync --locked --extra dev --project pipeline
+      - name: 測試與覆蓋率門檻
+        run: >-
+          uv run --project pipeline pytest -q
+          --cov=alpha_track --cov-report=term-missing --cov-fail-under=85
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.node-version'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: 依鎖定檔安裝
+        run: npm ci
+        working-directory: web
+      - name: 測試
+        run: npm test
+        working-directory: web
+      - name: 驗證匯出 JSON 契約
+        run: npm run validate:data
+        working-directory: web
+      - name: 型別與正式建置
+        run: npm run build
+        working-directory: web

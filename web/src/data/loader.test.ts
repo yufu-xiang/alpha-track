@@ -54,6 +54,30 @@ describe('loadData', () => {
     const r = await loadData()
     expect(r.ok).toBe(false)
   })
+
+  it('meta 與 rankings 日期不同時拒絕混用兩版資料', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => ({
+      ok: true,
+      json: async () => url.includes('meta')
+        ? { ...fixtureMeta, data_date: '2026-08-22' }
+        : fixtureRankings,
+    })))
+    const r = await loadData()
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toContain('版本不一致')
+  })
+
+  it('HTTP 200 但必要欄位損壞時回傳契約錯誤', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => ({
+      ok: true,
+      json: async () => url.includes('meta')
+        ? fixtureMeta
+        : { ...fixtureRankings, etfs: [{ code: '0050' }] },
+    })))
+    const r = await loadData()
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toContain('name')
+  })
 })
 
 describe('daysSince', () => {
@@ -67,7 +91,13 @@ describe('daysSince', () => {
 })
 
 describe('loadDetail', () => {
-  const detail = { code: '0050', name: '元大台灣50', series: { start: '2014-01-02', days: [0], adj: [9.27] }, dividends: [] }
+  const detail = {
+    ...fixtureRankings.etfs[0]!, exchange: 'TWSE', issuer: null,
+    tracking_index: null, fund_size: null,
+    series: { start: '2014-01-02', days: [0], adj: [9.27], close: [9.27] },
+    premium_series: { start: null, days: [], premium: [] },
+    holdings: { year_month: null, items: [] }, dividends: [],
+  }
   const bench = { start: '2016-08-01', days: [0], value: [1000] }
 
   it('個股與基準線都成功時一起回傳', async () => {
@@ -117,5 +147,42 @@ describe('loadDetail', () => {
     }))
     await loadDetail('0050')
     expect(seen.some((u) => u.endsWith('data/benchmark.json'))).toBe(true)
+  })
+
+  it('價格平行陣列長度不同時拒絕渲染', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => ({
+      ok: true,
+      json: async () => url.includes('benchmark') ? bench : {
+        ...detail, series: { ...detail.series, close: [] },
+      },
+    })))
+    const r = await loadDetail('0050')
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toContain('長度不一致')
+  })
+
+  it('序列日期位移不是嚴格遞增時拒絕渲染', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => ({
+      ok: true,
+      json: async () => url.includes('benchmark') ? bench : {
+        ...detail,
+        series: { start: '2014-01-02', days: [1, 1], adj: [9, 10], close: [9, 10] },
+      },
+    })))
+    const r = await loadDetail('0050')
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toContain('嚴格遞增')
+  })
+
+  it('配息列缺少必要欄位時拒絕半殘資料', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => ({
+      ok: true,
+      json: async () => url.includes('benchmark') ? bench : {
+        ...detail, dividends: [{ ex_date: '2026-08-01', amount: 1 }],
+      },
+    })))
+    const r = await loadDetail('0050')
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toContain('pay_date')
   })
 })

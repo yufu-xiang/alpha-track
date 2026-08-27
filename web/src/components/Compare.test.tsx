@@ -1,10 +1,11 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { fixtureDetail } from '../data/fixture'
 import { Compare } from './Compare'
 
 function detailFor(code: string, name: string, y1: number) {
   const nulls = { W1: null, M1: null, M6: null, INCEPTION: null }
-  return {
+  return fixtureDetail({
     code, name, category: '市值型', region: '台灣', exchange: 'TWSE',
     issuer: null, tracking_index: null, listing_date: '2020-01-01',
     data_start: '2020-01-01',
@@ -12,10 +13,13 @@ function detailFor(code: string, name: string, y1: number) {
     annualized: { ...nulls, D1: null, M3: null, YTD: null, Y1: null, Y3: 0.3, Y5: 0.24, Y10: null },
     excess: { ...nulls, D1: null, M3: null, YTD: null, Y1: 0.05, Y3: null, Y5: null, Y10: null },
     risk: { volatility: 0.28, mdd: -0.34, sharpe: 3.4, beta: 1.05 },
-    premium_discount: null,
-    series: { start: '2020-01-01', days: [0, 1, 2, 3], adj: [100, 105, 103, 110] },
-    dividends: [],
-  }
+    premium_discount: null, premium_low: null, premium_high: null,
+    premium_days_ratio: null, premium_sample: 0,
+    series: {
+      start: '2020-01-01', days: [0, 1, 2, 3],
+      adj: [100, 105, 103, 110], close: [100, 105, 103, 110],
+    },
+  })
 }
 
 function mockFor(codes: Record<string, unknown>) {
@@ -87,9 +91,10 @@ describe('Compare 共同區間', () => {
     mockFor({
       '0050': { ...detailFor('0050', '老牌', 1.0),
                 series: { start: '2020-01-01', days: [0, 366, 731, 1096, 1461],
-                          adj: [100, 105, 110, 120, 130] } },
+                          adj: [100, 105, 110, 120, 130],
+                          close: [100, 105, 110, 120, 130] } },
       '00929': { ...detailFor('00929', '新掛牌', 0.2),
-                 series: { start: '2023-01-01', days: [0, 365], adj: [50, 60] } },
+                 series: { start: '2023-01-01', days: [0, 365], adj: [50, 60], close: [50, 60] } },
     })
     render(<Compare codes={['0050', '00929']} />)
     await waitFor(() => expect(screen.getByText(/起標準化為 100/)).toBeInTheDocument())
@@ -107,9 +112,9 @@ describe('Compare 共同區間', () => {
   it('完全沒有共同區間時說明原因,而不是畫一張錯的圖', async () => {
     mockFor({
       '0050': { ...detailFor('0050', '早', 1.0),
-                series: { start: '2010-01-01', days: [0, 1], adj: [1, 2] } },
+                series: { start: '2010-01-01', days: [0, 1], adj: [1, 2], close: [1, 2] } },
       '0056': { ...detailFor('0056', '晚', 1.0),
-                series: { start: '2026-01-01', days: [0, 1], adj: [1, 2] } },
+                series: { start: '2026-01-01', days: [0, 1], adj: [1, 2], close: [1, 2] } },
     })
     render(<Compare codes={['0050', '0056']} />)
     await waitFor(() => expect(screen.getByText(/沒有共同的資料區間/)).toBeInTheDocument())

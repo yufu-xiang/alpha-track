@@ -90,7 +90,14 @@ export function monteCarlo(input: MonteCarloInput): MonteCarloResult {
       if (alive) {
         balance -= input.annualWithdrawal * (1 + input.inflation) ** (y - 1)
         if (balance <= 0) { balance = 0; alive = false }
-        else balance *= 1 + input.drawReturn()
+        else {
+          const sampled = input.drawReturn()
+          // 常態分布沒有下界，Beta 調整後也可能小於 -100%。現實資產最多
+          // 歸零，不可能變成負資產後仍被算作「存活」。非有限值同樣視為歸零。
+          const annualReturn = Number.isFinite(sampled) ? Math.max(sampled, -1) : -1
+          balance *= 1 + annualReturn
+          if (balance <= 0) { balance = 0; alive = false }
+        }
       }
       balancesByYear[y - 1]!.push(balance)
     }
@@ -148,6 +155,26 @@ export function normalSampler(mean: number, stdev: number, rand = Math.random) {
     const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2)
     return mean + stdev * z
   }
+}
+
+/**
+ * 把「ETF 三年累積報酬 − 大盤三年累積報酬」還原成年化報酬差。
+ *
+ * 直接把累積超額報酬除以年數忽略複利，而且 excess 本身不是可直接開根號
+ * 的總報酬。先由 ETF total - excess 還原大盤總報酬，再各自 CAGR 相減。
+ */
+export function annualizedExcess(
+  totalReturn: number | null,
+  excessReturn: number | null,
+  years: number,
+): number | null {
+  if (totalReturn === null || excessReturn === null
+    || !Number.isFinite(totalReturn) || !Number.isFinite(excessReturn)
+    || !Number.isFinite(years) || years <= 0) return null
+  const marketReturn = totalReturn - excessReturn
+  if (totalReturn <= -1 || marketReturn <= -1) return null
+  const annual = (r: number) => (1 + r) ** (1 / years) - 1
+  return annual(totalReturn) - annual(marketReturn)
 }
 
 /**

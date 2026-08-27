@@ -8,6 +8,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Transaction } from '../lib/portfolio'
+import { fixtureDetail } from '../data/fixture'
 import { DividendEstimates } from './DividendEstimates'
 
 const buy: Transaction = {
@@ -20,18 +21,9 @@ function mockDetail(dividends: { ex_date: string; pay_date: string | null; amoun
     ok: true,
     json: async () => (url.includes('benchmark')
       ? { start: null, days: [], value: [] }
-      : {
-          code: '0050', name: '元大台灣50', category: null, region: null,
-          exchange: 'TWSE', issuer: null, tracking_index: null,
-          listing_date: null, data_start: null,
-          returns: {}, annualized: {}, excess: {},
-          risk: { volatility: null, mdd: null, sharpe: null, beta: null },
-          premium_discount: null, premium_low: null, premium_high: null,
-          premium_days_ratio: null, premium_sample: 0,
-          premium_series: { start: null, days: [], premium: [] },
-          series: { start: null, days: [], adj: [], close: [] },
-          dividends,
-        }),
+      : fixtureDetail({ dividends: dividends.map((d) => ({
+          ...d, amount_adj: d.amount, scale_known: true,
+        })) })),
   })))
 }
 

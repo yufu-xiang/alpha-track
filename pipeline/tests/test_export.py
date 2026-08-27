@@ -135,6 +135,7 @@ def test_write_json_output_is_valid_json_and_round_trips(tmp_path: Path):
     payload = build_rankings(date(2026, 8, 21), [(profile(), metrics(), 195.5)])
     write_json(p, payload)
     assert json.loads(p.read_text(encoding="utf-8")) == payload
+    assert not (tmp_path / ".out.json.tmp").exists()
 
 
 def test_meta_carries_the_benchmark_return_for_context():

@@ -3,7 +3,7 @@
  * 老牌 ETF(十年資料齊全)、新掛牌(長期為 null)、槓桿、反向、未分類,
  * 以及 data_start 晚於 listing_date 而使「成立以來」為 null 的情況(0050)。
  */
-import type { MetaData, PeriodCode, RankingsData } from '../types'
+import type { EtfDetail, MetaData, PeriodCode, RankingsData } from '../types'
 
 function periods(v: Partial<Record<PeriodCode, number | null>>) {
   const base: Record<PeriodCode, number | null> = {
@@ -165,4 +165,22 @@ export const fixtureMeta: MetaData = {
   anomalies: [],
   risk_free_rate: 0.015,
   benchmark_return_1y: 0.9185,
+}
+
+/** 需要通過網路邊界契約的完整個股 fixture；測試可覆寫關心的欄位。 */
+export function fixtureDetail(overrides: Partial<EtfDetail> = {}): EtfDetail {
+  const row = fixtureRankings.etfs[0]!
+  return {
+    code: row.code, name: row.name, category: row.category, region: row.region,
+    exchange: 'TWSE', issuer: null, tracking_index: null,
+    listing_date: row.listing_date, data_start: row.data_start,
+    returns: row.returns, annualized: row.annualized, excess: row.excess,
+    risk: row.risk, premium_discount: row.premium_discount,
+    premium_low: row.premium_low, premium_high: row.premium_high,
+    premium_days_ratio: row.premium_days_ratio, premium_sample: row.premium_sample,
+    premium_series: { start: null, days: [], premium: [] }, fund_size: null,
+    holdings: { year_month: null, items: [] },
+    series: { start: null, days: [], adj: [], close: [] }, dividends: [],
+    ...overrides,
+  }
 }

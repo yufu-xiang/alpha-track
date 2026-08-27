@@ -20,20 +20,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 刻意不跟本機的 Python 版本一致。2026-08-25 的首班排程就是靠這個
-      # 落差抓到一個 bug:某個 TLS 測試斷言 ssl 的預設含 VERIFY_X509_STRICT,
-      # 但那個旗標 3.14 有、3.12 沒有 —— 本機全綠而 CI 整批失敗。
-      # 對齊版本只會讓這種假設繼續藏著。
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version-file: '.python-version'
 
-      # 沒有 ./ 的話 pip 會把 pipeline 當成 PyPI 上的套件名而不是本地路徑
+      # uv.lock 讓每日排程與 PR 使用完全相同的版本，避免免費來源沒變、
+      # 只因相依套件自動升級就突然失敗。
       - name: 安裝相依套件
-        run: pip install -e "./pipeline[dev]"
+        run: |
+          pip install uv==0.11.27
+          uv sync --locked --extra dev --project pipeline
 
       - name: 執行測試
-        run: cd pipeline && pytest -q
+        run: uv run --project pipeline pytest -q
 
       # 鍵**必須每次都不同**,而由 restore-keys 做前綴回退。
       #
@@ -64,10 +63,13 @@ jobs:
             alpha-track-db-v2-
             alpha-track-db-v1
 
+      # Cache 可能被 GitHub 清除；recovery.json 跟著主分支持久保存不可回補的
+      # 淨值歷史。匯入是冪等的，所以 cache 命中時照跑也不會重複資料。
+      - name: 從持久快照復原不可回補資料
+        run: uv run --project pipeline python -m alpha_track.cli restore
+
       - name: 更新資料
-        run: python -m alpha_track.cli update
-        env:
-          PYTHONPATH: pipeline/src
+        run: uv run --project pipeline python -m alpha_track.cli update
 
       # 這一步跑在數分鐘的回補之後,期間任何一次人工推送都會讓遠端前進,
       # 於是 push 被拒、整批白做 —— 而它已經付出完整回補的代價。
