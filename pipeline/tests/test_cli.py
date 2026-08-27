@@ -11,15 +11,7 @@ from alpha_track.models import EtfProfile, PriceRecord
 from alpha_track.storage import Database
 
 
-@pytest.fixture(autouse=True)
-def _no_real_sleeping(monkeypatch):
-    """測試不該真的睡。
-
-    回補對每個代號之間留 0.5 秒間隔(對免費 API 的禮貌),但在測試裡那是
-    純粹的浪費 —— 加上這個 fixture 之前,整套測試從 2 秒變成 73 秒。
-    專門驗證間隔的那幾個測試會自己再 monkeypatch 一次來記錄呼叫,不受影響。
-    """
-    monkeypatch.setattr(cli.time, "sleep", lambda _s: None)
+# 停用 sleep 的 autouse fixture 已移到 tests/conftest.py —— 整合測試也需要它。
 
 
 def price_at(code: str, d: date, close: float = 100.0) -> PriceRecord:
