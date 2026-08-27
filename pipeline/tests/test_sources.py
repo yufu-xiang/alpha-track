@@ -846,3 +846,98 @@ class TestIsolatedBadTick:
         to_old = abs(log(level / old))
         # 新水位並沒有比舊水位近多少 —— 因此不是尺度改變
         assert to_old / to_new < 5
+
+
+class TestParseSitcaHoldings:
+    """公會的「基金投資明細-月前十大」。對著 2026-07 元大的真實回應跑。
+
+    這是規格 §7.2「成分股重疊度」的資料來源。先前判定「沒有公開來源」
+    是錯的 —— 漏查了公會的「境內基金各項資料」。
+    """
+
+    @staticmethod
+    def page() -> str:
+        return (Path(__file__).parent / "fixtures"
+                / "sitca_holdings_A0005_AH11_202607.html").read_text(encoding="utf-8")
+
+    def test_parses_every_fund_in_the_response(self):
+        from alpha_track.sources.sitca import parse_sitca_holdings
+        rows = parse_sitca_holdings(self.page(), "202607")
+        funds = {r.fund_name for r in rows}
+        assert len(funds) == 10
+        assert "元大台灣卓越50基金" in funds
+        assert "元大台灣高股息基金" in funds
+
+    def test_strips_the_statutory_disclaimer_from_fund_names(self):
+        """公會把法定公開說明併進名稱裡,帶著它就對應不到 ETF 代號。
+
+        但幣別與級別註記是名稱的一部分,不能一併剝掉 ——
+        剝掉會讓兩檔不同的基金看起來同名。
+        """
+        from alpha_track.sources.sitca import clean_fund_name, parse_sitca_holdings
+        rows = parse_sitca_holdings(self.page(), "202607")
+        assert "元大台灣高股息基金" in {r.fund_name for r in rows}
+        assert not any("本基金之配息來源" in r.fund_name for r in rows)
+        assert clean_fund_name("某某基金(美元)") == "某某基金(美元)"
+        assert clean_fund_name("某某基金(本基金之配息來源可能為收益平準金)") == "某某基金"
+
+    def test_first_row_of_each_fund_is_not_shifted(self):
+        """同一檔基金只有第一列帶基金名稱,其餘列整列左移。
+
+        用固定索引的話,每一檔的**第一筆**持股會被讀成別的欄位 ——
+        而那正好是權重最大的那一筆。
+        """
+        from alpha_track.sources.sitca import parse_sitca_holdings
+        rows = parse_sitca_holdings(self.page(), "202607")
+        top = [r for r in rows if r.fund_name == "元大台灣卓越50基金" and r.rank == 1]
+        assert len(top) == 1
+        assert top[0].security_code == "2330"
+        assert top[0].security_name == "台積電"
+
+    def test_weight_is_a_fraction_not_a_percentage(self):
+        """公會的表格用百分比,我方一律存小數。
+
+        全站其他比例欄位都是小數,混用會在某一天讓某個計算差一百倍。
+        """
+        from alpha_track.sources.sitca import parse_sitca_holdings
+        rows = parse_sitca_holdings(self.page(), "202607")
+        top = next(r for r in rows
+                   if r.fund_name == "元大台灣卓越50基金" and r.rank == 1)
+        assert 0.4 < top.weight < 0.7
+        assert all(r.weight is None or 0 <= r.weight <= 1 for r in rows)
+
+    def test_ranks_are_contiguous_and_capped_at_ten(self):
+        from alpha_track.sources.sitca import parse_sitca_holdings
+        rows = parse_sitca_holdings(self.page(), "202607")
+        by_fund: dict[str, list[int]] = {}
+        for r in rows:
+            by_fund.setdefault(r.fund_name, []).append(r.rank)
+        for fund, ranks in by_fund.items():
+            assert ranks == list(range(1, len(ranks) + 1)), fund
+            assert len(ranks) <= 10, fund
+
+    def test_amount_strips_thousand_separators(self):
+        from alpha_track.sources.sitca import parse_sitca_holdings
+        rows = parse_sitca_holdings(self.page(), "202607")
+        top = next(r for r in rows
+                   if r.fund_name == "元大台灣卓越50基金" and r.rank == 1)
+        assert top.amount > 1e9
+
+    def test_a_page_without_results_returns_empty_not_garbage(self):
+        """查詢沒發生時頁面仍是 HTTP 200 且長得像正常頁面。
+
+        呼叫端必須檢查筆數,不能假設有回應就有資料。
+        """
+        from alpha_track.sources.sitca import parse_sitca_holdings
+        assert parse_sitca_holdings("<html><body>沒有表格</body></html>", "202607") == []
+
+    def test_form_data_always_includes_the_radio(self):
+        """沒帶 rdo1 的話伺服器回原本的表單頁,HTTP 200、沒有錯誤訊息。
+
+        實測是靠「前後兩次回應的位元組數完全相同」才發現的。
+        """
+        from alpha_track.sources.sitca import holdings_form_data
+        d = holdings_form_data("202607", "A0005", "AH11", {"__VIEWSTATE": "x"})
+        assert d["ctl00$ContentPlaceHolder1$rdo1"] == "rbComCL"
+        assert d["ctl00$ContentPlaceHolder1$ddlQ_Comid1"] == "A0005"
+        assert d["__VIEWSTATE"] == "x"
