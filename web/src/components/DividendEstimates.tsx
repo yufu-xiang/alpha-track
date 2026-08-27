@@ -38,7 +38,10 @@ export function DividendEstimates({ transactions, onRecord }: Props) {
       if (cancelled) return
       const all: DividendEvent[] = []
       results.forEach((r, i) => {
-        if (!r.ok) return
+        // dividends 不保證是陣列:使用者的瀏覽器可能快取著舊版的
+        // etf/*.json,或那一檔根本沒有配息欄位。少一檔的配息推估是小事,
+        // 整個組合頁因為一次 for...of 而崩掉不是。
+        if (!r.ok || !Array.isArray(r.detail.dividends)) return
         for (const d of r.detail.dividends) {
           all.push({ code: codes[i]!, ex_date: d.ex_date, pay_date: d.pay_date, amount: d.amount })
         }

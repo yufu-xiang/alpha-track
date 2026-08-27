@@ -115,3 +115,23 @@ describe('DividendEstimates', () => {
     expect(screen.getByRole('row', { name: /0050/ })).toBeInTheDocument()
   })
 })
+
+describe('資料畸形時的韌性', () => {
+  it('detail 缺 dividends 欄位時只是沒有推估,不讓整頁崩掉', async () => {
+    // 使用者的瀏覽器可能快取著舊版的 etf/*.json。CI 抓到過這個:
+    // 一次 for...of 就足以讓整個「我的組合」白畫面。
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true, json: async () => ({ code: '0050', name: '元大台灣50' }),
+    })))
+    await renderEstimates([buy])
+    expect(screen.getByText(/都已經記過了|先記錄買進交易/)).toBeInTheDocument()
+  })
+
+  it('dividends 是 null 也不崩', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: true, json: async () => ({ code: '0050', name: 'x', dividends: null }),
+    })))
+    await renderEstimates([buy])
+    expect(screen.queryByRole('table')).not.toBeInTheDocument()
+  })
+})
