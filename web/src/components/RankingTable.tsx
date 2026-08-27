@@ -174,7 +174,11 @@ export function RankingTable({
                 return (
                   <th
                     key={header.id}
-                    className={canSort ? 'is-sortable' : undefined}
+                    className={[
+                      canSort ? 'is-sortable' : '',
+                      sorted ? 'is-sorted' : '',
+                      `col-${header.column.id}`,
+                    ].filter(Boolean).join(' ')}
                     onClick={
                       canSort
                         ? () => {
@@ -220,7 +224,15 @@ export function RankingTable({
               )}
               <td className="col-rank">{ranks.get(row.id) ?? '—'}</td>
               {row.getVisibleCells().map((cell) => (
-                <td key={cell.id}>
+                <td
+                  key={cell.id}
+                  className={[
+                    ['code', 'name', 'category', 'close'].includes(cell.column.id)
+                      ? `col-${cell.column.id}`
+                      : '',
+                    cell.column.id === sortedId ? 'is-sorted' : '',
+                  ].filter(Boolean).join(' ')}
+                >
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </td>
               ))}

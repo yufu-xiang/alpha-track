@@ -113,6 +113,18 @@ describe('App', () => {
     })
   })
 
+  it('有篩選條件時可一次清除並回復全部結果', async () => {
+    const user = userEvent.setup()
+    await renderLoaded()
+    const before = within(screen.getByRole('table')).getAllByRole('row').length
+    await user.click(screen.getByRole('button', { name: '高股息' }))
+    const clear = await screen.findByRole('button', { name: /清除 1 項篩選/ })
+    await user.click(clear)
+    await waitFor(() => {
+      expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(before)
+    })
+  })
+
   it('槓桿反向標的預設不出現在表格中', async () => {
     await renderLoaded()
     expect(within(screen.getByRole('table')).queryByText('00631L')).not.toBeInTheDocument()

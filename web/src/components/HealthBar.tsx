@@ -51,9 +51,21 @@ export function HealthBar({ meta, now = new Date() }: Props) {
       className={`health-bar ${hasProblem ? 'health-bar--warning' : ''}`}
       role={hasProblem ? 'alert' : undefined}
     >
-      <span>資料更新至 {formatDate(meta.data_date)}</span>
-      <span aria-hidden="true"> · </span>
-      <span>{summary}</span>
+      <div className="health-bar__main">
+        <span className="health-bar__dot" aria-hidden="true" />
+        <span className="health-bar__label">資料狀態</span>
+        <span>資料更新至 {formatDate(meta.data_date)}</span>
+        <span aria-hidden="true">·</span>
+        <strong>{summary}</strong>
+        {meta.benchmark_return_1y !== null && (
+          <>
+            <span className="health-bar__divider" aria-hidden="true" />
+            <span className="health-bar__benchmark">
+              大盤一年 {formatPercent(meta.benchmark_return_1y)}
+            </span>
+          </>
+        )}
+      </div>
       {/* 來源問題把**原因**整句寫出來,不是計數。使用者需要知道的是
           「哪一個來源、後果是什麼」,而不是「有幾個問題」。 */}
       {sourceIssues.length > 0 && (
@@ -64,14 +76,6 @@ export function HealthBar({ meta, now = new Date() }: Props) {
       {/* 大盤同期漲幅是整張表的判讀基準,不是健康狀態 —— 大盤漲九成的
           年份,連平庸的標的都會有漂亮的報酬與夏普值。沒有資料時整段不顯示,
           而不是顯示破折號:那會被誤讀成「大盤沒漲」。 */}
-      {meta.benchmark_return_1y !== null && (
-        <>
-          <span aria-hidden="true"> · </span>
-          <span className="health-bar__benchmark">
-            大盤一年 {formatPercent(meta.benchmark_return_1y)}
-          </span>
-        </>
-      )}
     </div>
   )
 }

@@ -35,52 +35,63 @@ export function Filters({
   return (
     <div className="filters">
       {categories.length > 0 && (
-        <div className="filters__chips">
-          {categories.map((c) => (
-            <button
-              key={c}
-              type="button"
-              aria-pressed={selected.includes(c)}
-              onClick={() => toggle(c)}
-            >
-              {c}
-            </button>
-          ))}
+        <div className="filters__group">
+          <span className="filters__label">類型</span>
+          <div className="filters__chips">
+            {categories.map((c) => (
+              <button
+                key={c}
+                type="button"
+                aria-pressed={selected.includes(c)}
+                onClick={() => toggle(c)}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
       {regions.length > 0 && (
-        <div className="filters__chips filters__chips--region" role="group"
-             aria-label="依地區篩選">
-          {regions.map((r) => (
-            <button
-              key={r}
-              type="button"
-              aria-pressed={selectedRegions.includes(r)}
-              onClick={() => toggleRegion(r)}
-            >
-              {r}
-            </button>
-          ))}
+        <div className="filters__group" role="group" aria-label="依地區篩選">
+          <span className="filters__label">市場</span>
+          <div className="filters__chips filters__chips--region">
+            {regions.map((r) => (
+              <button
+                key={r}
+                type="button"
+                aria-pressed={selectedRegions.includes(r)}
+                onClick={() => toggleRegion(r)}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
-      <input
-        type="search"
-        placeholder="搜尋代號或名稱"
-        aria-label="搜尋代號或名稱"
-        value={query}
-        onChange={(e) => onQueryChange(e.target.value)}
-      />
+      <div className="filters__utility">
+        <label className="filters__search">
+          <span className="filters__label">搜尋</span>
+          <input
+            type="search"
+            placeholder="輸入代號或名稱"
+            aria-label="搜尋代號或名稱"
+            value={query}
+            onChange={(e) => onQueryChange(e.target.value)}
+          />
+        </label>
 
-      <label className="filters__toggle">
-        <input
-          type="checkbox"
-          checked={showLevered}
-          onChange={(e) => onShowLeveredChange(e.target.checked)}
-        />
-        顯示槓桿與反向 ETF
-      </label>
+        <label className="filters__toggle">
+          <input
+            type="checkbox"
+            checked={showLevered}
+            onChange={(e) => onShowLeveredChange(e.target.checked)}
+          />
+          <span className="switch-track" aria-hidden="true" />
+          <span>顯示槓桿與反向 ETF</span>
+        </label>
+      </div>
     </div>
   )
 }

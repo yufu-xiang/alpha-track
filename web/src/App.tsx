@@ -18,15 +18,20 @@ import { formatPercent } from './lib/format'
 import { loadPrefs, savePrefs } from './lib/prefs'
 import { MAX_COMPARE, toggleCompare } from './lib/compare'
 import { hashFor, useRoute } from './lib/route'
-import { PERIODS, type PeriodCode } from './types'
+import { PERIODS, PERIOD_LABELS, type PeriodCode } from './types'
 
 // 排行榜是首屏；個股、比較、組合與工具頁依路由載入，避免使用者只看排行
 // 時也下載十一個試算工具和所有圖表程式。
-const EtfDetail = lazy(() => import('./components/EtfDetail').then((m) => ({ default: m.EtfDetail })))
-const Compare = lazy(() => import('./components/Compare').then((m) => ({ default: m.Compare })))
-const Portfolio = lazy(() => import('./components/Portfolio').then((m) => ({ default: m.Portfolio })))
-const Glossary = lazy(() => import('./components/Glossary').then((m) => ({ default: m.Glossary })))
-const Tools = lazy(() => import('./components/tools').then((m) => ({ default: m.Tools })))
+const EtfDetail = lazy(() => import('./components/EtfDetail')
+  .then((m) => ({ default: m.EtfDetail })))
+const Compare = lazy(() => import('./components/Compare')
+  .then((m) => ({ default: m.Compare })))
+const Portfolio = lazy(() => import('./components/Portfolio')
+  .then((m) => ({ default: m.Portfolio })))
+const Glossary = lazy(() => import('./components/Glossary')
+  .then((m) => ({ default: m.Glossary })))
+const Tools = lazy(() => import('./components/tools')
+  .then((m) => ({ default: m.Tools })))
 
 export function App() {
   const route = useRoute()
@@ -102,6 +107,7 @@ function Rankings() {
     }),
     [allRows, categories, regions, query, prefs.showLevered],
   )
+  const activeFilters = categories.length + regions.length + (query.trim() ? 1 : 0)
 
   if (result === null) {
     return <main className="app"><p>載入中…</p></main>
@@ -121,37 +127,115 @@ function Rankings() {
 
   return (
     <main className="app">
-      <header>
-        <h1>台股 ETF 績效排行</h1>
-        <p className="app__nav">
-          <a href={hashFor({ name: 'portfolio' })}>我的組合 →</a>
-          <a href={hashFor({ name: 'tools', tool: null })}>理財工具 →</a>
-          <a href={hashFor({ name: 'glossary' })}>名詞解釋 →</a>
-        </p>
+      <header className="app__header">
+        <div className="app__hero">
+          <img
+            className="brand-mark"
+            src={`${import.meta.env.BASE_URL}icon.png`}
+            alt=""
+            aria-hidden="true"
+            draggable="false"
+          />
+          <div className="app__intro">
+            <p className="eyebrow">ALPHA TRACK · TAIWAN ETF</p>
+            <h1>ETF Rankings</h1>
+            <p className="app__subtitle">把全市場報酬、風險與相對強弱，整理成一張可比較的表。</p>
+          </div>
+          <nav className="app__nav" aria-label="主要功能">
+            <a href={hashFor({ name: 'portfolio' })}>
+              <span aria-hidden="true">◎</span> 我的組合
+            </a>
+            <a href={hashFor({ name: 'tools', tool: null })}>
+              <span aria-hidden="true">◇</span> 理財工具
+            </a>
+            <a href={hashFor({ name: 'glossary' })}>
+              <span aria-hidden="true">?</span> 指標詞典
+            </a>
+          </nav>
+        </div>
+
+        <div className="market-summary" aria-label="市場摘要">
+          <div className="market-summary__item">
+            <span>市場標的</span>
+            <strong>{result.meta.etf_count}</strong>
+            <small>檔 ETF</small>
+          </div>
+          <div className="market-summary__item">
+            <span>目前顯示</span>
+            <strong>{rows.length}</strong>
+            <small>檔結果</small>
+          </div>
+          <div className="market-summary__item market-summary__item--accent">
+            <span>排序依據</span>
+            <strong>{PERIOD_LABELS[sortBy]}</strong>
+            <small>含息總報酬</small>
+          </div>
+        </div>
+
         <HealthBar meta={result.meta} />
       </header>
 
-      <PeriodTabs active={sortBy} onSelect={handlePeriodSelect} />
+      <section className="dashboard-controls" aria-label="排行榜控制">
+        <div className="dashboard-controls__section dashboard-controls__section--period">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">PERFORMANCE WINDOW</p>
+              <h2>選擇排序期間</h2>
+            </div>
+            <span className="section-heading__hint">點擊表頭可切換升冪／降冪</span>
+          </div>
+          <PeriodTabs active={sortBy} onSelect={handlePeriodSelect} />
+        </div>
 
-      <div className="controls">
-        <Filters
-          categories={availableCategories}
-          selected={categories}
-          regions={availableRegions}
-          selectedRegions={regions}
-          onRegionsChange={setRegions}
-          query={query}
-          showLevered={prefs.showLevered}
-          onCategoriesChange={setCategories}
-          onQueryChange={setQuery}
-          onShowLeveredChange={(v) => setPrefs((p) => ({ ...p, showLevered: v }))}
-        />
-        <ColumnPicker
-          selected={prefs.visibleColumns}
-          onChange={handleColumnsChange}
-          selectedRisk={prefs.visibleRisk}
-          onRiskChange={(next) => setPrefs((p) => ({ ...p, visibleRisk: next }))}
-        />
+        <div className="dashboard-controls__section">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">REFINE RESULTS</p>
+              <h2>篩選市場</h2>
+            </div>
+            <div className="controls__actions">
+              {activeFilters > 0 && (
+                <button
+                  type="button"
+                  className="clear-filters"
+                  onClick={() => {
+                    setCategories([])
+                    setRegions([])
+                    setQuery('')
+                  }}
+                >
+                  清除 {activeFilters} 項篩選
+                </button>
+              )}
+              <ColumnPicker
+                selected={prefs.visibleColumns}
+                onChange={handleColumnsChange}
+                selectedRisk={prefs.visibleRisk}
+                onRiskChange={(next) => setPrefs((p) => ({ ...p, visibleRisk: next }))}
+              />
+            </div>
+          </div>
+          <Filters
+            categories={availableCategories}
+            selected={categories}
+            regions={availableRegions}
+            selectedRegions={regions}
+            onRegionsChange={setRegions}
+            query={query}
+            showLevered={prefs.showLevered}
+            onCategoriesChange={setCategories}
+            onQueryChange={setQuery}
+            onShowLeveredChange={(v) => setPrefs((p) => ({ ...p, showLevered: v }))}
+          />
+        </div>
+      </section>
+
+      <div className="ranking-heading">
+        <div>
+          <p className="eyebrow">MARKET RANKING</p>
+          <h2>{PERIOD_LABELS[sortBy]}績效排行榜</h2>
+        </div>
+        <p><strong>{rows.length}</strong> / {allRows.length} 檔</p>
       </div>
 
       <RankingTable
