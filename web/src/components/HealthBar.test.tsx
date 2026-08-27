@@ -75,3 +75,49 @@ describe('HealthBar 大盤對照', () => {
     expect(screen.queryByText(/大盤一年/)).not.toBeInTheDocument()
   })
 })
+
+describe('來源層級的問題(代號 *)', () => {
+  // 與既有測試一致地固定 now —— 不固定的話 fixture 的 data_date 會隨
+  // 真實日期變舊而觸發「已 N 天未更新」,把要驗的訊號蓋掉。
+  const NOW = new Date('2026-08-21T12:00:00Z')
+
+  const sourceIssue = {
+    code: '*',
+    reason: '今日完全沒有淨值資料,折溢價無法計算,而淨值來源沒有歷史、這一天補不回來',
+  }
+
+  it('把原因整句寫出來,不是計數', () => {
+    // 使用者需要知道的是「哪一個來源、後果是什麼」,不是「有幾個問題」。
+    render(<HealthBar meta={{ ...fixtureMeta, anomalies: [sourceIssue] }} now={NOW} />)
+    expect(screen.getByText(/淨值來源沒有歷史/)).toBeInTheDocument()
+  })
+
+  it('升級成 alert —— 來源靜默回空時畫面上的數字看起來完全正常', () => {
+    render(<HealthBar meta={{ ...fixtureMeta, anomalies: [sourceIssue] }} now={NOW} />)
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+  })
+
+  it('不與「N 檔價格異常」混為一談', () => {
+    // 「淨值來源掛了」說成「1 檔價格異常」是完全不同的嚴重度。
+    render(<HealthBar meta={{ ...fixtureMeta, anomalies: [sourceIssue] }} now={NOW} />)
+    expect(screen.queryByText(/檔價格異常/)).not.toBeInTheDocument()
+  })
+
+  it('個股層級的異常仍然只計數,且不升級成 alert', () => {
+    render(<HealthBar meta={{
+      ...fixtureMeta,
+      anomalies: [{ code: '00631L', reason: '單日變動 +40% 超過門檻' }],
+    }} now={NOW} />)
+    expect(screen.getByText(/1 檔價格異常/)).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('兩種混在一起時各自呈現', () => {
+    render(<HealthBar meta={{
+      ...fixtureMeta,
+      anomalies: [sourceIssue, { code: '00631L', reason: '單日變動 +40%' }],
+    }} now={NOW} />)
+    expect(screen.getByText(/1 檔價格異常/)).toBeInTheDocument()
+    expect(screen.getByText(/淨值來源沒有歷史/)).toBeInTheDocument()
+  })
+})

@@ -264,6 +264,32 @@ class Database:
             rows,
         )
 
+    def count_prices_on(self, day: date) -> int:
+        return self.conn.execute(
+            "SELECT COUNT(*) c FROM prices WHERE date = ?",
+            (day.isoformat(),)).fetchone()["c"]
+
+    def count_navs_on(self, day: date) -> int:
+        return self.conn.execute(
+            "SELECT COUNT(*) c FROM navs WHERE date = ?",
+            (day.isoformat(),)).fetchone()["c"]
+
+    def previous_trading_day(self, day: date) -> date | None:
+        """資料庫裡早於 `day` 的最後一個有價格的日子。
+
+        用「資料庫裡的前一天」而不是「日曆前一天」:連假之後拿一個
+        沒有資料的日期當基準,任何比較都會誤判成腰斬。
+        """
+        row = self.conn.execute(
+            "SELECT MAX(date) d FROM prices WHERE date < ?",
+            (day.isoformat(),)).fetchone()
+        return date.fromisoformat(row["d"]) if row and row["d"] else None
+
+    def count_dividends_with_prev_close(self) -> int:
+        return self.conn.execute(
+            "SELECT COUNT(*) c FROM dividends WHERE prev_close IS NOT NULL"
+        ).fetchone()["c"]
+
     def latest_holdings_month(self) -> str | None:
         """已抓到的最新月份(`YYYYMM`)。用來決定要不要再抓。
 

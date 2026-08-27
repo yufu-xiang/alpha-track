@@ -22,6 +22,7 @@ from pathlib import Path
 import yaml
 
 from .categories import UNCLASSIFIED, classify, is_etf_code, load_category_map
+from .health import check_sources
 from .fundnames import build_index, resolve
 from .compute import compute_etf_metrics
 from .export import (build_benchmark_series, build_detail, build_meta,
@@ -207,6 +208,9 @@ def run_export(
 
         stored = db.get_profiles()
         bench_closes = db.get_benchmark(BENCHMARK_NAME)
+        # 來源健康檢查。走 anomalies 管道,因此會出現在前端的健康狀態列 ——
+        # 而不是只留在沒人看的 CI 日誌裡。
+        anomalies = list(anomalies) + check_sources(db, base_date)
         rows = []
         unclassified: list[str] = []
         for code in db.all_codes():
