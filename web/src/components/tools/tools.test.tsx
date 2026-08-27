@@ -334,3 +334,84 @@ describe('排行的涵蓋率', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })
+
+describe('報酬相關性', () => {
+  /** 造兩檔幾乎同步、一檔反向的資料。 */
+  function mockSeries() {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const m = /etf\/([A-Z0-9]+)\.json/.exec(url)
+      if (!m) {
+        return { ok: true, json: async () => (url.includes('meta') ? fixtureMeta : fixtureRankings) }
+      }
+      const code = m[1]!
+      const sign = code === '0056' ? -1 : 1
+      const scale = code === '006208' ? 1.02 : 1
+      const adj = [100]
+      for (let i = 0; i < 300; i += 1) {
+        adj.push(adj[adj.length - 1]! * (1 + sign * scale * Math.sin(i / 4) / 100))
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          ...fixtureRankings.etfs[0], code, name: `測試${code}`,
+          exchange: 'TWSE', issuer: null, tracking_index: null, listing_date: null,
+          annualized: {}, excess: {}, dividends: [],
+          premium_low: null, premium_high: null, premium_days_ratio: null,
+          premium_sample: 0, premium_series: { start: null, days: [], premium: [] },
+          series: { start: '2025-01-01', days: adj.map((_, i) => i), adj, close: adj },
+        }),
+      }
+    }))
+  }
+
+  beforeEach(() => mockSeries())
+
+  async function renderCorr() {
+    render(<Tools tool="correlation" />)
+    await waitFor(() => expect(screen.getByRole('table')).toBeInTheDocument())
+  }
+
+  it('顯著說明這不是成分股重疊度 —— 不能讓人以為看到的是持股比對', async () => {
+    await renderCorr()
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent(/這不是成分股重疊度/)
+    expect(alert).toHaveTextContent(/沒有任何公開的統一來源/)
+  })
+
+  it('對角線為 1,矩陣對稱', async () => {
+    await renderCorr()
+    const rows = screen.getAllByRole('row').slice(1)
+    const grid = rows.map((r) => within(r).getAllByRole('cell').map((c) => c.textContent!))
+    expect(grid[0]![0]).toBe('1.00')
+    expect(grid[1]![1]).toBe('1.00')
+    expect(grid[0]![1]).toBe(grid[1]![0])
+  })
+
+  it('同向的兩檔接近 1,反向的接近 -1', async () => {
+    await renderCorr()
+    const rows = screen.getAllByRole('row').slice(1)
+    const grid = rows.map((r) => within(r).getAllByRole('cell').map((c) => c.textContent!))
+    // 0050 vs 006208 同向、0050 vs 0056 反向
+    expect(Number(grid[0]![1])).toBeGreaterThan(0.99)
+    expect(Number(grid[0]![2])).toBeLessThan(-0.99)
+  })
+
+  it('點出最高的一組 —— 那是使用者真正要的答案', async () => {
+    await renderCorr()
+    expect(screen.getByRole('status')).toHaveTextContent(/最高的一組是/)
+    expect(screen.getByRole('status')).toHaveTextContent(/分散/)
+  })
+
+  it('可移除標的,少於兩檔時說明原因', async () => {
+    await renderCorr()
+    await userEvent.click(screen.getByRole('button', { name: '移除 0056' }))
+    await userEvent.click(screen.getByRole('button', { name: '移除 006208' }))
+    await waitFor(() =>
+      expect(screen.getByText(/至少要兩檔才比得出相關性/)).toBeInTheDocument())
+  })
+
+  it('說明相關性會隨市況改變 —— 崩盤時往往一起跌', async () => {
+    await renderCorr()
+    expect(screen.getByText(/崩盤時往往一起跌/)).toBeInTheDocument()
+  })
+})

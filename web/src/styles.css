@@ -724,3 +724,9 @@ footer { margin-top: 1.5rem; font-size: 0.8125rem; color: var(--fg-muted); }
   background: var(--warn-bg);
   border-radius: 3px;
 }
+
+/* 相關性矩陣。只有「高到值得注意」才上色,而且用警告色 ——
+   這裡的「高」不是「漲」,借用漲跌色會讀成完全不同的意思。 */
+.corr-self { color: var(--fg-muted); }
+.corr-high { color: var(--warn-fg); font-weight: 600; }
+.tool-add { align-self: flex-end; padding: 0.35rem 0.9rem; }

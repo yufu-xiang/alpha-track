@@ -6,6 +6,7 @@
  * 而這些結果是拿來做財務決定的。
  */
 import { hashFor } from '../../lib/route'
+import { Correlation } from './Correlation'
 import { Dca } from './Dca'
 import { Fire } from './Fire'
 import { Lohas } from './Lohas'
@@ -52,6 +53,12 @@ export const TOOLS: ToolEntry[] = [
     title: '融資維持率計算',
     blurb: '依持股市值與融資金額算維持率與追繳價位。',
     Component: Margin,
+  },
+  {
+    id: 'correlation',
+    title: 'ETF 報酬相關性',
+    blurb: '最多五檔的相關係數矩陣,看一起買到底分不分散。',
+    Component: Correlation,
   },
   {
     id: 'yield',
