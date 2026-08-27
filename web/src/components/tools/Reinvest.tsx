@@ -33,8 +33,13 @@ export function Reinvest() {
           date: new Date(base + d * 86_400_000).toISOString().slice(0, 10),
           close: r.detail.series.close[i]!,
         })),
+        // amount_adj 而非 amount:價格序列已被還原,配息金額是原始金額,
+        // 混用會讓分割過的標的離譜地錯(0050 實測高估 155.6%)。
+        // 舊版快取沒有這個欄位時退回 amount,並由 scaleKnown 帶出不確定性。
         dividends: r.detail.dividends.map((d) => ({
-          ex_date: d.ex_date, amount: d.amount,
+          ex_date: d.ex_date,
+          amount: d.amount_adj ?? d.amount,
+          scaleKnown: d.scale_known ?? false,
         })),
       })
     })
@@ -54,6 +59,10 @@ export function Reinvest() {
     : []
 
   const result = data ? compareReinvestment(prices, data.dividends, initial) : null
+  // 只看真正納入計算的那些(區間之外的不影響結果)
+  const unknownScale = data
+    ? data.dividends.filter((d) => !d.scaleKnown && (!truncated || d.ex_date >= firstDiv!)).length
+    : 0
   const gap = result && result.cashOut > 0 ? result.reinvested / result.cashOut - 1 : null
 
   return (
@@ -73,6 +82,14 @@ export function Reinvest() {
       <datalist id="ri-codes">
         {rows.map((r) => <option key={r.code} value={r.code}>{r.name}</option>)}
       </datalist>
+
+      {unknownScale > 0 && (
+        <p role="alert" className="portfolio__remind">
+          有 {unknownScale} 筆配息無法確定尺度 —— 缺少證交所的除權息前收盤價,
+          或比值對不上任何乾淨的分割倍率。這幾筆以原始金額計算,
+          若該標的做過分割,結果會偏高。
+        </p>
+      )}
 
       {truncated && (
         <p role="alert" className="portfolio__remind">

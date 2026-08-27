@@ -1,3 +1,4 @@
+import sqlite3
 from datetime import date
 from pathlib import Path
 
@@ -214,3 +215,49 @@ def test_recording_a_fetch_twice_updates_rather_than_duplicates(tmp_path):
         db.record_dividend_fetch("0050", date(2026, 8, 25))
         n = db.conn.execute("SELECT COUNT(*) FROM dividend_fetches").fetchone()[0]
         assert n == 1
+
+
+def test_migration_adds_prev_close_to_an_existing_database(tmp_path):
+    """SCHEMA 是 CREATE TABLE IF NOT EXISTS —— 對既有的表完全不生效。
+
+    線上那份資料庫累積了三年歷史,砍掉重建等於永久失去淨值那段
+    (淨值來源沒有歷史,補不回來),所以新增欄位必須能就地遷移。
+    """
+    db_path = tmp_path / "old.db"
+    con = sqlite3.connect(db_path)
+    con.execute("""CREATE TABLE dividends (
+        code TEXT NOT NULL, ex_date TEXT NOT NULL, pay_date TEXT,
+        amount REAL NOT NULL, PRIMARY KEY (code, ex_date))""")
+    con.execute("INSERT INTO dividends VALUES ('0050','2024-01-17',NULL,3.0)")
+    con.commit()
+    con.close()
+
+    with Database(db_path) as db:
+        db.init_schema()
+        rows = db.get_dividends("0050")
+        assert len(rows) == 1
+        assert rows[0].amount == 3.0
+        assert rows[0].prev_close is None
+        # 遷移後可以寫入新欄位
+        db.upsert_dividends([DividendRecord(
+            code="0050", ex_date=date(2024, 1, 17), pay_date=None,
+            amount=3.0, prev_close=131.65)])
+        assert db.get_dividends("0050")[0].prev_close == 131.65
+
+
+def test_prev_close_is_not_wiped_by_a_source_that_lacks_it(tmp_path):
+    """FinMind 給金額、證交所給前收盤價,兩邊各補一半。
+
+    後寫的那一方不該把前一方補好的欄位清成 NULL(同 ledger R26)。
+    """
+    with Database(tmp_path / "d.db") as db:
+        db.init_schema()
+        db.upsert_dividends([DividendRecord(
+            code="0050", ex_date=date(2024, 1, 17), pay_date=None,
+            amount=3.0, prev_close=131.65)])
+        db.upsert_dividends([DividendRecord(
+            code="0050", ex_date=date(2024, 1, 17), pay_date=date(2024, 2, 21),
+            amount=3.0, prev_close=None)])
+        r = db.get_dividends("0050")[0]
+        assert r.prev_close == 131.65
+        assert r.pay_date == date(2024, 2, 21)

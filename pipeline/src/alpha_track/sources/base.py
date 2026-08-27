@@ -2,11 +2,12 @@
 
 網路層與解析層刻意分離:解析為純函式,可用 fixture 測試而不連網。
 
-日期格式有三種且外觀相似(見 docs/data-sources.md 第 6 點),故集中處理:
-民國年無分隔、民國年斜線、西元年句點。各 adapter 不得自行改寫。
+日期格式有四種且外觀相似(見 docs/data-sources.md 第 6 點),故集中處理:
+民國年無分隔、民國年斜線、民國年中文、西元年句點。各 adapter 不得自行改寫。
 """
 from __future__ import annotations
 
+import re
 import ssl
 import time
 from datetime import date
@@ -75,6 +76,23 @@ def parse_roc_compact(value: object) -> date | None:
         return None
     try:
         return date(int(text[:-4]) + 1911, int(text[-4:-2]), int(text[-2:]))
+    except ValueError:
+        return None
+
+
+def parse_roc_cjk(value: object) -> date | None:
+    """民國年中文分隔:'115年01月17日' → 2026-01-17。
+
+    TWSE 舊站的除權息表用這個格式,與同一個站上的斜線格式(parse_roc_slash)
+    和 openapi 的緊湊格式(parse_roc_compact)都不同 —— 三種並存,
+    不能共用一個解析器。
+    """
+    text = str(value or "").strip()
+    m = re.fullmatch(r"(\d{2,3})年(\d{1,2})月(\d{1,2})日", text)
+    if not m:
+        return None
+    try:
+        return date(int(m.group(1)) + 1911, int(m.group(2)), int(m.group(3)))
     except ValueError:
         return None
 

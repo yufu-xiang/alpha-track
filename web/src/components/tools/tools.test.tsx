@@ -220,7 +220,10 @@ describe('股息再投入', () => {
             ...fixtureRankings.etfs[0],
             exchange: 'TWSE', issuer: null, tracking_index: null, listing_date: null,
             annualized: {}, excess: {},
-            dividends: [{ ex_date: '2015-01-01', pay_date: null, amount: 1 }],
+            dividends: [{
+              ex_date: '2015-01-01', pay_date: null,
+              amount: 1, amount_adj: 1, scale_known: true,
+            }],
             series: {
               start: '2008-01-01',
               days: [0, 2557, 3653],
@@ -243,6 +246,65 @@ describe('股息再投入', () => {
     })
     // 起算日改用配息的起點,而不是最早的價格
     expect(screen.getByText(/涵蓋 2015-01-01 至/)).toBeInTheDocument()
+  })
+
+  it('用 amount_adj 而非 amount —— 用錯不會報錯,只會安靜地錯', async () => {
+    // 0050 的真實數字:2024-01-17 配 3.000(分割前),換算後 0.750
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const body =
+        url.includes('meta') ? fixtureMeta
+        : url.includes('benchmark') ? benchmark(20)
+        : url.includes('etf/') ? {
+            ...fixtureRankings.etfs[0],
+            exchange: 'TWSE', issuer: null, tracking_index: null, listing_date: null,
+            annualized: {}, excess: {},
+            dividends: [{
+              ex_date: '2024-01-01', pay_date: null,
+              amount: 3.0, amount_adj: 0.75, scale_known: true,
+            }],
+            series: {
+              start: '2024-01-01', days: [0, 30, 60],
+              adj: [30, 31, 32], close: [30, 31, 32],
+            },
+          }
+        : fixtureRankings
+      return { ok: true, json: async () => body }
+    }))
+    render(<Tools tool="reinvest" />)
+    await waitFor(() =>
+      expect(screen.getByText('累積領到的配息')).toBeInTheDocument())
+    // 100 萬 ÷ 30 = 33,333 股 × 0.75 = 25,000(用 amount 會是 100,000)
+    const row = screen.getByText('累積領到的配息').closest('.card')!
+    expect(row.textContent).toMatch(/25,000/)
+  })
+
+  it('尺度不確定時顯著警告 —— 不靜靜地用一個猜的數字', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      const body =
+        url.includes('meta') ? fixtureMeta
+        : url.includes('benchmark') ? benchmark(20)
+        : url.includes('etf/') ? {
+            ...fixtureRankings.etfs[0],
+            exchange: 'TWSE', issuer: null, tracking_index: null, listing_date: null,
+            annualized: {}, excess: {},
+            dividends: [{
+              ex_date: '2024-01-01', pay_date: null,
+              amount: 3.0, amount_adj: 3.0, scale_known: false,
+            }],
+            series: {
+              start: '2024-01-01', days: [0, 30, 60],
+              adj: [30, 31, 32], close: [30, 31, 32],
+            },
+          }
+        : fixtureRankings
+      return { ok: true, json: async () => body }
+    }))
+    render(<Tools tool="reinvest" />)
+    await waitFor(() => {
+      const alert = screen.getByRole('alert')
+      expect(alert).toHaveTextContent(/無法確定尺度/)
+      expect(alert).toHaveTextContent(/結果會偏高/)
+    })
   })
 
   it('沒有配息的標的直說兩種做法沒有差別,不印一組看似有意義的數字', async () => {

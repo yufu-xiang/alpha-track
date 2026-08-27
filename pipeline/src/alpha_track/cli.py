@@ -77,6 +77,21 @@ YAHOO_CHART_URL = (
     "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
     "?period1=0&period2=9999999999&interval=1d&events=div"
 )
+TWSE_EX_RIGHTS_URL = (
+    "https://www.twse.com.tw/rwd/zh/exRight/TWT49U"
+    "?startDate={start}&endDate={end}&response=json"
+)
+"""證交所除權除息計算結果表。一次請求可取一整段區間的**全市場**紀錄。
+
+採用它不是為了配息金額(FinMind 已經有),而是為了**除權息前收盤價** ——
+那是當時的真實價格,未經分割還原。我方的價格序列來自 Yahoo、已被還原,
+兩者相除就是那個時點的累積分割倍率。沒有它,分割過的標的在股息再投入
+試算裡會離譜地錯(實測 0050 高估 155.6%)。
+"""
+
+EX_RIGHTS_EARLIEST_YEAR = 2015
+"""除權息回補的起始年。與 FinMind 的配息起點(2015)一致。"""
+
 TAIEX_TR_MONTHLY_URL = (
     "https://www.twse.com.tw/rwd/zh/TAIEX/MFI94U?date={date}&response=json"
 )
@@ -363,12 +378,23 @@ def fetch_finmind_dividends(code: str) -> list[DividendRecord]:
     return parse_finmind_dividends(fetch_json(FINMIND_DIVIDEND_URL.format(code=code)))
 
 
+def fetch_twse_ex_rights(start: date, end: date) -> list[DividendRecord]:
+    """向證交所取一段區間的全市場除權息紀錄。"""
+    from .sources.base import fetch_json
+    from .sources.twse import parse_twse_ex_rights
+
+    return parse_twse_ex_rights(fetch_json(TWSE_EX_RIGHTS_URL.format(
+        start=start.strftime("%Y%m%d"), end=end.strftime("%Y%m%d"))))
+
+
 def run_backfill(
     settings: Settings,
     *,
     fetch_history: FetchHistory = fetch_yahoo_history,
     fetch_benchmark: FetchBenchmark | None = fetch_taiex_tr_history,
     fetch_dividends: FetchDividends | None = fetch_finmind_dividends,
+    fetch_ex_rights: Callable[[date, date], list[DividendRecord]] | None
+        = fetch_twse_ex_rights,
 ) -> None:
     """為缺歷史的代號回補完整還原股價,並補齊大盤報酬指數。
 
@@ -411,6 +437,22 @@ def run_backfill(
                 if rows:
                     logger.info("%s 配息 %d 筆", code, len(rows))
 
+        # 除權息前收盤價:逐年補,已經有 prev_close 的年份跳過。
+        # 一年一次請求就能拿到全市場,所以整段歷史只要十來次 ——
+        # 但也沒有理由每天重來,故以「該年是否已有 prev_close」當快門。
+        if fetch_ex_rights is not None:
+            for year in range(EX_RIGHTS_EARLIEST_YEAR, date.today().year + 1):
+                if db.has_prev_close_for_year(year):
+                    continue
+                try:
+                    rows = fetch_ex_rights(date(year, 1, 1), date(year, 12, 31))
+                except Exception as exc:
+                    logger.warning("%d 年除權息取得失敗:%s", year, exc)
+                    continue
+                db.upsert_dividends(rows)
+                logger.info("%d 年除權息 %d 筆", year, len(rows))
+                time.sleep(DIVIDEND_REQUEST_INTERVAL)
+
         # 大盤報酬指數:Beta 與超額報酬的基準。缺了不影響其他指標。
         #
         # 起點自資料庫既有的最後一筆之後續抓,不是每次都回頭補十年:
@@ -437,6 +479,8 @@ def run_update(
     fetch_history: FetchHistory = fetch_yahoo_history,
     fetch_benchmark: FetchBenchmark | None = fetch_taiex_tr_history,
     fetch_dividends: FetchDividends | None = fetch_finmind_dividends,
+    fetch_ex_rights: Callable[[date, date], list[DividendRecord]] | None
+        = fetch_twse_ex_rights,
 ) -> None:
     """每日更新:抓取 → 篩出 ETF → 驗證 → 寫入 → 回補 → 計算 → 匯出。
 
@@ -487,7 +531,8 @@ def run_update(
     # 否則所有多期間報酬都會是 null(R1)。
     # 基準也在此更新 —— 排程只跑 update,不在這裡補的話 Beta 永遠是 null。
     run_backfill(settings, fetch_history=fetch_history,
-                 fetch_benchmark=fetch_benchmark, fetch_dividends=fetch_dividends)
+                 fetch_benchmark=fetch_benchmark, fetch_dividends=fetch_dividends,
+                 fetch_ex_rights=fetch_ex_rights)
 
     run_export(settings, is_stale=False, anomalies=result.flagged)
 

@@ -23,7 +23,10 @@ const detail = {
   premium_series: {
     start: '2026-06-01', days: [0, 1, 2], premium: [0.001, -0.002, 0.003],
   },
-  dividends: [{ ex_date: '2026-07-21', pay_date: '2026-08-10', amount: 0.6 }],
+  dividends: [{
+    ex_date: '2026-07-21', pay_date: '2026-08-10',
+    amount: 0.6, amount_adj: 0.6, scale_known: true,
+  }],
 }
 
 function mockOk(overrides: Record<string, unknown> = {}) {

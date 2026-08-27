@@ -10,8 +10,10 @@ from __future__ import annotations
 import re
 from datetime import date
 
-from ..models import EtfProfile, NavRecord, PriceRecord
-from .base import parse_ad_dot, parse_roc_compact, parse_roc_slash, to_float
+from ..models import DividendRecord, EtfProfile, NavRecord, PriceRecord
+from .base import (
+    parse_ad_dot, parse_roc_cjk, parse_roc_compact, parse_roc_slash, to_float,
+)
 
 
 def parse_twse_daily(payload: list[dict], trade_date: date) -> list[PriceRecord]:
@@ -203,3 +205,35 @@ def _parse_mis_date(raw: object) -> date | None:
         return date(int(text[:4]), int(text[4:6]), int(text[6:]))
     except ValueError:
         return None
+
+
+def parse_twse_ex_rights(payload: dict) -> list[DividendRecord]:
+    """解析證交所除權除息計算結果表(TWT49U)。
+
+    一次請求可取整個日期區間的**全市場**紀錄(實測 2024 全年 1184 筆,
+    其中 232 筆是 ETF),因此回補十年只要十幾次請求。
+
+    這個來源的價值不在配息金額本身(FinMind 已經有),而在
+    **除權息前收盤價** —— 那是當時的真實價格,未經分割還原。
+    我方的價格序列來自 Yahoo、已被還原,兩者的比值就是累積分割倍率。
+    沒有它,分割過的標的在股息再投入試算裡會離譜地錯(實測 0050 高估 155.6%)。
+
+    只取「息」:「權」是股票股利,會改變股數而非給付現金,
+    當成配息金額算進去會憑空多出一筆錢。
+    """
+    rows: list[DividendRecord] = []
+    for item in payload.get("data") or []:
+        if not isinstance(item, list) or len(item) < 7:
+            continue
+        ex_date = parse_roc_cjk(item[0])
+        code = str(item[1]).strip()
+        prev_close = to_float(item[3])
+        amount = to_float(item[5])
+        kind = str(item[6]).strip()
+        if ex_date is None or not code or amount is None or kind != "息":
+            continue
+        rows.append(DividendRecord(
+            code=code, ex_date=ex_date, pay_date=None,
+            amount=amount, prev_close=prev_close,
+        ))
+    return rows

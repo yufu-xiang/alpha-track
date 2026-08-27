@@ -174,13 +174,80 @@ def build_detail(
             "close": [round(p.close, 4) for p in prices],
         },
         # 新到舊:配息表最常看的是「最近配了多少」。
-        "dividends": [
-            {"ex_date": d.ex_date.isoformat(),
-             "pay_date": d.pay_date.isoformat() if d.pay_date else None,
-             "amount": d.amount}
-            for d in sorted(dividends, key=lambda x: x.ex_date, reverse=True)
-        ],
+        "dividends": _dividend_rows(dividends, prices),
     }
+
+
+SPLIT_RATIOS = (2, 3, 4, 5, 6, 7, 8, 10)
+"""可接受的分割倍率。台股的分割與反分割都落在這個範圍。"""
+
+SPLIT_TOLERANCE = 0.06
+"""比值與整數倍率的容許偏差。
+
+除權息前收盤價是**除息前一日**的收盤,我方取的是同日或往前最近的一筆,
+兩者本來就可能差一兩天的漲跌,故容差比純粹的數值誤差寬一些。
+"""
+
+
+def _dividend_rows(
+    dividends: Sequence[DividendRecord], prices: Sequence[PriceRecord]
+) -> list[dict]:
+    """配息紀錄,並附上**換算到價格序列尺度**的金額。
+
+    為什麼需要換算:配息金額是當時的原始金額,我方的價格序列來自 Yahoo、
+    對歷史日期已除以分割倍率。兩者混用會讓分割過的標的算出離譜的結果 ——
+    實測 0050 的股息再投入試算因此高估 155.6%。
+
+    倍率由證交所公告的除權息前收盤價與我方同期價格相除得到,
+    並且只接受乾淨的整數倍率:對不上就維持原值並標記,
+    寧可少換算也不要換算錯 —— 換算錯的數字看起來一樣合理。
+    """
+    by_date = {p.date: p for p in prices}
+    dates = sorted(by_date)
+
+    def close_near(target: date) -> float | None:
+        """取除息日**前一個**交易日的收盤,與除權息前收盤價同一天。"""
+        for d in reversed(dates):
+            if d < target:
+                return by_date[d].close
+        return None
+
+    rows = []
+    for d in sorted(dividends, key=lambda x: x.ex_date, reverse=True):
+        factor = 1.0
+        known = False
+        if d.prev_close and d.prev_close > 0:
+            ours = close_near(d.ex_date)
+            if ours and ours > 0:
+                factor = _snap_split_factor(ours / d.prev_close)
+                known = factor is not None
+                factor = factor if known else 1.0
+        rows.append({
+            "ex_date": d.ex_date.isoformat(),
+            "pay_date": d.pay_date.isoformat() if d.pay_date else None,
+            "amount": d.amount,
+            # 換算到價格序列的尺度。與 amount 相同時代表沒有分割,
+            # 或是我們不確定 —— 由 scale_known 區分這兩件事。
+            "amount_adj": round(d.amount * factor, 6),
+            "scale_known": known,
+        })
+    return rows
+
+
+def _snap_split_factor(raw: float) -> float | None:
+    """把比值對到乾淨的分割倍率(或其倒數);對不到回 None。"""
+    if raw <= 0:
+        return None
+    if abs(raw - 1) <= SPLIT_TOLERANCE:
+        return 1.0
+    for r in SPLIT_RATIOS:
+        # 兩側都用**相對**誤差:|raw×r − 1| 本身已經是相對量,
+        # 再乘一次 r 會讓倒數那一側的門檻鬆掉數倍(實測把 0.38 判成 1/3)。
+        if abs(raw * r - 1) <= SPLIT_TOLERANCE:
+            return 1.0 / r
+        if abs(raw / r - 1) <= SPLIT_TOLERANCE:
+            return float(r)
+    return None
 
 
 def _premium_series(navs: Sequence[NavRecord]) -> dict:

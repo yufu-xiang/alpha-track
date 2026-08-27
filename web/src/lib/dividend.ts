@@ -15,7 +15,10 @@ export interface PricePoint {
 
 export interface DividendEvent {
   ex_date: string
+  /** 已換算到價格序列尺度的每股配息(契約的 amount_adj)。 */
   amount: number
+  /** 換算倍率是否確定。false 時呼叫端應提醒使用者結果可能不準。 */
+  scaleKnown?: boolean
 }
 
 export interface ReinvestResult {

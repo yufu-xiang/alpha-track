@@ -692,3 +692,50 @@ class TestParseTwseMisEtf:
         from alpha_track.sources.twse import parse_twse_mis_etf
         assert parse_twse_mis_etf({}) == []
         assert parse_twse_mis_etf({"a1": []}) == []
+
+
+class TestParseTwseExRights:
+    """證交所除權除息計算結果表(TWT49U)。對著 2024 全年的真實 fixture 跑。"""
+
+    def test_parses_the_real_payload(self):
+        from alpha_track.sources.twse import parse_twse_ex_rights
+        rows = parse_twse_ex_rights(load_fixture("twse_ex_rights_2024.json"))
+        assert len(rows) > 900
+        assert all(r.ex_date.year == 2024 for r in rows)
+
+    def test_carries_the_official_pre_ex_close(self):
+        """這個欄位才是採用此來源的理由 —— 它是**未經分割還原**的當時價格。"""
+        from alpha_track.sources.twse import parse_twse_ex_rights
+        rows = {(r.code, r.ex_date): r
+                for r in parse_twse_ex_rights(load_fixture("twse_ex_rights_2024.json"))}
+        r = rows[("0050", date(2024, 1, 17))]
+        assert r.amount == pytest.approx(3.0)
+        assert r.prev_close == pytest.approx(131.65)
+
+    def test_skips_stock_dividends(self):
+        """「權」是股票股利,改變的是股數不是現金。
+
+        當成配息金額算進去會憑空多出一筆錢。
+        """
+        from alpha_track.sources.twse import parse_twse_ex_rights
+        payload = {"data": [
+            ["113年01月17日", "0050", "元大台灣50", "131.65", "128.65",
+             "3.000000", "息", "", "", "", "", "", "", "", ""],
+            ["113年07月01日", "2317", "鴻海", "200.00", "190.00",
+             "10.00", "權", "", "", "", "", "", "", "", ""],
+        ]}
+        rows = parse_twse_ex_rights(payload)
+        assert [r.code for r in rows] == ["0050"]
+
+    def test_cjk_date_format_is_its_own_parser(self):
+        """同一個站上有三種民國年格式,不能共用解析器。"""
+        from alpha_track.sources.base import parse_roc_cjk, parse_roc_slash
+        assert parse_roc_cjk("115年01月17日") == date(2026, 1, 17)
+        assert parse_roc_cjk("113年1月7日") == date(2024, 1, 7)
+        assert parse_roc_cjk("115/01/17") is None
+        assert parse_roc_slash("115年01月17日") is None
+
+    def test_empty_payload_returns_empty(self):
+        from alpha_track.sources.twse import parse_twse_ex_rights
+        assert parse_twse_ex_rights({}) == []
+        assert parse_twse_ex_rights({"data": None}) == []

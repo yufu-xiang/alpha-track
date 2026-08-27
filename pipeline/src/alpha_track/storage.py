@@ -52,6 +52,8 @@ CREATE TABLE IF NOT EXISTS dividends (
     ex_date TEXT NOT NULL,
     pay_date TEXT,
     amount REAL NOT NULL,
+    -- 證交所公告的除權息前收盤價。用來還原配息金額的尺度,見 models.py。
+    prev_close REAL,
     PRIMARY KEY (code, ex_date)
 );
 
@@ -91,7 +93,23 @@ class Database:
 
     def init_schema(self) -> None:
         self.conn.executescript(SCHEMA)
+        self._migrate()
         self.conn.commit()
+
+    def _migrate(self) -> None:
+        """既有資料庫的欄位補齊。
+
+        SCHEMA 用的是 CREATE TABLE IF NOT EXISTS —— 對已經存在的表完全不生效,
+        新增欄位不會被套用。線上那份資料庫是累積了三年的歷史,砍掉重建的代價
+        極高(淨值來源沒有歷史,重建等於永久失去那些天),所以只能就地遷移。
+        """
+        for table, column, decl in (
+            ("dividends", "prev_close", "REAL"),
+        ):
+            cols = {r["name"] for r in
+                    self.conn.execute(f"PRAGMA table_info({table})").fetchall()}
+            if column not in cols:
+                self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
 
     def upsert_prices(self, records: Iterable[PriceRecord]) -> None:
         rows = [(r.code, r.date.isoformat(), r.open, r.high, r.low,
@@ -126,15 +144,20 @@ class Database:
 
     def upsert_dividends(self, records: Iterable[DividendRecord]) -> None:
         rows = [(r.code, r.ex_date.isoformat(),
-                 r.pay_date.isoformat() if r.pay_date else None, r.amount)
+                 r.pay_date.isoformat() if r.pay_date else None,
+                 r.amount, r.prev_close)
                 for r in records]
         if not rows:
             return
+        # prev_close 用 COALESCE:FinMind 與證交所各補一半的欄位,
+        # 後寫的那一方不該把前一方補好的欄位清成 NULL(同 R26)。
         self.conn.executemany(
-            """INSERT INTO dividends (code, ex_date, pay_date, amount)
-               VALUES (?, ?, ?, ?)
+            """INSERT INTO dividends (code, ex_date, pay_date, amount, prev_close)
+               VALUES (?, ?, ?, ?, ?)
                ON CONFLICT(code, ex_date) DO UPDATE SET
-                 pay_date=excluded.pay_date, amount=excluded.amount""",
+                 pay_date=COALESCE(excluded.pay_date, dividends.pay_date),
+                 amount=excluded.amount,
+                 prev_close=COALESCE(excluded.prev_close, dividends.prev_close)""",
             rows,
         )
         self.conn.commit()
@@ -204,9 +227,23 @@ class Database:
             DividendRecord(
                 code=r["code"], ex_date=date.fromisoformat(r["ex_date"]),
                 pay_date=date.fromisoformat(r["pay_date"]) if r["pay_date"] else None,
-                amount=r["amount"])
+                amount=r["amount"], prev_close=r["prev_close"])
             for r in cur.fetchall()
         ]
+
+    def has_prev_close_for_year(self, year: int) -> bool:
+        """該年是否已經補過除權息前收盤價。
+
+        用「有沒有資料」而非「抓過沒有」當快門是刻意的:某些年份可能真的
+        一筆 ETF 除息都沒有(極早期),那時重抓一次的成本遠低於多維護一張
+        抓取紀錄表。實務上 2015 年之後每年都有數百筆。
+        """
+        row = self.conn.execute(
+            "SELECT 1 FROM dividends WHERE prev_close IS NOT NULL "
+            "AND ex_date >= ? AND ex_date <= ? LIMIT 1",
+            (f"{year}-01-01", f"{year}-12-31"),
+        ).fetchone()
+        return row is not None
 
     def trading_days(self) -> list[date]:
         """全市場交易日曆,由已收錄的價格日期推導。"""

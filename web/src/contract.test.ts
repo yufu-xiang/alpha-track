@@ -10,7 +10,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { fixtureMeta, fixtureRankings } from './data/fixture'
-import { PERIODS, type Series } from './types'
+import { PERIODS, type DividendRecord, type Series } from './types'
 
 // 由 pipeline/src/alpha_track/export.py 的實際輸出取得,見 docs/json-contract.md
 const BACKEND_TOP_LEVEL_KEYS = ['data_date', 'etfs']
@@ -53,6 +53,18 @@ describe('與後端 export.py 的契約', () => {
     // 把配息算兩次。
     const series: Series = { start: '2026-01-01', days: [0], adj: [1], close: [1] }
     expect(Object.keys(series).sort()).toEqual(BACKEND_SERIES_KEYS)
+  })
+
+  it('配息紀錄同時送出原始金額與換算後的金額', () => {
+    // amount_adj 很容易被當成 amount 的重複而刪掉。它不是重複:
+    // 價格序列已被分割還原,amount 沒有,任何「拿配息去買股」的計算
+    // 都必須用 amount_adj —— 用錯不會報錯,只會安靜地錯 155%。
+    const d: DividendRecord = {
+      ex_date: '2024-01-17', pay_date: null,
+      amount: 3.0, amount_adj: 0.75, scale_known: true,
+    }
+    expect(Object.keys(d).sort())
+      .toEqual(['amount', 'amount_adj', 'ex_date', 'pay_date', 'scale_known'])
   })
 
   it('meta 的鍵一致', () => {

@@ -269,3 +269,88 @@ def test_premium_series_is_empty_when_there_are_no_navs():
     out = build_detail(profile(), metrics(),
                        price_series("0050", date(2026, 8, 1), [1.0]), dividends=[])
     assert out["premium_series"] == {"start": None, "days": [], "premium": []}
+
+
+def test_dividend_amount_is_rescaled_to_the_price_series_units():
+    """配息金額是當時的原始金額,價格序列已被還原 —— 混用會離譜地錯。
+
+    實測:0050 的股息再投入試算因為這件事高估 155.6%。
+    """
+    from alpha_track.export import build_detail
+    from alpha_track.models import DividendRecord
+    # 我方價格 31.86(已除以 4),證交所公告的除權息前收盤 131.65
+    prices = price_series("0050", date(2024, 1, 15), [31.86, 31.86, 31.0])
+    divs = [DividendRecord(code="0050", ex_date=date(2024, 1, 17), pay_date=None,
+                           amount=3.0, prev_close=131.65)]
+    out = build_detail(profile(), metrics(), prices, divs)
+    row = out["dividends"][0]
+    assert row["amount"] == pytest.approx(3.0)          # 原始金額不動
+    assert row["amount_adj"] == pytest.approx(0.75)     # 3.0 ÷ 4
+    assert row["scale_known"] is True
+
+
+def test_no_split_leaves_the_amount_untouched():
+    from alpha_track.export import build_detail
+    from alpha_track.models import DividendRecord
+    prices = price_series("0056", date(2024, 1, 15), [36.37, 36.37, 35.7])
+    divs = [DividendRecord(code="0056", ex_date=date(2024, 1, 17), pay_date=None,
+                           amount=0.7, prev_close=36.37)]
+    row = build_detail(profile(), metrics(), prices, divs)["dividends"][0]
+    assert row["amount_adj"] == pytest.approx(0.7)
+    assert row["scale_known"] is True
+
+
+def test_unclean_ratio_keeps_the_original_and_says_so():
+    """對不上整數倍率就維持原值 —— 換算錯的數字看起來一樣合理。"""
+    from alpha_track.export import build_detail
+    from alpha_track.models import DividendRecord
+    prices = price_series("0050", date(2024, 1, 15), [50.0, 50.0, 49.0])
+    divs = [DividendRecord(code="0050", ex_date=date(2024, 1, 17), pay_date=None,
+                           amount=3.0, prev_close=131.65)]   # 比值 2.63,不乾淨
+    row = build_detail(profile(), metrics(), prices, divs)["dividends"][0]
+    assert row["amount_adj"] == pytest.approx(3.0)
+    assert row["scale_known"] is False
+
+
+def test_missing_prev_close_is_not_guessed():
+    """FinMind 來的紀錄沒有 prev_close。沒有依據就不換算,並標記為不確定。"""
+    from alpha_track.export import build_detail
+    from alpha_track.models import DividendRecord
+    prices = price_series("0050", date(2024, 1, 15), [31.86, 31.86, 31.0])
+    divs = [DividendRecord(code="0050", ex_date=date(2024, 1, 17), pay_date=None,
+                           amount=3.0)]
+    row = build_detail(profile(), metrics(), prices, divs)["dividends"][0]
+    assert row["amount_adj"] == pytest.approx(3.0)
+    assert row["scale_known"] is False
+
+
+def test_uses_the_close_before_the_ex_date():
+    """除權息前收盤價是除息**前一日**的收盤,兩邊要取同一天才比得準。
+
+    取除息當日的話會差掉一個配息(約 1–2%),對 8 倍以上的分割還撐得住,
+    但 2 倍分割就可能被容差判成對不上。
+    """
+    from alpha_track.export import build_detail
+    from alpha_track.models import DividendRecord
+    # 前一日 100、除息當日 98(跌掉配息)。prev_close=200 → 倍率應為 2
+    prices = price_series("X", date(2024, 1, 16), [100.0, 98.0])
+    divs = [DividendRecord(code="X", ex_date=date(2024, 1, 17), pay_date=None,
+                           amount=2.0, prev_close=200.0)]
+    row = build_detail(profile(), metrics(), prices, divs)["dividends"][0]
+    assert row["amount_adj"] == pytest.approx(1.0)
+    assert row["scale_known"] is True
+
+
+def test_reciprocal_tolerance_is_relative_not_scaled():
+    """倒數那一側的門檻不能乘上倍率。
+
+    乘了的話 0.38 會被判成 1/3(|0.38×3−1| = 0.139,對上 0.06×3 = 0.18),
+    而 0.38 對應不到任何真實的分割。
+    """
+    from alpha_track.export import _snap_split_factor
+    assert _snap_split_factor(0.25) == pytest.approx(0.25)
+    assert _snap_split_factor(1 / 3) == pytest.approx(1 / 3)
+    assert _snap_split_factor(0.38) is None
+    assert _snap_split_factor(4.0) == pytest.approx(4.0)
+    assert _snap_split_factor(1.0) == pytest.approx(1.0)
+    assert _snap_split_factor(2.6) is None

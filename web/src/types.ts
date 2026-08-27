@@ -132,7 +132,23 @@ export interface Series {
 export interface DividendRecord {
   ex_date: string
   pay_date: string | null
+  /** 每股配息的**原始金額**(當時實際配的錢)。配息紀錄表顯示這個。 */
   amount: number
+  /**
+   * 換算到**價格序列尺度**的每股配息。
+   *
+   * 價格序列來自 Yahoo,對歷史日期已除以分割倍率;amount 卻是當時的
+   * 原始金額。任何「拿配息去買股」的計算都必須用這個欄位 ——
+   * 用 amount 會讓分割過的標的離譜地錯(實測 0050 的股息再投入
+   * 試算因此高估 155.6%)。
+   */
+  amount_adj: number
+  /**
+   * 換算倍率是否確定。false 代表缺少證交所的除權息前收盤價、
+   * 或比值對不上任何乾淨的分割倍率 —— 此時 amount_adj 等於 amount,
+   * 而 UI 必須說明那可能不準,不能靜靜地用一個猜的數字。
+   */
+  scale_known: boolean
 }
 
 /** 個股頁資料。lazy load `data/etf/{代號}.json`。 */

@@ -75,6 +75,16 @@ class DividendRecord:
     ex_date: date
     pay_date: date | None
     amount: float
+    prev_close: float | None = None
+    """證交所公告的**除權息前收盤價**(當時的真實價格,未經分割還原)。
+
+    它的用途不是顯示,而是**還原配息金額的尺度**。我方的價格序列來自
+    Yahoo,對歷史日期已除以分割倍率;配息金額卻是當時的原始金額。
+    兩者混用會讓分割過的標的算出離譜的結果 —— 實測 0050 的股息再投入
+    試算因此高估 155.6%。
+
+    prev_close 與我方同日價格的比值就是那個時點的累積分割倍率。
+    """
 
 
 @dataclass(frozen=True)

@@ -158,7 +158,7 @@ def test_update_skips_write_and_marks_stale_when_batch_rejected(tmp_path: Path):
 
     run_update(settings_for(tmp_path, db_path), fetch_all=fake_fetch,
                fetch_history=lambda code, exchange: [],
-               fetch_benchmark=None, fetch_dividends=None)
+               fetch_benchmark=None, fetch_dividends=None, fetch_ex_rights=None)
 
     with Database(db_path) as db:
         assert db.latest_price_date() == date(2026, 8, 20), "壞資料不得覆蓋好資料"
@@ -183,7 +183,7 @@ def test_update_writes_and_exports_when_batch_is_clean(tmp_path: Path):
 
     run_update(settings_for(tmp_path, db_path), fetch_all=fake_fetch,
                fetch_history=lambda code, exchange: [],
-               fetch_benchmark=None, fetch_dividends=None)
+               fetch_benchmark=None, fetch_dividends=None, fetch_ex_rights=None)
 
     with Database(db_path) as db:
         assert db.latest_price_date() == date(2026, 8, 21)
@@ -204,7 +204,7 @@ def test_update_reports_unclassified_codes(tmp_path: Path):
 
     run_update(settings_for(tmp_path, db_path), fetch_all=fake_fetch,
                fetch_history=lambda code, exchange: [],
-               fetch_benchmark=None, fetch_dividends=None)
+               fetch_benchmark=None, fetch_dividends=None, fetch_ex_rights=None)
     meta = json.loads(((tmp_path / "out") / "meta.json").read_text("utf-8"))
     assert "00999" in meta["unclassified"]
 
@@ -229,7 +229,7 @@ def test_backfill_fetches_history_only_for_codes_that_lack_it(tmp_path: Path):
                 for i in range(400)]
 
     run_backfill(settings_for(tmp_path, db_path), fetch_history=fake_history,
-                 fetch_benchmark=None, fetch_dividends=None)
+                 fetch_benchmark=None, fetch_dividends=None, fetch_ex_rights=None)
 
     assert requested == ["0050"], "歷史已足夠的代號不該重抓"
     with Database(db_path) as db:
@@ -253,7 +253,7 @@ def test_backfill_passes_the_exchange_so_the_yahoo_suffix_is_right(tmp_path: Pat
         return []
 
     run_backfill(settings_for(tmp_path, db_path), fetch_history=fake_history,
-                 fetch_benchmark=None, fetch_dividends=None)
+                 fetch_benchmark=None, fetch_dividends=None, fetch_ex_rights=None)
     assert seen == [("00679B", "TPEX")]
 
 
@@ -272,7 +272,7 @@ def test_backfill_survives_one_code_failing(tmp_path: Path):
                 for i in range(400)]
 
     run_backfill(settings_for(tmp_path, db_path), fetch_history=flaky,
-                 fetch_benchmark=None, fetch_dividends=None)
+                 fetch_benchmark=None, fetch_dividends=None, fetch_ex_rights=None)
 
     with Database(db_path) as db:
         assert len(db.get_prices("0056")) == 401, "另一檔仍應完成回補"
@@ -289,7 +289,7 @@ def test_backfill_stores_the_benchmark_when_it_is_missing(tmp_path: Path):
 
     run_backfill(settings_for(tmp_path, db_path),
                  fetch_history=lambda code, exchange: [],
-                 fetch_benchmark=fake_bench, fetch_dividends=None)
+                 fetch_benchmark=fake_bench, fetch_dividends=None, fetch_ex_rights=None)
 
     with Database(db_path) as db:
         assert len(db.get_benchmark("TAIEX_TR")) == 400
@@ -308,7 +308,7 @@ def test_update_triggers_backfill_for_newly_seen_codes(tmp_path: Path):
                 for i in range(400)]
 
     run_update(settings_for(tmp_path, db_path), fetch_all=fake_fetch,
-               fetch_history=fake_history, fetch_benchmark=None, fetch_dividends=None)
+               fetch_history=fake_history, fetch_benchmark=None, fetch_dividends=None, fetch_ex_rights=None)
 
     with Database(db_path) as db:
         assert len(db.get_prices("0050")) > 1, "新代號應自動回補歷史"
@@ -329,11 +329,11 @@ def test_update_is_idempotent(tmp_path: Path):
 
     s = settings_for(tmp_path, db_path)
     run_update(s, fetch_all=fake_fetch, fetch_history=fake_history,
-               fetch_benchmark=None, fetch_dividends=None)
+               fetch_benchmark=None, fetch_dividends=None, fetch_ex_rights=None)
     with Database(db_path) as db:
         first = len(db.get_prices("0050"))
     run_update(s, fetch_all=fake_fetch, fetch_history=fake_history,
-               fetch_benchmark=None, fetch_dividends=None)
+               fetch_benchmark=None, fetch_dividends=None, fetch_ex_rights=None)
     with Database(db_path) as db:
         assert len(db.get_prices("0050")) == first
 
@@ -351,7 +351,7 @@ def test_update_survives_a_source_that_raises(tmp_path: Path):
         raise RuntimeError("Yahoo 掛了")
 
     run_update(settings_for(tmp_path, db_path), fetch_all=fake_fetch,
-               fetch_history=exploding_history, fetch_benchmark=None, fetch_dividends=None)
+               fetch_history=exploding_history, fetch_benchmark=None, fetch_dividends=None, fetch_ex_rights=None)
     assert ((tmp_path / "out") / "rankings.json").exists(), "仍應完成匯出"
 
 
@@ -376,7 +376,7 @@ def test_update_ignores_securities_that_are_not_etfs(tmp_path: Path):
         return prices, profiles, [], []
 
     run_update(settings_for(tmp_path, db_path), fetch_all=fake_fetch,
-               fetch_history=lambda code, exchange: [], fetch_benchmark=None, fetch_dividends=None)
+               fetch_history=lambda code, exchange: [], fetch_benchmark=None, fetch_dividends=None, fetch_ex_rights=None)
 
     with Database(db_path) as db:
         assert db.all_codes() == ["0050"]
@@ -403,7 +403,7 @@ def test_update_refreshes_the_benchmark_so_beta_is_reachable(tmp_path: Path):
     run_update(settings_for(tmp_path, db_path),
                fetch_all=lambda _s: ([price_at("0050", date(2026, 8, 21))], [], [], []),
                fetch_history=lambda code, exchange: [],
-               fetch_benchmark=fake_bench, fetch_dividends=None)
+               fetch_benchmark=fake_bench, fetch_dividends=None, fetch_ex_rights=None)
 
     with Database(db_path) as db:
         assert len(db.get_benchmark("TAIEX_TR")) == 400
@@ -427,7 +427,7 @@ def test_benchmark_backfill_is_incremental_after_the_first_run(tmp_path: Path):
 
     run_backfill(settings_for(tmp_path, db_path),
                  fetch_history=lambda code, exchange: [],
-                 fetch_benchmark=fake_bench, fetch_dividends=None)
+                 fetch_benchmark=fake_bench, fetch_dividends=None, fetch_ex_rights=None)
 
     assert len(asked) == 1
     start, _ = asked[0]
@@ -448,7 +448,7 @@ def test_benchmark_backfill_goes_back_to_2003_when_empty(tmp_path: Path):
 
     run_backfill(settings_for(tmp_path, db_path),
                  fetch_history=lambda code, exchange: [],
-                 fetch_benchmark=fake_bench, fetch_dividends=None)
+                 fetch_benchmark=fake_bench, fetch_dividends=None, fetch_ex_rights=None)
 
     start, end = asked[0]
     # 規格 §7.3 的蒙地卡羅要長期歷史;只補十年會讓「資料不足」的警告
@@ -474,7 +474,7 @@ def test_backfill_paces_requests_between_codes(tmp_path: Path, monkeypatch):
 
     run_backfill(settings_for(tmp_path, db_path),
                  fetch_history=lambda code, exchange: [],
-                 fetch_benchmark=None, fetch_dividends=None)
+                 fetch_benchmark=None, fetch_dividends=None, fetch_ex_rights=None)
 
     # 三個代號之間有兩個間隔;第一個不必等
     assert len(slept) == 2
@@ -496,7 +496,7 @@ def test_backfill_does_not_sleep_when_there_is_nothing_to_backfill(tmp_path: Pat
 
     run_backfill(settings_for(tmp_path, db_path),
                  fetch_history=lambda code, exchange: [],
-                 fetch_benchmark=None, fetch_dividends=None)
+                 fetch_benchmark=None, fetch_dividends=None, fetch_ex_rights=None)
     assert slept == []
 
 
@@ -576,7 +576,7 @@ def test_backfill_fetches_dividends_for_codes_that_need_them(tmp_path: Path):
 
     run_backfill(settings_for(tmp_path, db_path),
                  fetch_history=lambda code, exchange: [],
-                 fetch_benchmark=None, fetch_dividends=fake_div)
+                 fetch_benchmark=None, fetch_dividends=fake_div, fetch_ex_rights=None)
 
     assert asked == ["0050", "0056"]
     with Database(db_path) as db:
@@ -601,7 +601,7 @@ def test_dividends_are_not_refetched_the_next_day(tmp_path: Path):
     s = settings_for(tmp_path, db_path)
     for _ in range(3):
         run_backfill(s, fetch_history=lambda c, e: [], fetch_benchmark=None,
-                     fetch_dividends=fake_div)
+                     fetch_dividends=fake_div, fetch_ex_rights=None)
     assert calls == ["0050"], "沒有配息紀錄不等於沒抓過,不該被重抓"
 
 
@@ -624,7 +624,7 @@ def test_dividend_fetching_is_capped_per_run(tmp_path: Path):
 
     run_backfill(settings_for(tmp_path, db_path),
                  fetch_history=lambda c, e: [], fetch_benchmark=None,
-                 fetch_dividends=fake_div)
+                 fetch_dividends=fake_div, fetch_ex_rights=None)
     from alpha_track import cli
     assert len(calls) == cli.DIVIDEND_FETCH_LIMIT
 
@@ -645,7 +645,7 @@ def test_one_failing_dividend_fetch_does_not_stop_the_rest(tmp_path: Path):
 
     run_backfill(settings_for(tmp_path, db_path),
                  fetch_history=lambda c, e: [], fetch_benchmark=None,
-                 fetch_dividends=flaky)
+                 fetch_dividends=flaky, fetch_ex_rights=None)
     with Database(db_path) as db:
         assert len(db.get_dividends("0056")) == 1
         # 失敗的那檔不記錄抓取時間,下次會再試
