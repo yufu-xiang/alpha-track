@@ -880,6 +880,10 @@ class TestParseSitcaHoldings:
         assert not any("本基金之配息來源" in r.fund_name for r in rows)
         assert clean_fund_name("某某基金(美元)") == "某某基金(美元)"
         assert clean_fund_name("某某基金(本基金之配息來源可能為收益平準金)") == "某某基金"
+        # 實測還有另一種寫法,沒有「本」字
+        assert clean_fund_name("某某基金(基金之配息來源可能為收益平準金 且 …)") == "某某基金"
+        # 實測有一檔是雙層括號,只剝一次會留下外層的空括號
+        assert clean_fund_name("某某基金((本基金之配息來源可能為收益平準金))") == "某某基金"
 
     def test_first_row_of_each_fund_is_not_shifted(self):
         """同一檔基金只有第一列帶基金名稱,其餘列整列左移。
@@ -937,7 +941,9 @@ class TestParseSitcaHoldings:
         實測是靠「前後兩次回應的位元組數完全相同」才發現的。
         """
         from alpha_track.sources.sitca import holdings_form_data
-        d = holdings_form_data("202607", "A0005", "AH11", {"__VIEWSTATE": "x"})
-        assert d["ctl00$ContentPlaceHolder1$rdo1"] == "rbComCL"
-        assert d["ctl00$ContentPlaceHolder1$ddlQ_Comid1"] == "A0005"
+        d = holdings_form_data("202607", "AH11", {"__VIEWSTATE": "x"})
+        # rbClass 模式用的是**第一組**下拉,不是「公司+類型」那組
+        assert d["ctl00$ContentPlaceHolder1$rdo1"] == "rbClass"
+        assert d["ctl00$ContentPlaceHolder1$ddlQ_Class"] == "AH11"
+        assert "ctl00$ContentPlaceHolder1$ddlQ_Class1" not in d
         assert d["__VIEWSTATE"] == "x"

@@ -73,6 +73,21 @@ CREATE TABLE IF NOT EXISTS benchmarks (
     PRIMARY KEY (name, date)
 );
 
+-- ETF 成分股(公會月報,每檔前十大)。
+-- 存 code 而非基金名稱:名稱對應在寫入前就做完,對不上的不寫入而是回報,
+-- 免得半對半錯的名稱散進資料裡。
+CREATE TABLE IF NOT EXISTS holdings (
+    code TEXT NOT NULL,
+    year_month TEXT NOT NULL,
+    rank INTEGER NOT NULL,
+    security_code TEXT NOT NULL,
+    security_name TEXT,
+    security_type TEXT,
+    amount REAL,
+    weight REAL,
+    PRIMARY KEY (code, year_month, rank)
+);
+
 CREATE INDEX IF NOT EXISTS idx_prices_date ON prices(date);
 """
 
@@ -230,6 +245,50 @@ class Database:
                 amount=r["amount"], prev_close=r["prev_close"])
             for r in cur.fetchall()
         ]
+
+    def upsert_holdings(self, records: Iterable[tuple]) -> None:
+        """records 為 (code, year_month, rank, security_code, security_name,
+        security_type, amount, weight)。"""
+        rows = list(records)
+        if not rows:
+            return
+        self.conn.executemany(
+            """INSERT INTO holdings (code, year_month, rank, security_code,
+                                     security_name, security_type, amount, weight)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(code, year_month, rank) DO UPDATE SET
+                 security_code=excluded.security_code,
+                 security_name=excluded.security_name,
+                 security_type=excluded.security_type,
+                 amount=excluded.amount, weight=excluded.weight""",
+            rows,
+        )
+
+    def latest_holdings_month(self) -> str | None:
+        """已抓到的最新月份(`YYYYMM`)。用來決定要不要再抓。
+
+        公會的資料是月報,每月第 10 個營業日更新 —— 每天重抓是白費,
+        而且是對一個公益性質的網站白費。
+        """
+        row = self.conn.execute(
+            "SELECT MAX(year_month) AS m FROM holdings"
+        ).fetchone()
+        return row["m"] if row and row["m"] else None
+
+    def get_holdings(self, code: str) -> list[dict]:
+        """某檔 ETF 最新月份的持股,依名次排序。"""
+        cur = self.conn.execute(
+            """SELECT * FROM holdings WHERE code = ?
+               AND year_month = (SELECT MAX(year_month) FROM holdings WHERE code = ?)
+               ORDER BY rank""",
+            (code, code),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+    def codes_with_holdings(self) -> list[str]:
+        cur = self.conn.execute(
+            "SELECT DISTINCT code FROM holdings ORDER BY code")
+        return [r["code"] for r in cur.fetchall()]
 
     def has_prev_close_for_year(self, year: int) -> bool:
         """該年是否已經補過除權息前收盤價。

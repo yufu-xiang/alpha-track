@@ -75,7 +75,17 @@ def _cells(row_html: str) -> list[str]:
     ]
 
 
-DISCLAIMER = re.compile(r"[（(]本基金[^）)]*[）)]\s*$")
+DISCLAIMER = re.compile(
+    r"[（(][^（()）]*(?:本基金|配息來源|收益平準金|保證收益)[^（()）]*[）)]"
+)
+"""含免責關鍵字的括號。刻意**不**錨定在字串末端。
+
+錨定在末端的話,巢狀的那一檔會匹配失敗:內層的 `)` 讓外層的
+`[^）)]*` 走不過去。改成先剝掉含關鍵字的內層,再由 EMPTY_PAREN
+清掉留下的空殼。
+"""
+
+EMPTY_PAREN = re.compile(r"[（(]\s*[）)]")
 
 
 def clean_fund_name(name: str) -> str:
@@ -85,10 +95,24 @@ def clean_fund_name(name: str) -> str:
     「元大台灣高股息基金(本基金之配息來源可能為收益平準金且並無保證收益及配息)」
     帶著它就對應不到 ETF 代號。
 
-    只剝**以「本基金」開頭**的括號 —— 幣別註記(如「(美元)」)、
-    級別註記都是名稱的一部分,剝掉會讓兩檔不同的基金看起來同名。
+    這段說明至少有兩種寫法,實測都出現過:
+      「(本基金之配息來源可能為收益平準金且並無保證收益及配息)」
+      「(基金之配息來源可能為收益平準金 且 基金之淨值可能因…)」
+    所以判準是括號內**含有**「本基金/配息來源/收益平準金」,
+    而不是以某個字開頭。
+
+    幣別註記(如「(美元)」)、級別註記都是名稱的一部分,不會被剝掉 ——
+    剝掉會讓兩檔不同的基金看起來同名。
     """
-    return DISCLAIMER.sub("", name).strip()
+    # 反覆剝到穩定為止:實測有一檔是雙層括號
+    # 「…ETF基金((本基金之配息來源可能為收益平準金且無保證收益及配息))」,
+    # 只剝一次會留下外層的空括號。
+    previous = None
+    current = name.strip()
+    while current != previous:
+        previous = current
+        current = EMPTY_PAREN.sub("", DISCLAIMER.sub("", current)).strip()
+    return current
 
 
 def _to_float(text: str) -> float | None:
@@ -147,20 +171,24 @@ def parse_sitca_holdings(page: str, year_month: str) -> list[HoldingRecord]:
 
 
 def holdings_form_data(
-    year_month: str, company: str, fund_class: str, tokens: dict[str, str]
+    year_month: str, fund_class: str, tokens: dict[str, str]
 ) -> dict[str, str]:
-    """組出查詢用的表單欄位。
+    """組出查詢用的表單欄位(**依類型**查詢,一次取全部投信)。
 
-    `tokens` 為先前 GET 取得的 __VIEWSTATE / __VIEWSTATEGENERATOR /
-    __EVENTVALIDATION。**rdo1 不可省略** —— 見模組說明第 1 點。
+    模式的選擇不是小事:「公司+類型」要 36 家 × 17 類 = 612 次請求,
+    實測跑十分鐘還沒完;「依類型」一次就回傳該類型的**所有投信**——
+    AH11 一次得 640 筆 / 64 檔、10 秒。17 個類型不到三分鐘。
+
+    `tokens` 為先前 GET 取得的隱藏權杖。**rdo1 不可省略** ——
+    見模組說明第 1 點;而且 rbClass 模式用的是**第一組**下拉
+    (`ddlQ_Class`),不是「公司+類型」那組的 `ddlQ_Class1`。
     """
     return {
         **tokens,
         "__EVENTTARGET": "",
         "__EVENTARGUMENT": "",
-        "ctl00$ContentPlaceHolder1$rdo1": "rbComCL",
+        "ctl00$ContentPlaceHolder1$rdo1": "rbClass",
         "ctl00$ContentPlaceHolder1$ddlQ_YM": year_month,
-        "ctl00$ContentPlaceHolder1$ddlQ_Comid1": company,
-        "ctl00$ContentPlaceHolder1$ddlQ_Class1": fund_class,
+        "ctl00$ContentPlaceHolder1$ddlQ_Class": fund_class,
         "ctl00$ContentPlaceHolder1$BtnQuery": "查詢",
     }

@@ -39,6 +39,19 @@ _REPLACEMENTS = (
     ("交易所交易基金", "ETF基金"),
     ("指數股票型基金", "ETF基金"),
     ("臺", "台"),
+    # 公會用「XXXETF基金」,證券簡稱沒有 ETF 這兩個字。
+    # 兩邊都拿掉才比得上:「中信關鍵半導體ETF基金」對「中信關鍵半導體」。
+    ("ETF", ""),
+)
+
+ISSUER_ALIASES = (
+    # 公會用投信全名,證券簡稱用縮寫。逐一列舉,不做前綴模糊比對 ——
+    # 模糊比對會把「第一金」與「第一金投信」以外的東西也吃進來。
+    ("中國信託", "中信"),
+    ("富蘭克林華美", "富蘭克林"),
+    ("兆豐國際", "兆豐"),
+    ("華南永昌", "華南"),
+    ("國泰投信", "國泰"),
 )
 
 
@@ -51,6 +64,10 @@ def normalize(name: str) -> str:
     真的出現時會由 build_index 的重複檢查擋下來,不會靜默取其一。
     """
     s = _PAREN.sub("", name)
+    for prefix, short in ISSUER_ALIASES:
+        if s.startswith(prefix):
+            s = short + s[len(prefix):]
+            break
     for a, b in _REPLACEMENTS:
         s = s.replace(a, b)
     return re.sub(r"\s+", "", s)

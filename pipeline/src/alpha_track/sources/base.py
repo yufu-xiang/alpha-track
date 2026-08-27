@@ -18,10 +18,11 @@ import httpx
 
 USER_AGENT = "alpha-track/0.1 (personal ETF tracker)"
 
-RFC5280_NONCONFORMING_HOSTS = frozenset({"www.tpex.org.tw"})
+RFC5280_NONCONFORMING_HOSTS = frozenset({"www.tpex.org.tw", "www.sitca.org.tw"})
 """憑證鏈不符 RFC 5280 格式要求、需要放寬 VERIFY_X509_STRICT 的網域。
 
 實測 2026-08-23:`www.tpex.org.tw` 的憑證鏈缺少 Subject Key Identifier 擴充。
+2026-08-27 再測:`www.sitca.org.tw`(投信投顧公會)同樣如此。
 Python 3.13+ / OpenSSL 3.5+ 的預設 context 開啟 VERIFY_X509_STRICT,會以
 `certificate verify failed: Missing Subject Key Identifier` 直接拒絕連線 ——
 於是 117 檔上櫃 ETF 在新版執行環境完全抓不到。
@@ -141,3 +142,51 @@ def to_float(value: object) -> float | None:
         return float(text)
     except ValueError:
         return None
+
+
+class FormSession:
+    """ASP.NET WebForms 的查詢工作階段。
+
+    這種頁面每次 POST 都要帶回上一次 GET 給的 __VIEWSTATE 等權杖,
+    所以不能用無狀態的 fetch —— 必須保留 cookie 與最近一次的頁面。
+    """
+
+    def __init__(self, url: str, *, timeout: float = 90.0) -> None:
+        self.url = url
+        self._client = httpx.Client(
+            headers={"User-Agent": USER_AGENT}, timeout=timeout,
+            follow_redirects=True, verify=ssl_context_for(url))
+        self._page = ""
+
+    def __enter__(self) -> FormSession:
+        self._page = self._client.get(self.url).text
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self._client.close()
+
+    def tokens(self) -> dict[str, str]:
+        """取當前頁面的隱藏權杖。每次查詢前都要重取 —— 它們會換。"""
+        out = {}
+        for name in ("__VIEWSTATE", "__VIEWSTATEGENERATOR", "__EVENTVALIDATION"):
+            m = re.search(rf'name="{name}"[^>]*value="([^"]*)"', self._page)
+            out[name] = m.group(1) if m else ""
+        return out
+
+    def options(self, select_name: str) -> list[str]:
+        """取某個下拉選單的全部 value。空字串(「所有類型」之類)排除。"""
+        m = re.search(
+            rf'<select[^>]*name="{re.escape(select_name)}"[^>]*>(.*?)</select>',
+            self._page, re.S | re.I)
+        if not m:
+            return []
+        return [v for v, _ in
+                re.findall(r'<option[^>]*value="([^"]*)"[^>]*>([^<]*)</option>',
+                           m.group(1)) if v]
+
+    def query(self, data: dict[str, str]) -> str:
+        """送出查詢並回傳結果頁,同時更新權杖供下一次使用。"""
+        resp = self._client.post(self.url, data=data)
+        resp.raise_for_status()
+        self._page = resp.text
+        return self._page

@@ -261,3 +261,37 @@ def test_prev_close_is_not_wiped_by_a_source_that_lacks_it(tmp_path):
         r = db.get_dividends("0050")[0]
         assert r.prev_close == 131.65
         assert r.pay_date == date(2024, 2, 21)
+
+
+def test_holdings_round_trip_and_latest_month(tmp_path):
+    with Database(tmp_path / "h.db") as db:
+        db.init_schema()
+        db.upsert_holdings([
+            ("0050", "202606", 1, "2330", "台積電", "國內上市", 1.0e12, 0.58),
+            ("0050", "202607", 1, "2330", "台積電", "國內上市", 1.1e12, 0.6059),
+            ("0050", "202607", 2, "2454", "聯發科", "國內上市", 1.2e11, 0.0535),
+        ])
+        assert db.latest_holdings_month() == "202607"
+        rows = db.get_holdings("0050")
+        # 只回最新月份,不把兩個月混在一起
+        assert [r["rank"] for r in rows] == [1, 2]
+        assert rows[0]["weight"] == 0.6059
+        assert db.codes_with_holdings() == ["0050"]
+
+
+def test_holdings_upsert_replaces_the_same_rank(tmp_path):
+    """同一個月同一個名次重抓時要覆蓋,不是新增一筆。"""
+    with Database(tmp_path / "h.db") as db:
+        db.init_schema()
+        db.upsert_holdings([("0050", "202607", 1, "2330", "台積電", "國內上市", 1.0, 0.5)])
+        db.upsert_holdings([("0050", "202607", 1, "2330", "台積電", "國內上市", 2.0, 0.6)])
+        rows = db.get_holdings("0050")
+        assert len(rows) == 1
+        assert rows[0]["weight"] == 0.6
+
+
+def test_latest_holdings_month_is_none_when_empty(tmp_path):
+    with Database(tmp_path / "h.db") as db:
+        db.init_schema()
+        assert db.latest_holdings_month() is None
+        assert db.get_holdings("0050") == []

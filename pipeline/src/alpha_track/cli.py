@@ -22,6 +22,7 @@ from pathlib import Path
 import yaml
 
 from .categories import UNCLASSIFIED, classify, is_etf_code, load_category_map
+from .fundnames import build_index, resolve
 from .compute import compute_etf_metrics
 from .export import (build_benchmark_series, build_detail, build_meta,
                      build_rankings, write_json)
@@ -56,6 +57,13 @@ HTTP 200 帶 `stat` 錯誤訊息(見 docs/data-sources.md)。
 TWSE_DAILY_URL = "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL"
 TWSE_ETF_LIST_URL = "https://www.twse.com.tw/rwd/zh/ETF/list"
 TPEX_DAILY_URL = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes"
+TWSE_FUND_PROFILE_URL = "https://openapi.twse.com.tw/v1/opendata/t187ap47_L"
+"""基金基本資料彙總表(268 檔上市基金)。
+
+只用它的**基金中文全名** —— 那是公會的基金名稱對應到 ETF 代號的第一層。
+公會的表格沒有證券代號,而全名是兩邊唯一共通的欄位。
+"""
+
 TWSE_MIS_ETF_URL = "https://mis.twse.com.tw/stock/data/all_etf.txt"
 """ETF 淨值與折溢價的唯一可用來源(2026-08-26 重新勘查)。
 
@@ -91,6 +99,20 @@ TWSE_EX_RIGHTS_URL = (
 
 EX_RIGHTS_EARLIEST_YEAR = 2015
 """除權息回補的起始年。與 FinMind 的配息起點(2015)一致。"""
+
+SITCA_REQUEST_INTERVAL = 1.5
+"""公會查詢之間的間隔(秒)。
+
+一次請求回傳一家投信某一類型的全部基金,所以總數不大(數十次)。
+但那是一個公益性質的網站,沒有理由跑滿。
+"""
+
+HOLDINGS_LAG_DAYS = 45
+"""成分股月報的落後天數。
+
+公會「每月第 10 個營業日」更新上個月的資料,所以當月的月份代碼要到
+下個月中旬才查得到。以 45 天回推目標月份,不會問一個還不存在的月份。
+"""
 
 TAIEX_TR_MONTHLY_URL = (
     "https://www.twse.com.tw/rwd/zh/TAIEX/MFI94U?date={date}&response=json"
@@ -387,6 +409,41 @@ def fetch_twse_ex_rights(start: date, end: date) -> list[DividendRecord]:
         start=start.strftime("%Y%m%d"), end=end.strftime("%Y%m%d"))))
 
 
+def fetch_sitca_holdings(year_month: str) -> list:
+    """向公會取一個月份的全市場 ETF 成分股。
+
+    **依類型**查詢:一次請求回傳該類型的全部投信、全部基金。
+
+    這個選擇是實測逼出來的。原本用「公司+類型」模式,36 家 × 17 類 =
+    612 次請求,跑十分鐘還沒完;改成依類型只要 17 次,實測 AH11 一次
+    得 640 筆 / 64 檔、10 秒,整輪不到三分鐘。
+
+    :returns: HoldingRecord 清單。名稱對應到代號由呼叫端負責 ——
+              對不上的必須被列出來,不能在這裡靜默丟掉。
+    """
+    from .sources.base import FormSession
+    from .sources.sitca import (
+        ETF_CLASSES, HOLDINGS_URL, holdings_form_data, parse_sitca_holdings,
+    )
+
+    rows = []
+    with FormSession(HOLDINGS_URL) as session:
+        for fund_class in ETF_CLASSES:
+            try:
+                page = session.query(
+                    holdings_form_data(year_month, fund_class, session.tokens()))
+            except Exception as exc:
+                logger.warning("公會 %s 取得失敗:%s", fund_class, exc)
+                continue
+            got = parse_sitca_holdings(page, year_month)
+            if got:
+                rows.extend(got)
+                logger.info("公會 %s:%d 筆 / %d 檔",
+                            fund_class, len(got), len({g.fund_name for g in got}))
+            time.sleep(SITCA_REQUEST_INTERVAL)
+    return rows
+
+
 def run_backfill(
     settings: Settings,
     *,
@@ -395,6 +452,7 @@ def run_backfill(
     fetch_dividends: FetchDividends | None = fetch_finmind_dividends,
     fetch_ex_rights: Callable[[date, date], list[DividendRecord]] | None
         = fetch_twse_ex_rights,
+    fetch_holdings: Callable[[str], list] | None = fetch_sitca_holdings,
 ) -> None:
     """為缺歷史的代號回補完整還原股價,並補齊大盤報酬指數。
 
@@ -453,6 +511,46 @@ def run_backfill(
                 logger.info("%d 年除權息 %d 筆", year, len(rows))
                 time.sleep(DIVIDEND_REQUEST_INTERVAL)
 
+        # ETF 成分股:公會月報,每月第 10 個營業日更新上個月的資料。
+        # 以「資料庫裡最新的月份」當快門 —— 每天重抓是白費,而且是對一個
+        # 公益性質的網站白費。
+        if fetch_holdings is not None:
+            target = _holdings_target_month(date.today())
+            if db.latest_holdings_month() != target:
+                try:
+                    raw = fetch_holdings(target)
+                except Exception as exc:
+                    logger.warning("公會成分股取得失敗:%s", exc)
+                    raw = []
+                if raw:
+                    index, collisions = build_index(
+                        _twse_fund_full_names(),
+                        {c: p.name for c, p in db.get_profiles().items()},
+                    )
+                    resolved, unresolved = [], []
+                    for h in raw:
+                        code = resolve(h.fund_name, index)
+                        if code is None:
+                            unresolved.append(h.fund_name)
+                            continue
+                        resolved.append((code, h.year_month, h.rank,
+                                         h.security_code, h.security_name,
+                                         h.security_type, h.amount, h.weight))
+                    db.upsert_holdings(resolved)
+                    logger.info("公會成分股 %s:寫入 %d 筆 / %d 檔",
+                                target, len(resolved),
+                                len({r[0] for r in resolved}))
+                    if unresolved:
+                        # 對不上就是對不上。列出來讓人補 fundnames.MANUAL,
+                        # 不要靜默丟掉 —— 那幾檔的成分股會永遠是空的,
+                        # 而畫面上看起來只是「還沒抓到」。
+                        logger.warning("公會成分股有 %d 檔對不上代號:%s",
+                                       len(set(unresolved)),
+                                       "、".join(sorted(set(unresolved))[:10]))
+                    if collisions:
+                        logger.warning("基金名稱正規化後撞名,已排除:%s",
+                                       "、".join(collisions))
+
         # 大盤報酬指數:Beta 與超額報酬的基準。缺了不影響其他指標。
         #
         # 起點自資料庫既有的最後一筆之後續抓,不是每次都回頭補十年:
@@ -481,6 +579,7 @@ def run_update(
     fetch_dividends: FetchDividends | None = fetch_finmind_dividends,
     fetch_ex_rights: Callable[[date, date], list[DividendRecord]] | None
         = fetch_twse_ex_rights,
+    fetch_holdings: Callable[[str], list] | None = fetch_sitca_holdings,
 ) -> None:
     """每日更新:抓取 → 篩出 ETF → 驗證 → 寫入 → 回補 → 計算 → 匯出。
 
@@ -532,7 +631,7 @@ def run_update(
     # 基準也在此更新 —— 排程只跑 update,不在這裡補的話 Beta 永遠是 null。
     run_backfill(settings, fetch_history=fetch_history,
                  fetch_benchmark=fetch_benchmark, fetch_dividends=fetch_dividends,
-                 fetch_ex_rights=fetch_ex_rights)
+                 fetch_ex_rights=fetch_ex_rights, fetch_holdings=fetch_holdings)
 
     run_export(settings, is_stale=False, anomalies=result.flagged)
 
@@ -561,3 +660,36 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+def _holdings_target_month(today: date) -> str:
+    """要查的成分股月份(`YYYYMM`)。
+
+    公會「每月第 10 個營業日」公布上個月的資料,所以不能問當月 ——
+    那個月份代碼還不存在,查了只會拿到空結果並白跑一輪數十次請求。
+    以 HOLDINGS_LAG_DAYS 回推。
+    """
+    target = today - timedelta(days=HOLDINGS_LAG_DAYS)
+    return f"{target.year}{target.month:02d}"
+
+
+def _twse_fund_full_names() -> dict[str, str]:
+    """代號 → TWSE 的基金中文全名。取得失敗時回空 dict。
+
+    失敗只會讓對應退回第二層(證券簡稱)與人工對照表,不會中斷整批 ——
+    但對應率會從 89% 掉到約 40%,所以失敗要留下警告。
+    """
+    from .sources.base import fetch_json
+
+    try:
+        payload = fetch_json(TWSE_FUND_PROFILE_URL)
+    except Exception as exc:
+        logger.warning("TWSE 基金基本資料取得失敗,名稱對應將大幅下降:%s", exc)
+        return {}
+    out: dict[str, str] = {}
+    for item in payload if isinstance(payload, list) else []:
+        code = str(item.get("基金代號", "")).strip()
+        name = str(item.get("基金中文名稱", "")).strip()
+        if code and name:
+            out[code] = name
+    return out
