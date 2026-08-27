@@ -35,13 +35,34 @@ jobs:
       - name: 執行測試
         run: cd pipeline && pytest -q
 
-      # 快取鍵必須穩定才會命中。含 run_id 的鍵每次都不同,等於永遠沒有快取,
-      # 歷史資料庫會每天重建。快取遺失是可自癒的 —— update 會偵測缺歷史並回補。
+      # 鍵**必須每次都不同**,而由 restore-keys 做前綴回退。
+      #
+      # 這裡原本用固定鍵 alpha-track-db-v1,理由寫著「鍵必須穩定才會命中」。
+      # 那個理由是錯的,而且錯得很安靜:actions/cache 在**命中時不會再存檔**,
+      # 所以固定鍵的快取只會是第一次存下的那一份,之後每天還原它、更新它、
+      # 然後丟掉。隔天再還原同一份舊的。
+      #
+      # 對「每天重抓就好」的資料(價格、配息)這只是浪費;但對**沒有歷史的
+      # 來源**是致命的:折溢價的淨值只有當日快照、抓不到過去,
+      # navs 表因此每天被打回原點,規格 §4.4 要的 20 個交易日樣本永遠湊不滿,
+      # 而畫面上只會顯示「目前累積 1 個交易日」—— 看起來像功能剛上線,
+      # 不像壞掉。
+      #
+      # 唯一鍵保證每次都是 miss,post 步驟因此一定存檔;restore-keys 以前綴
+      # 找到最近一次的快取來還原。快取真的遺失仍是可自癒的 ——
+      # update 會偵測缺歷史並回補,只有淨值補不回來。
+      #
+      # restore-keys 保留舊的 v1 是為了讓**第一次** v2 執行不必從零重建
+      # (完整回補要十分鐘,而且會白白丟掉已累積的淨值)。
+      # v2 存過一次之後這一行就沒有作用了,可以刪。
       - name: 還原資料庫快取
         uses: actions/cache@v4
         with:
           path: data/alpha_track.db
-          key: alpha-track-db-v1
+          key: alpha-track-db-v2-${{ github.run_id }}
+          restore-keys: |
+            alpha-track-db-v2-
+            alpha-track-db-v1
 
       - name: 更新資料
         run: python -m alpha_track.cli update

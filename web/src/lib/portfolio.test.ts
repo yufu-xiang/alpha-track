@@ -213,3 +213,58 @@ describe('股票分割(規格 §6.1 未涵蓋,但不處理會讓數字錯掉)', 
     expect(h.shares).toBe(1000)
   })
 })
+
+describe('今日損益(規格 §6.6)', () => {
+  const buy = {
+    id: 'b1', type: 'buy' as const, code: '0050', date: '2025-01-06',
+    shares: 1000, price: 100, fee: 0, tax: 0,
+  }
+  const prices = new Map([['0050', 110]])
+
+  it('由現價與當日報酬回推昨收', () => {
+    // 現價 110、當日 +10% → 昨收 100 → 1000 股賺 10,000
+    const s = summarize([buy], prices, '2026-08-27', new Map([['0050', 0.1]]))
+    expect(s.todayChange).toBeCloseTo(10_000)
+  })
+
+  it('下跌為負', () => {
+    const s = summarize([buy], prices, '2026-08-27', new Map([['0050', -0.05]]))
+    expect(s.todayChange).toBeCloseTo(1000 * (110 - 110 / 0.95))
+    expect(s.todayChange!).toBeLessThan(0)
+  })
+
+  it('完全查不到當日報酬時為 null,不是 0', () => {
+    // 0 代表「今天沒動」,null 代表「不知道今天動多少」—— 兩者意義不同
+    const s = summarize([buy], prices, '2026-08-27')
+    expect(s.todayChange).toBeNull()
+  })
+
+  it('某一檔的當日報酬是 null 時只跳過那一檔', () => {
+    const txs = [buy, { ...buy, id: 'b2', code: '0056', shares: 2000, price: 30 }]
+    const px = new Map([['0050', 110], ['0056', 33]])
+    const s = summarize(txs, px, '2026-08-27',
+      new Map([['0050', 0.1], ['0056', null]]))
+    expect(s.todayChange).toBeCloseTo(10_000)
+  })
+
+  it('查不到現價的持股不算今日損益,也不計入市值', () => {
+    const s = summarize([buy], new Map(), '2026-08-27', new Map([['0050', 0.1]]))
+    expect(s.todayChange).toBeNull()
+    expect(s.missingPrices).toEqual(['0050'])
+  })
+
+  it('D1 為 -1 不讓除法爆掉', () => {
+    const s = summarize([buy], prices, '2026-08-27', new Map([['0050', -1]]))
+    expect(s.todayChange).toBeNull()
+  })
+
+  it('已賣光的部位不計入今日損益', () => {
+    const sell = {
+      id: 's1', type: 'sell' as const, code: '0050', date: '2026-01-01',
+      shares: 1000, price: 120, fee: 0, tax: 0,
+    }
+    const s = summarize([buy, sell], prices, '2026-08-27',
+      new Map([['0050', 0.1]]))
+    expect(s.todayChange).toBeNull()
+  })
+})

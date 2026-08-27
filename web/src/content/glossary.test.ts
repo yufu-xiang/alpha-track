@@ -1,12 +1,26 @@
 import { describe, expect, it } from 'vitest'
 import { GLOSSARY } from './glossary'
 
+/** 規格 §5.7 明列「須涵蓋」的十六項。規格用英文名處以中文別名對照。 */
+const REQUIRED: [label: string, matcher: string][] = [
+  ['年化報酬', '年化報酬'], ['CAGR', 'CAGR'], ['含息總報酬', '含息總報酬'],
+  ['年化波動度', '年化波動度'], ['最大回撤', '最大回撤'], ['Sharpe', '夏普'],
+  ['Beta', '貝他'], ['超額報酬', '超額報酬'], ['折溢價', '折溢價'],
+  ['內扣費用率', '內扣費用率'], ['XIRR', 'XIRR'], ['平均成本', '平均成本'],
+  ['殖利率', '殖利率'], ['填息', '填息'],
+  ['蒙地卡羅成功率', '蒙地卡羅成功率'], ['安全提領率', '安全提領率'],
+]
+
 describe('指標詞典', () => {
-  it('涵蓋階段 1 顯示的全部指標', () => {
-    expect(Object.keys(GLOSSARY).sort()).toEqual([
-      'annualized', 'beta', 'cagr', 'excess', 'mdd', 'premium_discount',
-      'sharpe', 'total_return', 'volatility', 'xirr',
-    ])
+  it('涵蓋規格 §5.7 明列的十六項', () => {
+    // 原本這裡寫死階段 1 的十個鍵。那守不住規格 —— 規格 §9 要求詞典隨
+    // 各階段增量累積,而實際上工具組、投資組合、殖利率排行三個階段
+    // 都漏補了條目,而寫死鍵清單的測試一次都沒紅。改成對照規格的清單。
+    const terms = Object.values(GLOSSARY).map((e) => e.term)
+    const missing = REQUIRED
+      .filter(([, m]) => !terms.some((t) => t.includes(m)))
+      .map(([label]) => label)
+    expect(missing).toEqual([])
   })
 
   it('每一筆都具備四個欄位,且沒有空字串', () => {

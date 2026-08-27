@@ -92,6 +92,12 @@ export function buildHoldings(txs: Transaction[]): Map<string, Holding> {
 export interface PortfolioSummary {
   /** 目前持股的市值 */
   marketValue: number
+  /**
+   * 今日損益(規格 §6.6)。查不到當日報酬的持股不計入,並由 missingPrices
+   * 一併回報 —— 靜默當成 0 會讓「今天沒動」與「不知道今天動多少」
+   * 看起來一模一樣。全部查不到時為 null,不是 0。
+   */
+  todayChange: number | null
   /** 尚未回收的投入成本(持股數 × 平均成本) */
   costBasis: number
   unrealized: number
@@ -110,12 +116,16 @@ export function summarize(
   txs: Transaction[],
   prices: Map<string, number>,
   today: string,
+  /** 各檔的當日報酬(rankings 的 returns.D1)。昨收 = 現價 ÷ (1 + D1)。 */
+  dayReturns: Map<string, number | null> = new Map(),
 ): PortfolioSummary & { missingPrices: string[] } {
   const holdings = buildHoldings(txs)
   let marketValue = 0
   let costBasis = 0
   let realized = 0
   let dividends = 0
+  let todayChange = 0
+  let todayKnown = false
   const missingPrices: string[] = []
 
   for (const h of holdings.values()) {
@@ -124,8 +134,16 @@ export function summarize(
     if (h.shares <= 0) continue
     costBasis += h.shares * h.avgCost
     const px = prices.get(h.code)
-    if (px === undefined) missingPrices.push(h.code)
-    else marketValue += h.shares * px
+    if (px === undefined) { missingPrices.push(h.code); continue }
+    marketValue += h.shares * px
+
+    // 昨收由現價與當日報酬回推。D1 為 -1(跌停到 0,實務上不會發生)
+    // 會讓除法爆掉,故排除。
+    const d1 = dayReturns.get(h.code)
+    if (d1 !== undefined && d1 !== null && d1 > -1) {
+      todayChange += h.shares * (px - px / (1 + d1))
+      todayKnown = true
+    }
   }
 
   // 總投入 = 所有買進付出的錢(含手續費)
@@ -139,6 +157,7 @@ export function summarize(
 
   return {
     marketValue,
+    todayChange: todayKnown ? todayChange : null,
     costBasis,
     unrealized: marketValue - costBasis,
     realized,

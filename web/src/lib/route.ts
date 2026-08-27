@@ -14,12 +14,14 @@ export type Route =
   | { name: 'compare'; codes: string[] }
   | { name: 'portfolio' }
   | { name: 'tools'; tool: string | null }
+  | { name: 'glossary' }
 
 export function parseHash(hash: string): Route {
   const detail = /^#\/etf\/([A-Za-z0-9]+)$/.exec(hash)
   if (detail) return { name: 'detail', code: detail[1]!.toUpperCase() }
 
   if (hash === '#/portfolio') return { name: 'portfolio' }
+  if (hash === '#/glossary') return { name: 'glossary' }
   // 規格 §7.4「每個工具一頁」。無 id 時是工具列表;id 不存在時由 Tools
   // 顯示「找不到」再列出全部,不是靜默退回列表 —— 舊書籤失效時使用者
   // 需要知道發生了什麼,而不是納悶自己是不是點錯了。
@@ -39,6 +41,7 @@ export function hashFor(route: Route): string {
   if (route.name === 'detail') return `#/etf/${route.code}`
   if (route.name === 'compare') return `#/compare/${serializeCodes(route.codes)}`
   if (route.name === 'portfolio') return '#/portfolio'
+  if (route.name === 'glossary') return '#/glossary'
   if (route.name === 'tools') return route.tool ? `#/tools/${route.tool}` : '#/tools'
   return '#/'
 }

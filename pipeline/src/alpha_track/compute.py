@@ -95,6 +95,12 @@ class EtfMetrics:
     """近 PREMIUM_WINDOW_DAYS 日中,折溢價為正(溢價)的天數佔比。"""
     premium_sample: int = 0
     """實際納入折溢價統計的天數。少於 MIN_DAYS_FOR_PREMIUM_STATS 時上面三項為 None。"""
+    fund_size: float | None = None
+    """基金規模(新台幣元)= 已發行受益權單位數 × 每單位淨值。
+
+    規格 §5.2 ② 要求個股頁顯示。它關係到流動性與清算風險 ——
+    台灣規定 ETF 規模連續低於門檻可能下市,屆時被迫在低點實現損益。
+    """
     data_start: date | None = None
     """最早持有價格資料的日期。與掛牌日不同時,前端據此說明實際涵蓋範圍。"""
     avg_volume: float | None = None
@@ -226,6 +232,12 @@ def compute_etf_metrics(
 
     m.premium_discount, m.premium_low, m.premium_high, m.premium_days_ratio, \
         m.premium_sample = _premium_stats(navs, base_date)
+
+    # 規模 = 已發行受益權單位數 × 每單位淨值。取基準日當天或之前最新的一筆。
+    latest_nav = max((n for n in navs if n.date <= base_date),
+                     key=lambda n: n.date, default=None)
+    if latest_nav is not None and latest_nav.fund_size:
+        m.fund_size = latest_nav.fund_size * latest_nav.nav
 
     return m
 

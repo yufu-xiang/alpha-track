@@ -187,6 +187,8 @@ export interface EtfDetail {
    * 會讓折溢價前面補上一長串 null,而那看起來像資料壞了。
    */
   premium_series: PremiumSeries
+  /** 基金規模(新台幣元)= 已發行受益權單位數 × 每單位淨值。 */
+  fund_size: number | null
   series: Series
   dividends: DividendRecord[]
 }

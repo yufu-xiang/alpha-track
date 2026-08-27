@@ -163,6 +163,8 @@ def build_detail(
         "premium_high": metrics.premium_high,
         "premium_days_ratio": metrics.premium_days_ratio,
         "premium_sample": metrics.premium_sample,
+        # 規模(新台幣元)。規格 §5.2 ② 的基本資料之一。
+        "fund_size": metrics.fund_size,
         # 折溢價走勢(規格 §5.2 ②)。與價格序列分開,因為兩者的起點不同:
         # 淨值只能自接上來源的那天開始逐日累積,價格則有多年歷史。
         # 硬塞進同一組 days 會讓折溢價前面補上一長串 null。

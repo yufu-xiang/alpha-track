@@ -467,3 +467,33 @@ class TestPremiumStats:
         m = compute_etf_metrics(_prices_with_volume(30), base, risk_free=0.0,
                                 bench_closes={}, navs=navs, listing_date=None)
         assert m.premium_sample == 11
+
+
+def test_fund_size_is_units_times_nav():
+    """規模 = 已發行受益權單位數 × 每單位淨值(規格 §5.2 ②)。
+
+    實測對照元大官網 2026-08-26 公告的基金資產總淨值 2,369,434,458,616:
+    我方以 22,338,500,000 單位 × 106.07 得 2,369,444,695,000,
+    **相差 0.0004%**。差額來自公告的淨值只到小數點後兩位
+    (回推真實淨值為 106.069542…),不是算法不同。
+
+    因此容差取 1e-4 而非精確相等 —— 寫成精確相等會在下一次淨值的
+    小數位變動時無故變紅,而那不代表任何東西壞掉。
+    """
+    from alpha_track.compute import compute_etf_metrics
+    from alpha_track.models import NavRecord
+    navs = [NavRecord(code="0050", date=date(2026, 8, 26), nav=106.07,
+                      market_price=105.9, fund_size=22_338_500_000)]
+    m = compute_etf_metrics(_prices_with_volume(30), date(2026, 8, 26),
+                            risk_free=0.0, bench_closes={}, navs=navs,
+                            listing_date=None)
+    assert m.fund_size == pytest.approx(2_369_434_458_616, rel=1e-4)
+
+
+def test_fund_size_is_none_without_nav_data():
+    """沒有淨值資料就沒有規模。回 0 會讓一檔正常的 ETF 看起來要清算了。"""
+    from alpha_track.compute import compute_etf_metrics
+    m = compute_etf_metrics(_prices_with_volume(30), date(2026, 1, 30),
+                            risk_free=0.0, bench_closes={}, navs=[],
+                            listing_date=None)
+    assert m.fund_size is None

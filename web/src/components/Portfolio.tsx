@@ -38,9 +38,12 @@ export function Portfolio() {
   const infoMap = useMemo(
     () => new Map(rows.map((r) => [r.code, r])), [rows])
 
+  const dayReturns = useMemo(
+    () => new Map(rows.map((r) => [r.code, r.returns.D1])), [rows])
+
   const summary = useMemo(
-    () => summarize(data.transactions, priceMap, today),
-    [data.transactions, priceMap, today])
+    () => summarize(data.transactions, priceMap, today, dayReturns),
+    [data.transactions, priceMap, today, dayReturns])
   const holdings = useMemo(
     () => [...buildHoldings(data.transactions).values()].filter((h) => h.shares > 0),
     [data.transactions])
@@ -137,6 +140,10 @@ export function Portfolio() {
         <h2>總覽</h2>
         <dl className="cards">
           <Card label="總市值" value={formatNumber(summary.marketValue, 0)} />
+          <Card label="今日損益"
+                value={summary.todayChange === null
+                  ? '—' : formatNumber(summary.todayChange, 0)}
+                tone={summary.todayChange} />
           <Card label="投入成本" value={formatNumber(summary.costBasis, 0)} />
           <Card label="未實現損益" value={formatNumber(summary.unrealized, 0)}
                 tone={summary.unrealized} />

@@ -18,6 +18,7 @@ const detail = {
     start: '2014-01-02', days: [0, 1, 2],
     adj: [100, 105, 110], close: [90, 94, 99],
   },
+  fund_size: 2_369_444_695_000,
   premium_low: -0.003, premium_high: 0.004,
   premium_days_ratio: 0.55, premium_sample: 60,
   premium_series: {
@@ -153,5 +154,26 @@ describe('折溢價(規格 §5.2 ②、§4.4)', () => {
     // 頁面主體仍在
     expect(screen.getByRole('heading', { name: /0050/ })).toBeInTheDocument()
     expect(screen.getByText(/還沒有折溢價資料/)).toBeInTheDocument()
+  })
+})
+
+describe('基本資料(規格 §5.2 ②)', () => {
+  it('顯示規模,並以億為單位 —— 兆元的原始數字讀不出量級', async () => {
+    await renderLoaded()
+    expect(screen.getByText('23,694 億')).toBeInTheDocument()
+  })
+
+  it('沒有淨值資料時規模顯示破折號,不是 0', async () => {
+    mockOk({ fund_size: null })
+    await renderLoaded()
+    const dl = screen.getByRole('heading', { name: '基本資料' })
+      .parentElement!.querySelector('dl')!
+    expect(dl.textContent).toContain('—')
+  })
+
+  it('內扣費用率整欄保留,並由 ⓘ 說明去哪裡查', async () => {
+    // 沒有公開的統一來源。整欄拿掉的話,使用者不會知道這個資訊存在。
+    await renderLoaded()
+    expect(screen.getByText('內扣費用率')).toBeInTheDocument()
   })
 })

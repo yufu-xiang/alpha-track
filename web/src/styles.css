@@ -730,3 +730,51 @@ footer { margin-top: 1.5rem; font-size: 0.8125rem; color: var(--fg-muted); }
 .corr-self { color: var(--fg-muted); }
 .corr-high { color: var(--warn-fg); font-weight: 600; }
 .tool-add { align-self: flex-end; padding: 0.35rem 0.9rem; }
+
+/* ── 名詞解釋頁(規格 §5.7 的第二種呈現)──────────────── */
+
+.glossary__toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  margin: 1rem 0 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8125rem;
+}
+.glossary__toc a { color: var(--accent); }
+
+.glossary { margin: 0; }
+.glossary__entry {
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--border);
+  /* 錨點捲動時不要被上方元素蓋住 */
+  scroll-margin-top: 1rem;
+}
+.glossary__entry dt {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+.glossary__entry dd { margin: 0; }
+.glossary__entry dd p {
+  margin: 0 0 0.5rem;
+  line-height: 1.7;
+  font-size: 0.875rem;
+}
+.glossary__what { color: var(--fg); }
+/* 「怎麼看」是這份詞典的重點(規格 §5.7),用左邊界把它挑出來。
+   其餘三段維持一般內文,不互相搶。 */
+.glossary__read {
+  padding-left: 0.7rem;
+  border-left: 3px solid var(--accent);
+}
+.glossary__how, .glossary__pitfall { color: var(--fg-muted); }
+.glossary__entry dd strong {
+  display: inline-block;
+  min-width: 3.6rem;
+  margin-right: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+}
+.glossary__read strong { color: var(--accent); }

@@ -13,6 +13,7 @@ import { HealthBar } from './components/HealthBar'
 import { PeriodTabs } from './components/PeriodTabs'
 import { Compare } from './components/Compare'
 import { EtfDetail } from './components/EtfDetail'
+import { Glossary } from './components/Glossary'
 import { Portfolio } from './components/Portfolio'
 import { RankingTable } from './components/RankingTable'
 import { Tools } from './components/tools'
@@ -29,6 +30,7 @@ export function App() {
   if (route.name === 'detail') return <EtfDetail code={route.code} />
   if (route.name === 'compare') return <Compare codes={route.codes} />
   if (route.name === 'portfolio') return <Portfolio />
+  if (route.name === 'glossary') return <Glossary />
   if (route.name === 'tools') return <Tools tool={route.tool} />
   return <Rankings />
 }
@@ -118,6 +120,7 @@ function Rankings() {
         <p className="app__nav">
           <a href={hashFor({ name: 'portfolio' })}>我的組合 →</a>
           <a href={hashFor({ name: 'tools', tool: null })}>理財工具 →</a>
+          <a href={hashFor({ name: 'glossary' })}>名詞解釋 →</a>
         </p>
         <HealthBar meta={result.meta} />
       </header>

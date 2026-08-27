@@ -29,3 +29,20 @@ export function formatMoney(v: number | null, digits = 0): string {
     minimumFractionDigits: digits, maximumFractionDigits: digits,
   })
 }
+
+
+/**
+ * 大額金額,以「億/萬」為單位。
+ *
+ * 基金規模動輒兆元,`2,369,444,695,000` 這串沒有人能一眼讀出量級,
+ * 而規模這個欄位的用途正是判斷量級(幾十億以下要留意流動性與清算風險)。
+ */
+export function formatCompactMoney(v: number | null): string {
+  if (v === null || Number.isNaN(v)) return DASH
+  const abs = Math.abs(v)
+  if (abs >= 1e8) return `${(v / 1e8).toLocaleString('zh-TW', {
+    maximumFractionDigits: 0 })} 億`
+  if (abs >= 1e4) return `${(v / 1e4).toLocaleString('zh-TW', {
+    maximumFractionDigits: 0 })} 萬`
+  return v.toLocaleString('zh-TW', { maximumFractionDigits: 0 })
+}
