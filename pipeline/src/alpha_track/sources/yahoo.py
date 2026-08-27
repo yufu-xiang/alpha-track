@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from math import log
+from statistics import median
 from zoneinfo import ZoneInfo
 
 from ..models import PriceRecord
@@ -28,6 +30,19 @@ SPLIT_RATIOS = tuple(range(2, 11))
 以及反分割 ×4、×5、×6、×7 —— 全部是乾淨的整數比。"""
 
 SPLIT_RATIO_TOLERANCE = 0.10
+
+PERSISTENCE_WINDOW = 5
+"""跳空之後要觀察幾個交易日,才判斷新水位是不是「留下來了」。"""
+
+PERSISTENCE_MARGIN = 5.0
+"""新水位要比舊水位近多少倍,才算尺度改變。
+
+實測兩個真實案例的分離度極大,所以這個門檻不敏感:
+  - 00631L(2015-01-05,尺度改變):跳後五日中位數距新水位 0.0026、
+    距舊水位 3.086 —— 相差 **1169 倍**
+  - 00715L(2026-03-09,真實行情):0.211 對 0.273 —— 只有 **1.29 倍**
+取 5 遠離兩者。
+"""
 """倍率與整數比的容許誤差。
 
 留 10% 是因為分割當天大盤也在動:1:4 分割搭配 -5% 的行情是 4.21 倍。
@@ -134,26 +149,75 @@ def _drop_history_before_unadjusted_split(
         gap = rows[i].adj_close / prev
         ratio = gap if gap > 1 else 1 / gap
         split = _looks_like_split(ratio)
-        if split is None:
-            # 對不上任何分割比。可能是不受漲跌幅限制的商品/海外槓桿 ETF
-            # 真的這樣動(實測 00715L 全序列有五天超過 35%),也可能是
-            # 來源的壞資料。兩者都不該靠猜來截斷 —— 誤砍的代價是丟掉
-            # 數年歷史,而那會表現為「長期報酬是 null」,與「這檔太新」
-            # 完全無法區分。保留資料,把事情說出來讓人去看。
+        if split is not None:
             logger.warning(
-                "%s 在 %s 有 %.1f%% 的單日跳空,但 %.2f 倍對不上任何分割比,"
-                "保留完整歷史。請確認是真實行情還是來源壞資料。",
-                code, rows[i].date, change * 100, ratio,
+                "%s 在 %s 有 %.1f%% 的單日跳空,倍率 %.2f 判定為未調整的 1:%d 分割;"
+                "捨棄該日之前的 %d 筆歷史,起點改為 %s",
+                code, rows[i].date, change * 100, ratio, split, i, rows[i].date,
             )
-            continue
+            return rows[i:]
+
+        # 對不上任何整數分割比。這裡再問一個問題:**新水位留下來了嗎?**
+        #
+        # 留下來 → 不管成因是什麼(未公告的分割、面額變更、來源換了標的),
+        #          斷點之前的資料與之後不在同一個尺度上,留著必然是錯的。
+        # 沒留下 → 那是一天的跳動或壞跳點,不是尺度改變。砍掉數年歷史的
+        #          代價遠高於留著,而且誤砍會表現為「長期報酬是 null」,
+        #          與「這檔太新」完全無法區分。
+        if _level_persisted(rows, i):
+            logger.warning(
+                "%s 在 %s 有 %.1f%% 的單日跳空,%.2f 倍對不上任何分割比,"
+                "但新水位在其後 %d 個交易日持續存在 —— 判定為尺度改變,"
+                "捨棄該日之前的 %d 筆歷史,起點改為 %s",
+                code, rows[i].date, change * 100, ratio,
+                PERSISTENCE_WINDOW, i, rows[i].date,
+            )
+            return rows[i:]
 
         logger.warning(
-            "%s 在 %s 有 %.1f%% 的單日跳空,倍率 %.2f 判定為未調整的 1:%d 分割;"
-            "捨棄該日之前的 %d 筆歷史,起點改為 %s",
-            code, rows[i].date, change * 100, ratio, split, i, rows[i].date,
+            "%s 在 %s 有 %.1f%% 的單日跳空,%.2f 倍對不上任何分割比,"
+            "且價位隨後回到原水位 —— 判定為真實行情或單日壞跳點,保留完整歷史。",
+            code, rows[i].date, change * 100, ratio,
         )
-        return rows[i:]
     return rows
+
+
+def _level_persisted(rows: list[PriceRecord], i: int) -> bool:
+    """跳空之後的價位,是靠近**新**水位還是回到**舊**水位?
+
+    前後**都取中位數**,不是拿跳空前一天當基準。這一點是實測逼出來的:
+    00633L 在 2015-02-05 有一個孤立的壞點(36.77 → **24.50** → 35.16),
+    只看前一天的話,2015-02-06 從 24.50 跳回 35.16 會被判成「新水位持續」,
+    於是把三個月的歷史砍掉 —— 而實際上是那一天的 24.50 有問題。
+    取中位數之後,「跳空前的水位」是 35.33 而非 24.50 —— 壞點雖然還在視窗內,
+    中位數不受它左右 —— 結論就反過來了。
+
+    用中位數而非平均,是為了讓孤立的壞點與緊接著的第二個跳點都無法左右判斷。
+
+    距離用對數比值:價格是幾何量,19.05 → 0.87 與 0.87 → 19.05 是同一件事,
+    用絕對差值的話前者看起來比後者嚴重二十倍。
+    """
+    after = [r.adj_close for r in rows[i + 1: i + 1 + PERSISTENCE_WINDOW]
+             if r.adj_close > 0]
+    before = [r.adj_close for r in rows[max(0, i - PERSISTENCE_WINDOW): i]
+              if r.adj_close > 0]
+    # 樣本不足就不判斷。跳空落在序列末端時,我們還不知道它留不留得下來,
+    # 而「還不知道」不該被當成「是尺度改變」——那會砍掉整段歷史。
+    if len(after) < 3 or len(before) < 3:
+        return False
+
+    level = median(after)
+    new_price = rows[i].adj_close
+    old_price = median(before)
+    if level <= 0 or new_price <= 0 or old_price <= 0:
+        return False
+
+    to_new = abs(log(level / new_price))
+    to_old = abs(log(level / old_price))
+    # 完全貼合新水位(to_new 為 0)是最強的證據,不能因為除以零而漏掉。
+    if to_new == 0:
+        return to_old > 0
+    return to_old / to_new >= PERSISTENCE_MARGIN
 
 
 def _at(seq: list | None, i: int) -> float | None:

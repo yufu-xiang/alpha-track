@@ -739,3 +739,110 @@ class TestParseTwseExRights:
         from alpha_track.sources.twse import parse_twse_ex_rights
         assert parse_twse_ex_rights({}) == []
         assert parse_twse_ex_rights({"data": None}) == []
+
+
+class TestUnadjustedScaleChange:
+    """跳空之後的判別:新水位留下來了,還是回到原水位?
+
+    兩個 fixture 都是真實資料的斷點區段(2026-08-27 自 Yahoo 取得):
+      - 00631L 2015-01-05:19.05 → 0.8691,其後穩定在 0.87 —— 尺度改變
+      - 00715L 2026-03-09:38.16 → 61.95,其後回到 39–50 —— 真實行情
+    倍率 21.92 與 1.62 都對不上任何整數分割比,舊規則因此兩者都保留,
+    而 00631L 的最大回撤就長期顯示為 -96.9%(元大台灣50正2 沒有跌過九成七)。
+    """
+
+    def test_persistent_level_shift_truncates_history(self):
+        from alpha_track.sources.yahoo import parse_yahoo_chart
+        rows = parse_yahoo_chart(load_fixture("yahoo_00631L_jump.json"), "00631L")
+        assert rows[0].date == date(2015, 1, 5)
+        assert all(r.adj_close < 2 for r in rows)
+
+    def test_reverting_spike_keeps_history(self):
+        """砍錯的代價是丟掉數年歷史,而那會表現為「長期報酬是 null」,
+
+        與「這檔太新」完全無法區分 —— 使用者看不出差別。
+        """
+        from alpha_track.sources.yahoo import parse_yahoo_chart
+        rows = parse_yahoo_chart(load_fixture("yahoo_00715L_jump.json"), "00715L")
+        assert rows[0].date == date(2026, 2, 26)
+        assert len(rows) == 14
+
+    def test_the_two_cases_are_far_apart_not_marginal(self):
+        """門檻不該是勉強分開的 —— 實測相差近千倍,所以取 5 很安全。"""
+        import json
+        from math import log
+        from statistics import median
+        from pathlib import Path
+
+        def gap_ratio(name, target):
+            payload = json.loads(
+                (Path(__file__).parent / "fixtures" / name).read_text(encoding="utf-8"))
+            adj = payload["chart"]["result"][0]["indicators"]["adjclose"][0]["adjclose"]
+            i = next(j for j in range(1, len(adj))
+                     if abs(adj[j] / adj[j - 1] - 1) > 0.35)
+            after = median(adj[i + 1:i + 6])
+            return abs(log(after / adj[i - 1])) / abs(log(after / adj[i]))
+
+        assert gap_ratio("yahoo_00631L_jump.json", None) > 100
+        assert gap_ratio("yahoo_00715L_jump.json", None) < 2
+
+    def test_a_jump_at_the_very_end_is_not_truncated(self):
+        """樣本不足就不判斷 ——「還不知道」不該被當成「是尺度改變」。"""
+        from alpha_track.sources.yahoo import parse_yahoo_chart
+        import json
+        from pathlib import Path
+        payload = json.loads(
+            (Path(__file__).parent / "fixtures" / "yahoo_00631L_jump.json")
+            .read_text(encoding="utf-8"))
+        r = payload["chart"]["result"][0]
+        # 只留到跳空後一天:證據不足以下判斷
+        keep = 7
+        r["timestamp"] = r["timestamp"][:keep]
+        for k in r["indicators"]["quote"][0]:
+            r["indicators"]["quote"][0][k] = r["indicators"]["quote"][0][k][:keep]
+        r["indicators"]["adjclose"][0]["adjclose"] = \
+            r["indicators"]["adjclose"][0]["adjclose"][:keep]
+        rows = parse_yahoo_chart(payload, "00631L")
+        assert len(rows) == keep
+
+
+class TestIsolatedBadTick:
+    """孤立的壞點不該被誤判成尺度改變。
+
+    00633L 在 2015-02-05 有一個孤立的壞點:36.77 → **24.50** → 35.16,
+    前後都在 35–37。只拿跳空前一天當基準的話,2015-02-06 從 24.50
+    跳回 35.16 會被判成「新水位持續」,於是把三個月的歷史砍掉 ——
+    而實際上有問題的是 24.50 那一天。前後都取中位數就判得對:
+    壞點雖然落在視窗內,中位數(35.33)不受它左右。
+
+    這個案例是掃描全站找出來的,不是想像的:舊規則會截斷兩檔,
+    一檔對(00631L)、一檔錯(00633L)。
+    """
+
+    def test_isolated_bad_tick_keeps_history(self):
+        from alpha_track.sources.yahoo import parse_yahoo_chart
+        rows = parse_yahoo_chart(
+            load_fixture("yahoo_00633L_bad_tick.json"), "00633L")
+        assert rows[0].date == date(2015, 1, 29)
+        assert len(rows) == 14
+
+    def test_the_baseline_is_the_median_not_the_day_before(self):
+        """壞點落在視窗裡也沒關係 —— 中位數把它壓住了。
+
+        跳空前一天是 24.50,但前五日的中位數是 35.33。
+        判斷用的是後者,結論因此正確。
+        """
+        from math import log
+        from statistics import median
+        adj = [37.03, 36.63, 35.33, 34.8, 36.77, 24.5,
+               35.16, 35.02, 36.61, 36.43, 36.48, 38.22]
+        i = 6  # 2015-02-06
+        assert adj[i - 1] == 24.5
+        old = median(adj[i - 5:i])
+        assert old == pytest.approx(35.33)
+
+        level = median(adj[i + 1:i + 6])
+        to_new = abs(log(level / adj[i]))
+        to_old = abs(log(level / old))
+        # 新水位並沒有比舊水位近多少 —— 因此不是尺度改變
+        assert to_old / to_new < 5
