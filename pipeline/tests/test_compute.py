@@ -497,3 +497,47 @@ def test_fund_size_is_none_without_nav_data():
                             risk_free=0.0, bench_closes={}, navs=[],
                             listing_date=None)
     assert m.fund_size is None
+
+
+class TestDegenerateWindow:
+    """零長度的期間必須是 None,不是 0。
+
+    0 的意思是「這段期間沒漲沒跌」,None 的意思是「這段期間算不出來」——
+    排行榜會把 null 排到最末並顯示破折號,把 0 當成一個真實的名次。
+    """
+
+    @staticmethod
+    def prices(dates_and_closes):
+        from alpha_track.models import PriceRecord
+        return [PriceRecord(code="X", date=d, open=c, high=c, low=c,
+                            close=c, volume=1000, adj_close=c)
+                for d, c in dates_and_closes]
+
+    def test_stale_etf_reports_null_not_zero_for_the_day(self):
+        """該檔的資料落後於全站基準日時,「當日」算不出來。
+
+        end 取的是這檔自己的最新日,而 D1 的起點以 base_date 回推 ——
+        兩者會撞在同一天。實測 2026-08-27 有 339 / 353 檔因此顯示 0.00%。
+        """
+        from alpha_track.compute import compute_etf_metrics
+        rows = self.prices([(date(2026, 8, 25), 100.0), (date(2026, 8, 26), 105.0)])
+        # 全站基準日比這檔的最新日晚一天
+        m = compute_etf_metrics(rows, date(2026, 8, 27), risk_free=0.0,
+                                bench_closes={}, navs=[], listing_date=None)
+        assert m.returns["D1"] is None
+
+    def test_up_to_date_etf_still_reports_the_day(self):
+        """一般情況不能被這條防護誤傷。"""
+        from alpha_track.compute import compute_etf_metrics
+        rows = self.prices([(date(2026, 8, 25), 100.0), (date(2026, 8, 26), 105.0)])
+        m = compute_etf_metrics(rows, date(2026, 8, 26), risk_free=0.0,
+                                bench_closes={}, navs=[], listing_date=None)
+        assert m.returns["D1"] == pytest.approx(0.05)
+
+    def test_a_genuinely_flat_day_is_still_zero_not_null(self):
+        """真的沒漲沒跌就是 0 —— 這條防護不能把它也吃掉。"""
+        from alpha_track.compute import compute_etf_metrics
+        rows = self.prices([(date(2026, 8, 25), 100.0), (date(2026, 8, 26), 100.0)])
+        m = compute_etf_metrics(rows, date(2026, 8, 26), risk_free=0.0,
+                                bench_closes={}, navs=[], listing_date=None)
+        assert m.returns["D1"] == 0.0

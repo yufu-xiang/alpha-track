@@ -178,6 +178,16 @@ def compute_etf_metrics(
         start_day = period_start(base_date, period, own_days)
         if start_day is None or start_day not in by_date:
             continue  # 已預設為 None
+        # 零長度的區間沒有報酬可言。起訖同一天時 total_return 會回 0.0,
+        # 而 0 的意思是「這段期間沒漲沒跌」—— 完全不同的一件事。
+        #
+        # 這在「該 ETF 的資料落後於全站基準日」時必然發生:end 取的是這檔
+        # 自己的最新日,而 D1 的起點是以 base_date 回推的前一個交易日,
+        # 兩者於是撞在同一天。實測 2026-08-27 有 339 / 353 檔的當日報酬
+        # 因此顯示為 0.00% —— 排行榜預設的「當日」欄整欄失去意義,
+        # 而畫面上完全看不出異常。
+        if start_day == end.date:
+            continue  # 已預設為 None
         start = by_date[start_day]
         ret = total_return(start.adj_close, end.adj_close)
         m.returns[period.value] = ret
