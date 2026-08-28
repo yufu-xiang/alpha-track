@@ -70,6 +70,17 @@ describe('工具列表(規格 §7.4:每個工具一頁)', () => {
     // 仍然把全部工具列出來,不讓使用者卡在死路上
     expect(screen.getByRole('link', { name: TOOLS[0]!.title })).toBeInTheDocument()
   })
+
+  it('可依分類縮小工具清單,並顯示目前數量', async () => {
+    render(<Tools tool={null} />)
+    await userEvent.click(screen.getByRole('button', { name: '風險分析' }))
+
+    expect(screen.getByText('顯示 3 / 11 項')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '融資維持率計算' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'ETF 成分股重疊度' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'ETF 報酬相關性' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '退休提領計算' })).not.toBeInTheDocument()
+  })
 })
 
 describe('蒙地卡羅(規格 §7.3)', () => {

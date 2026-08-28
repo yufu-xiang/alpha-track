@@ -11,6 +11,8 @@ import { hashFor } from '../lib/route'
 import { PERIOD_LABELS, type EtfDetail, type PeriodCode } from '../types'
 import { CompareChart } from './CompareChart'
 import { MetricInfo } from './MetricInfo'
+import { PageShell } from './PageShell'
+import { PageLoading } from './LoadingSkeleton'
 
 const SHOWN_PERIODS: PeriodCode[] = ['M3', 'YTD', 'Y1', 'Y3', 'Y5', 'Y10']
 
@@ -36,12 +38,20 @@ export function Compare({ codes }: Props) {
     return () => { live = false }
   }, [codes])
 
-  if (items === null) return <main className="app"><p>載入中…</p></main>
+  if (items === null) return <PageLoading />
 
   return (
-    <main className="app detail">
-      <p><a href={hashFor({ name: 'rankings' })}>← 回排行榜</a></p>
-      <h1>比較 {items.length} 檔</h1>
+    <PageShell
+      eyebrow="ETF COMPARISON"
+      title={`比較 ${items.length} 檔`}
+      description="把走勢標準化到共同起點，再並排比較報酬與風險，避免只看價格高低。"
+      backHref={hashFor({ name: 'rankings' })}
+      meta={items.length > 0 && (
+        <div className="compare-chips">
+          {items.map((d) => <span key={d.code}>{d.code} · {d.name}</span>)}
+        </div>
+      )}
+    >
 
       {failed.length > 0 && (
         <p className="detail__caveat" role="note">
@@ -53,12 +63,20 @@ export function Compare({ codes }: Props) {
         <p role="alert" className="error">選取的標的都沒有資料。</p>
       ) : (
         <>
-          <CompareChart items={items.map((d) => ({
-            code: d.code, name: d.name, series: d.series,
-          }))} />
+          <section className="content-panel content-panel--chart">
+            <div className="panel-heading">
+              <div><p className="eyebrow">NORMALIZED GROWTH</p><h2>共同區間走勢</h2></div>
+              <span>共同起點 = 100</span>
+            </div>
+            <CompareChart items={items.map((d) => ({
+              code: d.code, name: d.name, series: d.series,
+            }))} />
+          </section>
 
-          <section>
-            <h2>指標對照</h2>
+          <section className="content-panel">
+            <div className="panel-heading">
+              <div><p className="eyebrow">SIDE BY SIDE</p><h2>指標對照</h2></div>
+            </div>
             <div className="table-wrap">
               <table>
                 <thead>
@@ -90,7 +108,7 @@ export function Compare({ codes }: Props) {
           </section>
         </>
       )}
-    </main>
+    </PageShell>
   )
 }
 

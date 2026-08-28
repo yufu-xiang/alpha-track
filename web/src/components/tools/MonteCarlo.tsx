@@ -15,6 +15,7 @@ import {
 } from '../../lib/retirement'
 import type { BenchmarkSeries, EtfRow } from '../../types'
 import { ModeSwitch, Num, Pct, Stat, ToolPage } from './shared'
+import { InlineLoading } from '../LoadingSkeleton'
 
 const MIN_YEARS_FOR_LONG_TERM = 10
 const YEARS = 30
@@ -140,7 +141,7 @@ export function MonteCarlo() {
       )}
 
       {loading && mode === 'bootstrap' ? (
-        <p className="chart-empty">載入中…</p>
+        <InlineLoading announce={false} />
       ) : result === null ? (
         <p className="chart-empty">還沒有歷史資料可供抽樣,請改用參數化假設。</p>
       ) : (

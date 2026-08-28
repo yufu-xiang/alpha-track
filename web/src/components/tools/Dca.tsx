@@ -4,6 +4,7 @@ import { loadData, loadDetail } from '../../data/loader'
 import { formatMoney, formatNumber, formatPercent } from '../../lib/format'
 import { lumpVsDca } from '../../lib/invest'
 import type { EtfRow } from '../../types'
+import { InlineLoading } from '../LoadingSkeleton'
 import { Num, Stat, ToolPage } from './shared'
 
 const RANGES = [
@@ -72,7 +73,7 @@ export function Dca() {
         ))}
       </div>
 
-      {loading ? <p className="chart-empty">載入中…</p>
+      {loading ? <InlineLoading />
         : !result ? <p className="chart-empty">找不到 {code} 在這個區間的資料。</p>
         : (
           <>

@@ -17,6 +17,8 @@ import type { EtfRow } from '../types'
 import { AllocationPie } from './AllocationPie'
 import { MetricInfo } from './MetricInfo'
 import { DividendEstimates } from './DividendEstimates'
+import { EmptyState } from './EmptyState'
+import { PageShell } from './PageShell'
 import { SplitNotice } from './SplitNotice'
 import { TransactionForm } from './TransactionForm'
 
@@ -92,9 +94,13 @@ export function Portfolio() {
   }
 
   return (
-    <main className="app detail">
-      <p><a href={hashFor({ name: 'rankings' })}>← 回排行榜</a></p>
-      <h1>我的組合</h1>
+    <PageShell
+      active="portfolio"
+      eyebrow="PORTFOLIO OVERVIEW"
+      title="我的組合"
+      description="集中查看持倉、損益、配息與交易紀錄，掌握這個投資組合現在的樣子。"
+      backHref={hashFor({ name: 'rankings' })}
+    >
 
       {!persistable.current && (
         <p role="alert" className="error">
@@ -103,10 +109,26 @@ export function Portfolio() {
         </p>
       )}
 
-      <p className="detail__caveat" role="note">
-        交易紀錄只存在這台裝置的瀏覽器裡。<strong>清除瀏覽器資料、換裝置、
-        換瀏覽器,紀錄就會消失</strong> —— 匯出是備份的唯一方式。
-      </p>
+      <div className="portfolio-backup">
+        <div>
+          <p className="eyebrow">LOCAL DATA</p>
+          <h2>資料與備份</h2>
+          <p className="portfolio-backup__copy" role="note">
+            交易紀錄只存在這台裝置的瀏覽器裡。<strong>清除瀏覽器資料、換裝置、
+            換瀏覽器，紀錄就會消失</strong>。匯出 JSON 是備份的唯一方式。
+          </p>
+        </div>
+        <div className="portfolio__actions">
+          <button type="button" onClick={doExport}
+                  disabled={data.transactions.length === 0}>匯出備份</button>
+          <label className="portfolio__import">
+            匯入備份
+            <input type="file" accept="application/json,.json"
+                   onChange={(e) => { const f = e.target.files?.[0]; if (f) doImport(f) }} />
+          </label>
+          {notice && <span className="portfolio__notice" role="status">{notice}</span>}
+        </div>
+      </div>
 
       {needsExportReminder(data, today) && (
         <p role="alert" className="portfolio__remind">
@@ -117,17 +139,6 @@ export function Portfolio() {
         </p>
       )}
 
-      <div className="portfolio__actions">
-        <button type="button" onClick={doExport}
-                disabled={data.transactions.length === 0}>匯出 JSON</button>
-        <label className="portfolio__import">
-          匯入 JSON
-          <input type="file" accept="application/json,.json"
-                 onChange={(e) => { const f = e.target.files?.[0]; if (f) doImport(f) }} />
-        </label>
-        {notice && <span className="portfolio__notice" role="status">{notice}</span>}
-      </div>
-
       {summary.missingPrices.length > 0 && (
         <p className="detail__caveat" role="note">
           查不到 {summary.missingPrices.join('、')} 的現價,這幾檔未計入總市值。
@@ -136,8 +147,11 @@ export function Portfolio() {
 
       <SplitNotice transactions={data.transactions} onAdd={addTx} />
 
-      <section>
-        <h2>總覽</h2>
+      <section className="content-panel content-panel--summary">
+        <div className="panel-heading">
+          <div><p className="eyebrow">AT A GLANCE</p><h2>組合總覽</h2></div>
+          <span>依最新收盤價估算</span>
+        </div>
         <dl className="cards">
           <Card label="總市值" value={formatNumber(summary.marketValue, 0)} />
           <Card label="今日損益"
@@ -157,8 +171,11 @@ export function Portfolio() {
         </dl>
       </section>
 
-      <section>
-        <h2>資產配置</h2>
+      <div className="portfolio-grid">
+      <section className="content-panel" id="new-transaction">
+        <div className="panel-heading">
+          <div><p className="eyebrow">ALLOCATION</p><h2>資產配置</h2></div>
+        </div>
         <div className="chart__ranges" role="toolbar" aria-label="切換配置維度">
           <button type="button" aria-pressed={pieBy === 'code'}
                   onClick={() => setPieBy('code')}>依標的</button>
@@ -169,20 +186,34 @@ export function Portfolio() {
                        title={pieBy === 'code' ? '依標的的資產配置' : '依分類的資產配置'} />
       </section>
 
-      <section>
-        <h2>應領配息推估</h2>
+      <section className="content-panel">
+        <div className="panel-heading">
+          <div><p className="eyebrow">NEW ACTIVITY</p><h2>新增交易</h2></div>
+        </div>
+        <TransactionForm fees={data.fees} rows={rows} onAdd={addTx} />
+      </section>
+      </div>
+
+      <section className="content-panel">
+        <div className="panel-heading">
+          <div><p className="eyebrow">DIVIDEND INBOX</p><h2>應領配息推估</h2></div>
+        </div>
         <DividendEstimates transactions={data.transactions} onRecord={addTx} />
       </section>
 
-      <section>
-        <h2>新增交易</h2>
-        <TransactionForm fees={data.fees} rows={rows} onAdd={addTx} />
-      </section>
-
-      <section>
-        <h2>交易紀錄</h2>
+      <section className="content-panel">
+        <div className="panel-heading">
+          <div><p className="eyebrow">ACTIVITY</p><h2>交易紀錄</h2></div>
+          <span>{data.transactions.length} 筆</span>
+        </div>
         {data.transactions.length === 0 ? (
-          <p className="detail__caveat">還沒有交易紀錄。用上面的表單新增第一筆。</p>
+          <EmptyState
+            marker="＋"
+            title="還沒有交易紀錄"
+            description="從一筆買進開始，系統會自動計算持股成本、損益與配息。"
+            action={<a href="#new-transaction">前往新增交易</a>}
+            compact
+          />
         ) : (
           <div className="table-wrap">
             <table>
@@ -227,7 +258,7 @@ export function Portfolio() {
           </div>
         )}
       </section>
-    </main>
+    </PageShell>
   )
 }
 

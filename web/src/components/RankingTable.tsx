@@ -22,6 +22,7 @@ import {
   type EtfRow, type PeriodCode, type RiskColumn,
 } from '../types'
 import { MetricInfo } from './MetricInfo'
+import { EmptyState } from './EmptyState'
 
 const helper = createColumnHelper<EtfRow>()
 
@@ -48,11 +49,13 @@ interface Props {
   /** 已選入比較的代號。未提供則不顯示選取欄。 */
   compareSelected?: string[]
   onCompareToggle?: (code: string) => void
+  /** 篩選後沒有結果時，提供回到完整市場的明確出口。 */
+  onClearFilters?: () => void
 }
 
 export function RankingTable({
   rows, visibleColumns, sortBy, onSortChange, visibleRisk = [],
-  compareSelected, onCompareToggle,
+  compareSelected, onCompareToggle, onClearFilters,
 }: Props) {
   const picking = compareSelected !== undefined && onCompareToggle !== undefined
   const [sorting, setSorting] = useState<SortingState>(
@@ -143,7 +146,16 @@ export function RankingTable({
   })
 
   if (rows.length === 0) {
-    return <p className="empty-state">沒有符合條件的 ETF。試著放寬篩選條件。</p>
+    return (
+      <EmptyState
+        marker="⌕"
+        title="沒有符合條件的 ETF"
+        description="目前的分類、地區或關鍵字組合沒有結果，可以清除條件重新探索。"
+        action={onClearFilters && (
+          <button type="button" onClick={onClearFilters}>清除所有篩選</button>
+        )}
+      />
+    )
   }
 
   // 名次是**排序的結果**,不是一個資料欄位 —— 所以不做成 TanStack 欄位,

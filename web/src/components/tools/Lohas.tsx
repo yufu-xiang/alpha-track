@@ -14,6 +14,7 @@ import {
 } from '../../lib/lohas'
 import type { EtfRow } from '../../types'
 import { Stat, ToolPage } from './shared'
+import { InlineLoading } from '../LoadingSkeleton'
 
 const BOX = { width: 760, height: 320, padX: 52, padY: 16 }
 
@@ -88,7 +89,7 @@ export function Lohas() {
         ))}
       </div>
 
-      {loading ? <p className="chart-empty">載入中…</p>
+      {loading ? <InlineLoading />
         : !model ? <p className="chart-empty">{code} 在這個區間沒有足夠的價格資料。</p>
         : (
           <>

@@ -12,6 +12,9 @@ import {
 import { hashFor } from '../lib/route'
 import { PERIODS, PERIOD_LABELS, RISK_LABELS, type PeriodCode } from '../types'
 import { MetricInfo } from './MetricInfo'
+import { EmptyState } from './EmptyState'
+import { PageLoading } from './LoadingSkeleton'
+import { PageShell } from './PageShell'
 import { PremiumChart } from './PremiumChart'
 import { PriceChart } from './PriceChart'
 
@@ -28,15 +31,16 @@ export function EtfDetail({ code }: Props) {
   }, [code])
 
   if (result === null) {
-    return <main className="app"><p>載入中…</p></main>
+    return <PageLoading />
   }
 
   if (!result.ok) {
     return (
-      <main className="app">
-        <p><a href={hashFor({ name: 'rankings' })}>← 回排行榜</a></p>
+      <PageShell eyebrow="ETF PROFILE" title={code}
+        description="無法載入這檔 ETF 的詳細資料。"
+        backHref={hashFor({ name: 'rankings' })}>
         <p role="alert" className="error">{result.error}</p>
-      </main>
+      </PageShell>
     )
   }
 
@@ -45,19 +49,27 @@ export function EtfDetail({ code }: Props) {
   const coverageGap = d.listing_date && d.data_start && d.data_start > d.listing_date
 
   return (
-    <main className="app detail">
-      <p><a href={hashFor({ name: 'rankings' })}>← 回排行榜</a></p>
-
-      <header>
-        <h1>{d.code} {d.name}</h1>
-        <p className="detail__tags">
+    <PageShell
+      eyebrow="ETF PROFILE"
+      title={`${d.code} ${d.name}`}
+      description="從價格走勢、含息績效到風險與折溢價，一頁掌握這檔 ETF 的完整輪廓。"
+      backHref={hashFor({ name: 'rankings' })}
+      meta={
+        <div className="detail__tags">
           {d.category && <span className="tag">{d.category}</span>}
           {d.region && <span className="tag">{d.region}</span>}
           <span className="tag">{d.exchange === 'TPEX' ? '上櫃' : '上市'}</span>
-        </p>
-      </header>
+        </div>
+      }
+    >
 
-      <PriceChart series={d.series} benchmark={result.benchmark} name={d.name} />
+      <section className="content-panel content-panel--chart">
+        <div className="panel-heading">
+          <div><p className="eyebrow">TOTAL RETURN</p><h2>價格與含息走勢</h2></div>
+          <span>基準：臺灣加權報酬指數</span>
+        </div>
+        <PriceChart series={d.series} benchmark={result.benchmark} name={d.name} />
+      </section>
 
       {coverageGap && (
         <p className="detail__caveat" role="note">
@@ -68,8 +80,11 @@ export function EtfDetail({ code }: Props) {
         </p>
       )}
 
-      <section>
-        <h2>各期間報酬</h2>
+      <section className="content-panel">
+        <div className="panel-heading">
+          <div><p className="eyebrow">PERFORMANCE</p><h2>各期間報酬</h2></div>
+          <span>含息總報酬</span>
+        </div>
         <div className="table-wrap">
           <table>
             <thead>
@@ -94,8 +109,10 @@ export function EtfDetail({ code }: Props) {
         </div>
       </section>
 
-      <section>
-        <h2>風險指標</h2>
+      <section className="content-panel">
+        <div className="panel-heading">
+          <div><p className="eyebrow">RISK PROFILE</p><h2>風險指標</h2></div>
+        </div>
         <dl className="cards">
           <Card label={RISK_LABELS.volatility} term="volatility"
                 value={formatPercent(d.risk.volatility)} />
@@ -108,8 +125,11 @@ export function EtfDetail({ code }: Props) {
         </dl>
       </section>
 
-      <section>
-        <h2>折溢價走勢</h2>
+      <section className="content-panel content-panel--chart">
+        <div className="panel-heading">
+          <div><p className="eyebrow">PREMIUM / DISCOUNT</p><h2>折溢價走勢</h2></div>
+          <span>近 60 個交易日</span>
+        </div>
         <PremiumChart series={d.premium_series} name={d.name} sample={d.premium_sample} />
         <dl className="cards">
           {/* 三格都指向同一條詞典條目:它們是折溢價的三個面向,不是三個指標,
@@ -137,10 +157,19 @@ export function EtfDetail({ code }: Props) {
         </p>
       </section>
 
-      <section>
-        <h2>配息紀錄</h2>
+      <div className="detail-grid">
+      <section className="content-panel">
+        <div className="panel-heading">
+          <div><p className="eyebrow">DISTRIBUTIONS</p><h2>配息紀錄</h2></div>
+          <span>{d.dividends.length} 筆</span>
+        </div>
         {d.dividends.length === 0 ? (
-          <p className="detail__caveat">目前沒有配息紀錄。</p>
+          <EmptyState
+            marker="—"
+            title="目前沒有配息紀錄"
+            description="這檔 ETF 在本站涵蓋期間內沒有可用的除息與發放資料。"
+            compact
+          />
         ) : (
           <div className="table-wrap">
             <table>
@@ -161,8 +190,9 @@ export function EtfDetail({ code }: Props) {
         )}
       </section>
 
-      <section>
-        <h2>基本資料</h2>
+      <section className="content-panel">
+        <p className="eyebrow">FUND FACTS</p>
+        <h2 className="standalone-heading">基本資料</h2>
         <dl className="facts">
           <dt>發行商</dt><dd>{d.issuer ?? '—'}</dd>
           <dt>追蹤指數</dt><dd>{d.tracking_index ?? '—'}</dd>
@@ -177,7 +207,8 @@ export function EtfDetail({ code }: Props) {
           <dt>本站資料自</dt><dd>{formatDate(d.data_start)}</dd>
         </dl>
       </section>
-    </main>
+      </div>
+    </PageShell>
   )
 }
 

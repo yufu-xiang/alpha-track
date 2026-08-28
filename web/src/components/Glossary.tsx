@@ -10,17 +10,20 @@
  */
 import { GLOSSARY } from '../content/glossary'
 import { hashFor } from '../lib/route'
+import { PageShell } from './PageShell'
 
 export function Glossary() {
   const entries = Object.entries(GLOSSARY)
 
   return (
-    <main className="app detail">
-      <p className="app__nav">
-        <a href={hashFor({ name: 'rankings' })}>← 回排行榜</a>
-        <a href={hashFor({ name: 'tools', tool: null })}>理財工具</a>
-      </p>
-      <h1>名詞解釋</h1>
+    <PageShell
+      active="glossary"
+      eyebrow="INVESTMENT GLOSSARY"
+      title="指標詞典"
+      description="把報酬、風險與 ETF 常見指標翻成可以直接用來判讀的語言。"
+      backHref={hashFor({ name: 'rankings' })}
+      meta={<span className="page-stat"><strong>{entries.length}</strong> 個詞條</span>}
+    >
       <p className="detail__caveat" role="note">
         排行榜與個股頁上的每個指標名稱旁邊都有 ⓘ,點開會顯示同一份說明。
         這一頁是完整版,共 {entries.length} 個詞條。
@@ -37,7 +40,7 @@ export function Glossary() {
         ))}
       </nav>
 
-      <dl className="glossary">
+      <dl className="glossary content-panel">
         {entries.map(([id, e]) => (
           <div key={id} id={id} className="glossary__entry">
             <dt>{e.term}</dt>
@@ -58,6 +61,6 @@ export function Glossary() {
           </div>
         ))}
       </dl>
-    </main>
+    </PageShell>
   )
 }

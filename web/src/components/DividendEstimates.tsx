@@ -14,6 +14,8 @@ import {
 } from '../lib/dividendEstimate'
 import { formatDate, formatMoney, formatNumber } from '../lib/format'
 import type { Transaction } from '../lib/portfolio'
+import { EmptyState } from './EmptyState'
+import { InlineLoading } from './LoadingSkeleton'
 
 interface Props {
   transactions: Transaction[]
@@ -68,15 +70,20 @@ export function DividendEstimates({ transactions, onRecord }: Props) {
     setActual((a) => { const next = { ...a }; delete next[key]; return next })
   }
 
-  if (events === null) return <p className="chart-empty">查詢配息紀錄中…</p>
+  if (events === null) return <InlineLoading label="查詢配息紀錄中…" />
 
   if (estimates.length === 0) {
     return (
-      <p className="detail__caveat">
-        {transactions.length === 0
-          ? '先記錄買進交易,這裡才推估得出應領配息。'
-          : '沒有尚未記錄的配息 —— 持有期間內的除息日都已經記過了。'}
-      </p>
+      <EmptyState
+        marker={transactions.length === 0 ? '↗' : '✓'}
+        title={transactions.length === 0 ? '先建立持股紀錄' : '配息紀錄已經整理完成'}
+        description={transactions.length === 0
+          ? '先記錄買進交易，系統才能依除息日持股推估應領配息。'
+          : '目前沒有尚未記錄的配息，持有期間內的除息日都已經記過了。'}
+        action={transactions.length === 0
+          ? <a href="#new-transaction">新增買進交易</a> : undefined}
+        compact
+      />
     )
   }
 

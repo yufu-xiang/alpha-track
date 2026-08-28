@@ -13,6 +13,7 @@ import { formatNumber, formatPercent } from '../../lib/format'
 import { describeOverlap, overlap } from '../../lib/overlap'
 import type { EtfRow, Holdings } from '../../types'
 import { ToolPage } from './shared'
+import { InlineLoading } from '../LoadingSkeleton'
 
 const pct = (v: number) => formatPercent(v, 1).replace('+', '')
 
@@ -120,7 +121,7 @@ export function Overlap() {
         </p>
       )}
 
-      {loading ? <p className="chart-empty">載入中…</p>
+      {loading ? <InlineLoading />
         : present.length < 2 ? (
           <p className="chart-empty">至少要兩檔有成分股資料才比得出重疊度。</p>
         ) : (

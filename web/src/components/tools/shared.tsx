@@ -1,19 +1,22 @@
 /** 工具頁共用元件。規格 §7.4:共用參數輸入面板、模式切換、結果呈現。 */
 import type { ReactNode } from 'react'
 import { hashFor } from '../../lib/route'
+import { PageShell } from '../PageShell'
 
 export function ToolPage(
   { title, children }: { title: string; children: ReactNode },
 ) {
   return (
-    <main className="app detail">
-      <p className="app__nav">
-        <a href={hashFor({ name: 'tools', tool: null })}>← 回工具列表</a>
-        <a href={hashFor({ name: 'rankings' })}>排行榜</a>
-      </p>
-      <h1>{title}</h1>
-      {children}
-    </main>
+    <PageShell
+      active="tools"
+      eyebrow="FINANCIAL TOOL"
+      title={title}
+      description="調整參數後即時查看結果；所有試算都保留假設、資料範圍與限制說明。"
+      backHref={hashFor({ name: 'tools', tool: null })}
+      backLabel="回工具列表"
+    >
+      <section className="content-panel tool-workspace">{children}</section>
+    </PageShell>
   )
 }
 

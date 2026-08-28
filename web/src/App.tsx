@@ -12,6 +12,8 @@ import { Filters } from './components/Filters'
 import { HealthBar } from './components/HealthBar'
 import { PeriodTabs } from './components/PeriodTabs'
 import { RankingTable } from './components/RankingTable'
+import { PageLoading } from './components/LoadingSkeleton'
+import { ThemeToggle } from './components/ThemeToggle'
 import { loadData, type LoadResult } from './data/loader'
 import { applyFilters, collectCategories, collectRegions } from './lib/filtering'
 import { formatPercent } from './lib/format'
@@ -41,7 +43,7 @@ export function App() {
       : route.name === 'portfolio' ? <Portfolio />
       : route.name === 'glossary' ? <Glossary />
       : <Tools tool={route.tool} />
-    return <Suspense fallback={<main className="app"><p>載入頁面中…</p></main>}>{page}</Suspense>
+    return <Suspense fallback={<PageLoading />}>{page}</Suspense>
   }
   return <Rankings />
 }
@@ -110,7 +112,7 @@ function Rankings() {
   const activeFilters = categories.length + regions.length + (query.trim() ? 1 : 0)
 
   if (result === null) {
-    return <main className="app"><p>載入中…</p></main>
+    return <PageLoading variant="rankings" />
   }
 
   if (!result.ok) {
@@ -151,6 +153,7 @@ function Rankings() {
             <a href={hashFor({ name: 'glossary' })}>
               <span aria-hidden="true">?</span> 指標詞典
             </a>
+            <ThemeToggle />
           </nav>
         </div>
 
@@ -246,6 +249,11 @@ function Rankings() {
         visibleRisk={prefs.visibleRisk}
         compareSelected={compare}
         onCompareToggle={(code) => setCompare((s) => toggleCompare(s, code))}
+        onClearFilters={() => {
+          setCategories([])
+          setRegions([])
+          setQuery('')
+        }}
       />
 
       {compare.length > 0 && (

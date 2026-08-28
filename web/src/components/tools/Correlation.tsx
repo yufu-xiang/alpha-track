@@ -16,6 +16,7 @@ import { formatNumber } from '../../lib/format'
 import { MAX_COMPARE } from '../../lib/compare'
 import type { EtfRow, Series } from '../../types'
 import { ToolPage } from './shared'
+import { InlineLoading } from '../LoadingSkeleton'
 
 const RANGES = [
   { label: '近一年', days: 365 },
@@ -126,7 +127,7 @@ export function Correlation() {
         ))}
       </div>
 
-      {loading ? <p className="chart-empty">載入中…</p>
+      {loading ? <InlineLoading />
         : present.length < 2 ? (
           <p className="chart-empty">
             至少要兩檔才比得出相關性。

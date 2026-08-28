@@ -5,6 +5,7 @@ import { compareReinvestment, type DividendEvent, type PricePoint } from '../../
 import { formatMoney, formatNumber, formatPercent } from '../../lib/format'
 import type { EtfRow } from '../../types'
 import { Num, Stat, ToolPage } from './shared'
+import { InlineLoading } from '../LoadingSkeleton'
 
 export function Reinvest() {
   const [code, setCode] = useState('0056')
@@ -100,7 +101,7 @@ export function Reinvest() {
         </p>
       )}
 
-      {loading ? <p className="chart-empty">載入中…</p>
+      {loading ? <InlineLoading />
         : !result ? <p className="chart-empty">找不到 {code} 的價格資料。</p>
         : result.events === 0 ? (
           <p className="chart-empty">

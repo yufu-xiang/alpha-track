@@ -7,6 +7,7 @@
  * 因為「其他」不是一個實體,不該和真正的持股搶識別度。
  */
 import { formatPercent } from '../lib/format'
+import { EmptyState } from './EmptyState'
 
 const MAX_SLICES = 6
 
@@ -24,7 +25,17 @@ interface Props {
 export function AllocationPie({ slices, title }: Props) {
   const positive = slices.filter((s) => s.value > 0).sort((a, b) => b.value - a.value)
   const total = positive.reduce((s, x) => s + x.value, 0)
-  if (total <= 0) return <p className="chart-empty">目前沒有持股。</p>
+  if (total <= 0) {
+    return (
+      <EmptyState
+        marker="◎"
+        title="目前還沒有持股"
+        description="新增第一筆買進交易後，這裡會自動整理標的與分類占比。"
+        action={<a href="#new-transaction">新增第一筆交易</a>}
+        compact
+      />
+    )
+  }
 
   const shown = positive.slice(0, MAX_SLICES)
   const restValue = positive.slice(MAX_SLICES).reduce((s, x) => s + x.value, 0)
