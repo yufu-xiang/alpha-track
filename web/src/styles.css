@@ -850,57 +850,141 @@ footer {
 :root {
   --chart-main: #2a78d6;
   --chart-bench: #e87ba4;
+  --premium-line: #8b5cf6;
+  --premium-high: #f59e0b;
+  --premium-low: #06a6a6;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --chart-main: #3987e5; --chart-bench: #d55181; }
+  :root:not([data-theme]) {
+    --chart-main: #62a3ff;
+    --chart-bench: #f08bb1;
+    --premium-line: #b69cff;
+    --premium-high: #f8bd55;
+    --premium-low: #43c7c7;
+  }
+}
+:root[data-theme="dark"] {
+  --chart-main: #62a3ff;
+  --chart-bench: #f08bb1;
+  --premium-line: #b69cff;
+  --premium-high: #f8bd55;
+  --premium-low: #43c7c7;
 }
 
-.chart { margin: 0 0 1rem; }
-.chart__svg { width: 100%; height: auto; display: block; }
-.chart__ranges { display: flex; gap: 0.25rem; margin-bottom: 0.5rem; }
-.chart__ranges button {
-  padding: 0.25rem 0.6rem;
+.chart { margin: 0; min-width: 0; }
+.chart-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+.chart-toolbar--summary { align-items: center; }
+.chart__ranges {
+  display: inline-flex;
+  gap: 0.2rem;
+  margin: 0;
+  padding: 0.22rem;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg);
-  color: var(--fg);
+  border-radius: 10px;
+  background: var(--surface-soft);
+}
+.chart__ranges button {
+  padding: 0.34rem 0.7rem;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--fg-muted);
   cursor: pointer;
   font-size: 0.8125rem;
+  font-weight: 650;
 }
 .chart__ranges button[aria-pressed="true"] {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: var(--surface-raised);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
 }
-
-/* 格線與軸標籤要退到背後 —— 它們是尺規,不是內容 */
-.chart__grid { stroke: var(--border); stroke-width: 1; }
-.chart__tick { fill: var(--fg-muted); font-size: 11px; }
-
-.chart__line { fill: none; stroke-width: 2; }
-.chart__line--main { stroke: var(--chart-main); }
-/* 基準線:虛線 + 較細。由線型承擔「這是參考線不是對手」的層級,
-   顏色只負責辨識 —— 也讓色盲使用者不必只靠顏色分辨。 */
-.chart__line--bench {
-  stroke: var(--chart-bench);
-  stroke-width: 1.5;
-  stroke-dasharray: 5 4;
+.chart-insights { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.45rem; }
+.chart-insights > span {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  gap: 0.3rem;
+  padding: 0.38rem 0.58rem;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
 }
-
-.chart__crosshair { stroke: var(--fg-muted); stroke-width: 1; stroke-dasharray: 2 3; }
-.chart__dot { stroke: var(--bg); stroke-width: 2; }
-.chart__dot--main { fill: var(--chart-main); }
-.chart__dot--bench { fill: var(--chart-bench); }
-
+.chart-insights small { color: var(--fg-muted); font-size: 0.7rem; }
+.chart-insights strong { font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+.chart-sample { color: var(--fg-muted); font-size: 0.78rem; }
+.chart-leader {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border));
+  border-radius: 999px;
+  background: var(--accent-soft);
+  font-size: 0.78rem;
+}
+.chart-leader span { color: var(--fg-muted); }
+.chart-leader b { font-variant-numeric: tabular-nums; }
+.chart-canvas {
+  min-width: 0;
+  padding: 0.35rem 0.4rem 0;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 14px;
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--accent) 3%, var(--surface)) 0%,
+    var(--surface) 68%);
+  overflow: hidden;
+}
+.chart-canvas .recharts-surface { overflow: visible; }
+.chart-canvas .recharts-cartesian-grid-horizontal line { opacity: 0.72; }
+.chart-canvas .recharts-tooltip-cursor { opacity: 0.65; }
+.chart-canvas .recharts-active-dot circle { stroke: var(--surface); stroke-width: 3; }
+.chart-popover {
+  min-width: 9rem;
+  padding: 0.68rem 0.75rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-raised) 94%, transparent);
+  box-shadow: var(--shadow-lg);
+  color: var(--fg);
+  backdrop-filter: blur(12px);
+  font-size: 0.78rem;
+}
+.chart-popover__date {
+  margin: 0 0 0.42rem;
+  padding-bottom: 0.38rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--fg-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.chart-popover ul { display: grid; gap: 0.28rem; margin: 0; padding: 0; list-style: none; }
+.chart-popover li {
+  display: grid;
+  grid-template-columns: 0.45rem minmax(5rem, 1fr) auto;
+  align-items: center;
+  gap: 0.42rem;
+}
+.chart-popover li strong { font-variant-numeric: tabular-nums; }
+.chart-popover > strong { display: block; font-size: 1rem; }
+.chart-popover > small { display: block; margin-top: 0.1rem; color: var(--fg-muted); }
+.chart-popover__marker { width: 0.42rem; height: 0.42rem; border-radius: 999px; }
 .chart__legend {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.75rem;
+  margin-top: 0.68rem;
   font-size: 0.8125rem;
   color: var(--fg-muted);
 }
-/* 圖例的色塊帶顏色,文字維持一般字色 —— 讓數值與標籤穿上series 色
-   會降低可讀性,識別交給旁邊的色塊。 */
+.chart__legend--comparison { row-gap: 0.4rem; }
+.chart__legend strong { margin-left: 0.2rem; font-variant-numeric: tabular-nums; }
 .chart__key::before {
   content: "";
   display: inline-block;
@@ -914,13 +998,19 @@ footer {
   background: repeating-linear-gradient(90deg,
     var(--chart-bench) 0 5px, transparent 5px 9px);
 }
-.chart__note { margin-left: auto; }
-.chart__tooltip {
-  margin: 0.25rem 0 0;
-  font-size: 0.8125rem;
-  font-variant-numeric: tabular-nums;
+.chart__key--premium::before {
+  background: linear-gradient(90deg, var(--premium-high), var(--premium-low));
 }
-.chart-empty { padding: 2rem; text-align: center; color: var(--fg-muted); }
+.chart__note { margin-left: auto; }
+.chart-empty {
+  margin: 0;
+  padding: 3rem 1rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface-soft);
+  text-align: center;
+  color: var(--fg-muted);
+}
 
 /* ── 比較圖 ───────────────────────────────────────────────────
    五個顏色來自 Okabe-Ito(色覺障礙友善調色盤),深色模式重新取階以落在
@@ -932,9 +1022,12 @@ footer {
   --s0: #0072B2; --s1: #D55E00; --s2: #009E73; --s3: #CC79A7; --s4: #E69F00;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
-    --s0: #006ba7; --s1: #954200; --s2: #00956c; --s3: #c0729d; --s4: #bd8200;
+  :root:not([data-theme]) {
+    --s0: #4aa8dd; --s1: #ef8a4e; --s2: #42bd98; --s3: #df91be; --s4: #e9b84f;
   }
+}
+:root[data-theme="dark"] {
+  --s0: #4aa8dd; --s1: #ef8a4e; --s2: #42bd98; --s3: #df91be; --s4: #e9b84f;
 }
 .chart__line--s0 { stroke: var(--s0); }
 .chart__line--s1 { stroke: var(--s1); }
@@ -946,6 +1039,7 @@ footer {
 .chart__key--s2::before { background: var(--s2); }
 .chart__key--s3::before { background: var(--s3); }
 .chart__key--s4::before { background: var(--s4); }
+.chart__key--s5::before { background: var(--accent); }
 
 /* 比較列:選了才出現,浮在底部 */
 .compare-bar {
@@ -1062,10 +1156,24 @@ footer {
   text-decoration: underline;
 }
 
-.pie { display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: center; margin: 0; }
-.pie__svg { width: 180px; height: 180px; flex: 0 0 auto; }
-/* 每一塊之間留一道底色描邊,相鄰的扇形才不會糊成一片 */
-.pie__slice { stroke: var(--bg); stroke-width: 1.5; }
+.pie {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.78fr) minmax(180px, 1fr);
+  gap: clamp(1rem, 3vw, 2rem);
+  align-items: center;
+  margin: 0;
+}
+.pie__visual {
+  min-width: 0;
+  border-radius: 16px;
+  background: radial-gradient(circle,
+    color-mix(in srgb, var(--accent) 7%, var(--surface)) 0 38%,
+    transparent 39%);
+}
+/* 每一塊之間留一道底色描邊，相鄰的扇形才不會糊成一片。 */
+.pie__slice { cursor: pointer; outline: none; transition: filter 160ms ease, opacity 160ms ease; }
+.pie__visual:hover .pie__slice:not(:hover) { opacity: 0.68; }
+.pie__slice:hover { filter: brightness(1.08); }
 .pie__slice--s0 { fill: var(--s0); }
 .pie__slice--s1 { fill: var(--s1); }
 .pie__slice--s2 { fill: var(--s2); }
@@ -1075,8 +1183,16 @@ footer {
 /* 「其他」不是一個實體,用中性灰,不與真正的持股搶識別度 */
 .pie__slice--rest { fill: var(--fg-muted); }
 .chart__key--rest::before { background: var(--fg-muted); }
-.pie__legend { list-style: none; margin: 0; padding: 0; font-size: 0.875rem; }
-.pie__legend li { display: flex; gap: 0.75rem; justify-content: space-between; }
+.pie__center-label { fill: var(--fg-muted); font-size: 9px; font-weight: 650; }
+.pie__center-value { fill: var(--fg); font-size: 11px; font-weight: 800; }
+.pie__legend { display: grid; gap: 0.48rem; list-style: none; margin: 0; padding: 0; font-size: 0.875rem; }
+.pie__legend li {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+  padding-bottom: 0.38rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
 .pie__share { color: var(--fg-muted); font-variant-numeric: tabular-nums; }
 
 /* ── 理財工具 ─────────────────────────────────────────── */
@@ -1179,7 +1295,7 @@ footer {
 .chart__zero { stroke: var(--fg-muted); stroke-width: 1.5; opacity: 0.7; }
 /* 刻意不用 --gain/--loss:那組色在本站是台股的漲跌語意,而溢價(買貴了)
    對買方不利、折價對買方有利 —— 沿用會讓紅色同時代表「上漲」與「買貴」。 */
-.premium__line { stroke: var(--accent); stroke-width: 2; fill: none; }
+.premium__line { stroke: var(--premium-line); }
 
 /* 推估的配息。用文字標籤而非只用顏色 —— 顏色不是資訊。 */
 .tx-estimated {
@@ -1888,6 +2004,15 @@ footer {
   .portfolio-backup { grid-template-columns: 1fr; }
   .portfolio__actions { justify-content: flex-start; }
   .portfolio__notice { text-align: left; }
+  .chart-toolbar { align-items: stretch; flex-direction: column; gap: 0.65rem; }
+  .chart-toolbar--summary { align-items: stretch; }
+  .chart-insights { justify-content: flex-start; }
+  .chart-insights > span { flex: 1 1 auto; }
+  .chart-leader { align-self: flex-start; }
+  .chart-sample { align-self: flex-start; }
+  .chart__note { flex-basis: 100%; margin-left: 0; }
+  .pie { grid-template-columns: minmax(0, 1fr); gap: 0.75rem; }
+  .pie__visual { max-width: 19rem; width: 100%; margin-inline: auto; }
   .detail-grid { grid-template-columns: 1fr; }
   .page-shell .glossary__entry { grid-template-columns: 1fr; gap: 0.35rem; }
   .guided-empty { grid-template-columns: auto minmax(0, 1fr); }
@@ -1940,6 +2065,12 @@ footer {
   .page-heading h1 { font-size: 1.55rem; }
   .page-heading__description { max-width: 90%; }
   .content-panel { padding: 0.8rem; }
+  .chart-canvas { margin-inline: -0.35rem; padding-inline: 0; border-radius: 11px; }
+  .chart__ranges { width: 100%; }
+  .chart__ranges button { flex: 1 1 0; padding-inline: 0.3rem; }
+  .chart-insights { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .chart-insights > span { display: flex; flex-direction: column; gap: 0.05rem; }
+  .chart__legend { font-size: 0.73rem; }
   .panel-heading { align-items: flex-end; }
   .panel-heading > span { white-space: normal; text-align: right; }
   .tool-grid { grid-template-columns: 1fr; }
