@@ -14,11 +14,12 @@ interface Props {
   fees: FeeConfig
   rows: EtfRow[]
   onAdd: (tx: Transaction) => void
+  initialCode?: string
 }
 
-export function TransactionForm({ fees, rows, onAdd }: Props) {
+export function TransactionForm({ fees, rows, onAdd, initialCode }: Props) {
   const [type, setType] = useState<TxType>('buy')
-  const [code, setCode] = useState('')
+  const [code, setCode] = useState(() => initialCode?.toUpperCase() ?? '')
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [shares, setShares] = useState('')
   const [price, setPrice] = useState('')
@@ -30,6 +31,10 @@ export function TransactionForm({ fees, rows, onAdd }: Props) {
   const nPrice = Number(price) || 0
   const amount = nShares * nPrice
   const row = rows.find((r) => r.code === code.toUpperCase())
+
+  useEffect(() => {
+    if (initialCode) setCode(initialCode.toUpperCase())
+  }, [initialCode])
 
   // 使用者手動改過就不再覆蓋 —— 自動試算不該把人打的字吃掉
   useEffect(() => {

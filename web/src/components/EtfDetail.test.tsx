@@ -1,4 +1,5 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { EtfDetail } from './EtfDetail'
 
@@ -53,6 +54,34 @@ describe('EtfDetail', () => {
     await renderLoaded()
     expect(screen.getByRole('heading', { level: 1 }))
       .toHaveTextContent('0050 元大台灣50')
+  })
+
+  it('提供收藏、比較、組合與分享的下一步', async () => {
+    await renderLoaded()
+    const actions = screen.getByRole('group', { name: /0050 快速操作/ })
+    expect(within(actions).getByRole('button', { name: /加入自選/ })).toBeInTheDocument()
+    expect(within(actions).getByRole('button', { name: /加入比較/ })).toBeInTheDocument()
+    expect(within(actions).getByRole('link', { name: /帶入我的組合/ }))
+      .toHaveAttribute('href', '#/portfolio?code=0050')
+    expect(within(actions).getByRole('button', { name: /分享/ })).toBeInTheDocument()
+  })
+
+  it('收藏會持久保存並可再次移除', async () => {
+    const user = userEvent.setup()
+    await renderLoaded()
+    const button = screen.getByRole('button', { name: /加入自選/ })
+    await user.click(button)
+    expect(localStorage.getItem('alpha-track:watchlist')).toContain('0050')
+    expect(button).toHaveAttribute('aria-pressed', 'true')
+    await user.click(button)
+    expect(localStorage.getItem('alpha-track:watchlist')).toBe('[]')
+  })
+
+  it('加入比較會寫入跨頁比較籃', async () => {
+    const user = userEvent.setup()
+    await renderLoaded()
+    await user.click(screen.getByRole('button', { name: /加入比較/ }))
+    expect(localStorage.getItem('alpha-track:compare')).toContain('0050')
   })
 
   it('列出全部十一個期間的報酬', async () => {

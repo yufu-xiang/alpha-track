@@ -42,6 +42,18 @@ export interface Holding {
   dividends: number
 }
 
+export interface PositionAnalysis extends Holding {
+  price: number | null
+  marketValue: number | null
+  costBasis: number
+  unrealized: number | null
+  returnRate: number | null
+  weight: number | null
+  targetWeight: number | null
+  /** 正值代表需買進，負值代表需賣出；未設定目標或缺價格時為 null。 */
+  rebalanceAmount: number | null
+}
+
 /**
  * 依時間順序重放交易,推出每一檔的持股與成本。
  *
@@ -87,6 +99,45 @@ export function buildHoldings(txs: Transaction[]): Map<string, Holding> {
     byCode.set(tx.code, h)
   }
   return byCode
+}
+
+/**
+ * 把交易紀錄轉成持倉層級的決策資訊。再平衡金額固定以「目前總市值」為基準，
+ * 因此買進總額與賣出總額在目標合計 100% 時會互相抵銷，不假設額外投入現金。
+ */
+export function analyzePositions(
+  txs: Transaction[],
+  prices: Map<string, number>,
+  targets: Record<string, number> = {},
+): PositionAnalysis[] {
+  const holdings = [...buildHoldings(txs).values()].filter((holding) => holding.shares > 0)
+  const total = holdings.reduce((sum, holding) => {
+    const price = prices.get(holding.code)
+    return price === undefined ? sum : sum + holding.shares * price
+  }, 0)
+
+  return holdings.map((holding) => {
+    const price = prices.get(holding.code) ?? null
+    const marketValue = price === null ? null : holding.shares * price
+    const costBasis = holding.shares * holding.avgCost
+    const target = targets[holding.code]
+    const targetWeight = typeof target === 'number' && Number.isFinite(target)
+      ? Math.max(0, Math.min(1, target))
+      : null
+    return {
+      ...holding,
+      price,
+      marketValue,
+      costBasis,
+      unrealized: marketValue === null ? null : marketValue - costBasis,
+      returnRate: marketValue === null || costBasis <= 0
+        ? null : (marketValue - costBasis) / costBasis,
+      weight: marketValue === null || total <= 0 ? null : marketValue / total,
+      targetWeight,
+      rebalanceAmount: marketValue === null || targetWeight === null || total <= 0
+        ? null : total * targetWeight - marketValue,
+    }
+  })
 }
 
 export interface PortfolioSummary {

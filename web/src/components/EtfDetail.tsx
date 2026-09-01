@@ -10,6 +10,9 @@ import {
   formatCompactMoney, formatDate, formatNumber, formatPercent,
 } from '../lib/format'
 import { hashFor } from '../lib/route'
+import {
+  addToCompareBasket, loadCompareBasket, loadWatchlist, toggleWatchlist,
+} from '../lib/personalLists'
 import { PERIODS, PERIOD_LABELS, RISK_LABELS, type PeriodCode } from '../types'
 import { MetricInfo } from './MetricInfo'
 import { EmptyState } from './EmptyState'
@@ -24,6 +27,8 @@ interface Props {
 
 export function EtfDetail({ code }: Props) {
   const [result, setResult] = useState<DetailResult | null>(null)
+  const [watchlist, setWatchlist] = useState<string[]>(() => loadWatchlist())
+  const [actionStatus, setActionStatus] = useState<string | null>(null)
 
   useEffect(() => {
     setResult(null)
@@ -45,6 +50,7 @@ export function EtfDetail({ code }: Props) {
   }
 
   const d = result.detail
+  const watched = watchlist.includes(d.code)
   // 掛牌日與資料起點不同時要說明,否則「成立以來」為什麼空白沒人知道
   const coverageGap = d.listing_date && d.data_start && d.data_start > d.listing_date
 
@@ -62,6 +68,44 @@ export function EtfDetail({ code }: Props) {
         </div>
       }
     >
+
+      <div className="detail-actions" role="group" aria-label={`${d.code} 快速操作`}>
+        <div className="detail-actions__primary">
+          <button type="button" aria-pressed={watched}
+                  onClick={() => {
+                    const next = toggleWatchlist(watchlist, d.code)
+                    setWatchlist(next)
+                    setActionStatus(next.includes(d.code) ? '已加入自選清單' : '已從自選清單移除')
+                  }}>
+            <ActionIcon name="star" filled={watched} />
+            {watched ? '已收藏' : '加入自選'}
+          </button>
+          <button type="button" onClick={() => {
+            const next = addToCompareBasket(d.code)
+            if (!next.includes(d.code)) {
+              setActionStatus('比較清單已滿，請先移除一檔。')
+              return
+            }
+            window.location.hash = hashFor({ name: 'rankings' })
+          }}>
+            <ActionIcon name="compare" />
+            加入比較
+          </button>
+          <a href={hashFor({ name: 'portfolio', code: d.code })}>
+            <ActionIcon name="portfolio" />
+            帶入我的組合
+          </a>
+        </div>
+        <button type="button" className="detail-actions__share" onClick={() => {
+          void shareCurrentPage(d.code, d.name).then((message) => {
+            if (message) setActionStatus(message)
+          })
+        }}>
+          <ActionIcon name="share" />
+          分享
+        </button>
+        {actionStatus && <span className="detail-actions__status" role="status">{actionStatus}</span>}
+      </div>
 
       <section className="content-panel content-panel--chart">
         <div className="panel-heading">
@@ -210,6 +254,49 @@ export function EtfDetail({ code }: Props) {
       </div>
     </PageShell>
   )
+}
+
+async function shareCurrentPage(code: string, name: string): Promise<string | null> {
+  const shareData = { title: `${code} ${name}｜ETF Rankings`, url: window.location.href }
+  try {
+    if (navigator.share) {
+      await navigator.share(shareData)
+      return '已開啟分享選單'
+    }
+    if (navigator.clipboard) {
+      await navigator.clipboard.writeText(shareData.url)
+      return '連結已複製'
+    }
+    return '可直接複製瀏覽器網址分享'
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') return null
+    return '分享失敗，請直接複製瀏覽器網址'
+  }
+}
+
+function ActionIcon({ name, filled = false }: {
+  name: 'star' | 'compare' | 'portfolio' | 'share'
+  filled?: boolean
+}) {
+  if (name === 'star') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true" className={filled ? 'is-filled' : ''}>
+      <path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z" />
+    </svg>
+  }
+  if (name === 'compare') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7 4v16M17 4v16M4 8l3-3 3 3M14 16l3 3 3-3" />
+    </svg>
+  }
+  if (name === 'portfolio') {
+    return <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 8.5h16v11H4zM8 8.5V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2.5M4 13h16" />
+    </svg>
+  }
+  return <svg viewBox="0 0 24 24" aria-hidden="true">
+    <circle cx="6" cy="12" r="2.2" /><circle cx="18" cy="6" r="2.2" />
+    <circle cx="18" cy="18" r="2.2" /><path d="m8 11 8-4M8 13l8 4" />
+  </svg>
 }
 
 function Tone({ v }: { v: number | null }) {

@@ -12,7 +12,7 @@ export type Route =
   | { name: 'rankings' }
   | { name: 'detail'; code: string }
   | { name: 'compare'; codes: string[] }
-  | { name: 'portfolio' }
+  | { name: 'portfolio'; code?: string }
   | { name: 'tools'; tool: string | null }
   | { name: 'glossary' }
 
@@ -21,6 +21,8 @@ export function parseHash(hash: string): Route {
   if (detail) return { name: 'detail', code: detail[1]!.toUpperCase() }
 
   if (hash === '#/portfolio') return { name: 'portfolio' }
+  const portfolio = /^#\/portfolio\?code=([A-Za-z0-9]+)$/.exec(hash)
+  if (portfolio) return { name: 'portfolio', code: portfolio[1]!.toUpperCase() }
   if (hash === '#/glossary') return { name: 'glossary' }
   // 規格 §7.4「每個工具一頁」。無 id 時是工具列表;id 不存在時由 Tools
   // 顯示「找不到」再列出全部,不是靜默退回列表 —— 舊書籤失效時使用者
@@ -40,7 +42,9 @@ export function parseHash(hash: string): Route {
 export function hashFor(route: Route): string {
   if (route.name === 'detail') return `#/etf/${route.code}`
   if (route.name === 'compare') return `#/compare/${serializeCodes(route.codes)}`
-  if (route.name === 'portfolio') return '#/portfolio'
+  if (route.name === 'portfolio') {
+    return route.code ? `#/portfolio?code=${route.code}` : '#/portfolio'
+  }
   if (route.name === 'glossary') return '#/glossary'
   if (route.name === 'tools') return route.tool ? `#/tools/${route.tool}` : '#/tools'
   return '#/'

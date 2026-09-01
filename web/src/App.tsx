@@ -19,6 +19,9 @@ import { applyFilters, collectCategories, collectRegions } from './lib/filtering
 import { formatPercent } from './lib/format'
 import { loadPrefs, savePrefs } from './lib/prefs'
 import { MAX_COMPARE, toggleCompare } from './lib/compare'
+import {
+  loadCompareBasket, loadWatchlist, saveCompareBasket, toggleWatchlist,
+} from './lib/personalLists'
 import { hashFor, useRoute } from './lib/route'
 import { PERIODS, PERIOD_LABELS, type PeriodCode } from './types'
 
@@ -40,7 +43,7 @@ export function App() {
   if (route.name !== 'rankings') {
     const page = route.name === 'detail' ? <EtfDetail code={route.code} />
       : route.name === 'compare' ? <Compare codes={route.codes} />
-      : route.name === 'portfolio' ? <Portfolio />
+      : route.name === 'portfolio' ? <Portfolio initialCode={route.code} />
       : route.name === 'glossary' ? <Glossary />
       : <Tools tool={route.tool} />
     return <Suspense fallback={<PageLoading />}>{page}</Suspense>
@@ -54,7 +57,9 @@ function Rankings() {
   const [sortBy, setSortBy] = useState<PeriodCode>('Y1')
   const [categories, setCategories] = useState<string[]>([])
   const [regions, setRegions] = useState<string[]>([])
-  const [compare, setCompare] = useState<string[]>([])
+  const [compare, setCompare] = useState<string[]>(() => loadCompareBasket())
+  const [watchlist, setWatchlist] = useState<string[]>(() => loadWatchlist())
+  const [onlyWatchlist, setOnlyWatchlist] = useState(false)
   const [query, setQuery] = useState('')
 
   useEffect(() => {
@@ -64,6 +69,10 @@ function Rankings() {
   useEffect(() => {
     savePrefs(prefs)
   }, [prefs])
+
+  useEffect(() => {
+    saveCompareBasket(compare)
+  }, [compare])
 
   function handlePeriodSelect(period: PeriodCode) {
     setSortBy(period)
@@ -103,13 +112,24 @@ function Rankings() {
   const availableRegions = useMemo(
     () => collectRegions(visibleRows), [visibleRows],
   )
-  const rows = useMemo(
+  const filteredRows = useMemo(
     () => applyFilters(allRows, {
       categories, regions, query, showLevered: prefs.showLevered,
     }),
     [allRows, categories, regions, query, prefs.showLevered],
   )
+  const rows = useMemo(
+    () => onlyWatchlist
+      ? filteredRows.filter((row) => watchlist.includes(row.code))
+      : filteredRows,
+    [filteredRows, onlyWatchlist, watchlist],
+  )
   const activeFilters = categories.length + regions.length + (query.trim() ? 1 : 0)
+    + (onlyWatchlist ? 1 : 0)
+
+  function handleWatchlistToggle(code: string) {
+    setWatchlist((current) => toggleWatchlist(current, code))
+  }
 
   if (result === null) {
     return <PageLoading variant="rankings" />
@@ -202,9 +222,10 @@ function Rankings() {
                   type="button"
                   className="clear-filters"
                   onClick={() => {
-                    setCategories([])
-                    setRegions([])
-                    setQuery('')
+                  setCategories([])
+                  setRegions([])
+                  setQuery('')
+                  setOnlyWatchlist(false)
                   }}
                 >
                   清除 {activeFilters} 項篩選
@@ -229,6 +250,9 @@ function Rankings() {
             onCategoriesChange={setCategories}
             onQueryChange={setQuery}
             onShowLeveredChange={(v) => setPrefs((p) => ({ ...p, showLevered: v }))}
+            watchlistCount={watchlist.length}
+            onlyWatchlist={onlyWatchlist}
+            onOnlyWatchlistChange={setOnlyWatchlist}
           />
         </div>
       </section>
@@ -249,10 +273,13 @@ function Rankings() {
         visibleRisk={prefs.visibleRisk}
         compareSelected={compare}
         onCompareToggle={(code) => setCompare((s) => toggleCompare(s, code))}
+        watchlist={watchlist}
+        onWatchlistToggle={handleWatchlistToggle}
         onClearFilters={() => {
           setCategories([])
           setRegions([])
           setQuery('')
+          setOnlyWatchlist(false)
         }}
       />
 

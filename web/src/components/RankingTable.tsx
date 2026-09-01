@@ -51,11 +51,15 @@ interface Props {
   onCompareToggle?: (code: string) => void
   /** 篩選後沒有結果時，提供回到完整市場的明確出口。 */
   onClearFilters?: () => void
+  /** 自選清單。提供時在代號旁顯示收藏按鈕。 */
+  watchlist?: string[]
+  onWatchlistToggle?: (code: string) => void
 }
 
 export function RankingTable({
   rows, visibleColumns, sortBy, onSortChange, visibleRisk = [],
   compareSelected, onCompareToggle, onClearFilters,
+  watchlist, onWatchlistToggle,
 }: Props) {
   const picking = compareSelected !== undefined && onCompareToggle !== undefined
   const [sorting, setSorting] = useState<SortingState>(
@@ -76,7 +80,26 @@ export function RankingTable({
         header: '代號',
         // 連結而非 onClick:可以中鍵開新分頁、可以複製網址、鍵盤能 Tab 到,
         // 而 onClick 綁在 <td> 上這三件事都做不到。
-        cell: (c) => <a href={`#/etf/${c.getValue()}`}>{c.getValue()}</a>,
+        cell: (c) => {
+          const code = c.getValue()
+          const watched = watchlist?.includes(code) ?? false
+          return (
+            <span className="rank-code">
+              <a href={`#/etf/${code}`}>{code}</a>
+              {onWatchlistToggle && (
+                <button type="button" className="watchlist-mini"
+                        aria-label={`${watched ? '移除' : '加入'}自選 ${code}`}
+                        aria-pressed={watched}
+                        title={watched ? '從自選移除' : '加入自選'}
+                        onClick={() => onWatchlistToggle(code)}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z" />
+                  </svg>
+                </button>
+              )}
+            </span>
+          )
+        },
         enableSorting: false,
       }),
       helper.accessor('name', {
@@ -134,7 +157,7 @@ export function RankingTable({
     })
 
     return [...base, ...periodCols, ...riskCols]
-  }, [visibleColumns, visibleRisk, sortBy])
+  }, [visibleColumns, visibleRisk, sortBy, watchlist, onWatchlistToggle])
 
   const table = useReactTable({
     data: rows,

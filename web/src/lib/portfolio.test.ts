@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { buildHoldings, summarize, toCashFlows, type Transaction } from './portfolio'
+import {
+  analyzePositions, buildHoldings, summarize, toCashFlows, type Transaction,
+} from './portfolio'
 
 let seq = 0
 function tx(o: Partial<Transaction> & Pick<Transaction, 'type' | 'code' | 'date'>): Transaction {
@@ -266,5 +268,37 @@ describe('今日損益(規格 §6.6)', () => {
     const s = summarize([buy, sell], prices, '2026-08-27',
       new Map([['0050', 0.1]]))
     expect(s.todayChange).toBeNull()
+  })
+})
+
+describe('持倉洞察與再平衡', () => {
+  const positions = [
+    tx({ type: 'buy', code: '0050', date: '2025-01-01', shares: 100, price: 100 }),
+    tx({ type: 'buy', code: '0056', date: '2025-01-01', shares: 100, price: 40 }),
+  ]
+
+  it('計算每檔市值、占比與未實現報酬', () => {
+    const rows = analyzePositions(positions, new Map([['0050', 120], ['0056', 30]]))
+    expect(rows[0]!.marketValue).toBe(12_000)
+    expect(rows[0]!.weight).toBeCloseTo(0.8)
+    expect(rows[0]!.returnRate).toBeCloseTo(0.2)
+    expect(rows[1]!.weight).toBeCloseTo(0.2)
+  })
+
+  it('依目標比例算出互相抵銷的買賣建議', () => {
+    const rows = analyzePositions(
+      positions,
+      new Map([['0050', 120], ['0056', 30]]),
+      { '0050': 0.5, '0056': 0.5 },
+    )
+    expect(rows[0]!.rebalanceAmount).toBeCloseTo(-4_500)
+    expect(rows[1]!.rebalanceAmount).toBeCloseTo(4_500)
+  })
+
+  it('缺少價格時不捏造市值、占比或調整金額', () => {
+    const rows = analyzePositions(positions, new Map([['0050', 120]]), { '0056': 0.5 })
+    expect(rows[1]!.marketValue).toBeNull()
+    expect(rows[1]!.weight).toBeNull()
+    expect(rows[1]!.rebalanceAmount).toBeNull()
   })
 })

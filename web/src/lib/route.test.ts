@@ -54,6 +54,19 @@ describe('比較頁路由', () => {
   })
 })
 
+describe('組合頁路由', () => {
+  it('可從詳情頁帶入 ETF 代號', () => {
+    const route = { name: 'portfolio', code: '00679B' } as const
+    expect(parseHash(hashFor(route))).toEqual(route)
+    expect(parseHash('#/portfolio?code=00679b')).toEqual(route)
+  })
+
+  it('一般組合頁網址維持不變', () => {
+    expect(parseHash('#/portfolio')).toEqual({ name: 'portfolio' })
+    expect(hashFor({ name: 'portfolio' })).toBe('#/portfolio')
+  })
+})
+
 describe('工具子路由(規格 §7.4:每個工具一頁)', () => {
   it('#/tools 是工具列表', () => {
     expect(parseHash('#/tools')).toEqual({ name: 'tools', tool: null })

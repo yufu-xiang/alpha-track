@@ -13,11 +13,13 @@ import { DEFAULT_FEE_CONFIG, type FeeConfig } from './fees'
 const KEY = 'alpha-track:portfolio'
 export const EXPORT_REMINDER_DAYS = 30
 /** 匯出檔的格式版本。日後改結構時,匯入端才知道怎麼轉換。 */
-export const EXPORT_VERSION = 1
+export const EXPORT_VERSION = 2
 
 export interface PortfolioData {
   transactions: Transaction[]
   fees: FeeConfig
+  /** 各 ETF 的目標配置，0 到 1；未設定的代號不出現在物件中。 */
+  targets: Record<string, number>
   /** 最後一次匯出的日期(ISO)。從未匯出為 null。 */
   lastExport: string | null
 }
@@ -25,6 +27,7 @@ export interface PortfolioData {
 export const EMPTY_PORTFOLIO: PortfolioData = {
   transactions: [],
   fees: DEFAULT_FEE_CONFIG,
+  targets: {},
   lastExport: null,
 }
 
@@ -49,6 +52,18 @@ function isTransaction(v: unknown): v is Transaction {
     && typeof t.tax === 'number' && Number.isFinite(t.tax)
 }
 
+function validTargets(value: unknown): Record<string, number> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
+  const targets: Record<string, number> = {}
+  for (const [rawCode, rawWeight] of Object.entries(value)) {
+    const code = rawCode.trim().toUpperCase()
+    if (!/^[A-Z0-9]+$/.test(code) || typeof rawWeight !== 'number'
+      || !Number.isFinite(rawWeight) || rawWeight < 0 || rawWeight > 1) continue
+    targets[code] = rawWeight
+  }
+  return targets
+}
+
 export function loadPortfolio(): PortfolioData {
   try {
     const raw = localStorage.getItem(KEY)
@@ -60,6 +75,7 @@ export function loadPortfolio(): PortfolioData {
         ? parsed.transactions.filter(isTransaction)
         : [],
       fees: { ...DEFAULT_FEE_CONFIG, ...(parsed.fees ?? {}) },
+      targets: validTargets(parsed.targets),
       lastExport: typeof parsed.lastExport === 'string' ? parsed.lastExport : null,
     }
   } catch {
@@ -90,12 +106,13 @@ export function canPersist(): boolean {
 export function toExportFile(data: PortfolioData): string {
   return JSON.stringify(
     { version: EXPORT_VERSION, exportedAt: new Date().toISOString(),
-      transactions: data.transactions, fees: data.fees },
+      transactions: data.transactions, fees: data.fees, targets: data.targets },
     null, 2)
 }
 
 export type ImportResult =
-  | { ok: true; transactions: Transaction[]; fees: FeeConfig; skipped: number }
+  | { ok: true; transactions: Transaction[]; fees: FeeConfig;
+      targets: Record<string, number>; skipped: number }
   | { ok: false; error: string }
 
 export function fromExportFile(text: string): ImportResult {
@@ -119,6 +136,7 @@ export function fromExportFile(text: string): ImportResult {
     ok: true,
     transactions,
     fees: { ...DEFAULT_FEE_CONFIG, ...(obj.fees as Partial<FeeConfig> ?? {}) },
+    targets: validTargets(obj.targets),
     skipped: all.length - transactions.length,
   }
 }

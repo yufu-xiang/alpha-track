@@ -113,6 +113,18 @@ describe('App', () => {
     })
   })
 
+  it('可收藏 ETF 並切換為只看自選', async () => {
+    const user = userEvent.setup()
+    await renderLoaded()
+    const code = fixtureRankings.etfs[0]!.code
+    await user.click(screen.getByRole('button', { name: `加入自選 ${code}` }))
+    expect(localStorage.getItem('alpha-track:watchlist')).toContain(code)
+    await user.click(screen.getByRole('button', { name: /只看自選/ }))
+    await waitFor(() => {
+      expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(2)
+    })
+  })
+
   it('有篩選條件時可一次清除並回復全部結果', async () => {
     const user = userEvent.setup()
     await renderLoaded()

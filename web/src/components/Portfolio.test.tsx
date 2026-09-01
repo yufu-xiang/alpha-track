@@ -25,6 +25,12 @@ async function renderLoaded() {
 }
 
 describe('Portfolio', () => {
+  it('可從詳情頁預填 ETF 代號', async () => {
+    render(<Portfolio initialCode="0050" />)
+    expect(await screen.findByLabelText('代號')).toHaveValue('0050')
+    expect(screen.getByRole('status')).toHaveTextContent('0050')
+  })
+
   it('一律提示紀錄只存在本機 —— 規格要求必須明示這個風險', async () => {
     await renderLoaded()
     expect(screen.getByText(/清除瀏覽器資料、換裝置/)).toBeInTheDocument()
@@ -52,7 +58,8 @@ describe('Portfolio', () => {
     localStorage.setItem(KEY, JSON.stringify({ transactions: [buy], lastExport: null }))
     await renderLoaded()
     // fixture 的 0050 現價 195.5,持股 1000 -> 市值 195,500
-    expect(screen.getByText('195500')).toBeInTheDocument()
+    const summary = screen.getByRole('heading', { name: '組合總覽' }).closest('section')!
+    expect(within(summary).getByText('195,500')).toBeInTheDocument()
   })
 
   it('新增交易後立即反映並寫入 localStorage', async () => {
@@ -67,7 +74,8 @@ describe('Portfolio', () => {
       const stored = JSON.parse(localStorage.getItem(KEY)!)
       expect(stored.transactions).toHaveLength(1)
     })
-    expect(within(screen.getByRole('table')).getByText('0050')).toBeInTheDocument()
+    const activity = screen.getByRole('heading', { name: '交易紀錄' }).closest('section')!
+    expect(within(activity).getByRole('table')).toHaveTextContent('0050')
   })
 
   it('賣出時自動帶入證交稅,且可覆寫', async () => {
@@ -118,6 +126,46 @@ describe('Portfolio', () => {
     await renderLoaded()
     await waitFor(() =>
       expect(screen.getByText(/查不到 09999 的現價/)).toBeInTheDocument())
+  })
+
+  it('持倉明細顯示占比、成本與報酬', async () => {
+    localStorage.setItem(KEY, JSON.stringify({ transactions: [buy], lastExport: null }))
+    await renderLoaded()
+    const section = screen.getByRole('heading', { name: '持倉明細與再平衡' }).closest('section')!
+    expect(within(section).getAllByText('100.00%')).toHaveLength(2)
+    expect(within(section).getByText('+95.22%')).toBeInTheDocument()
+    expect(within(section).getByRole('link', { name: '0050' }))
+      .toHaveAttribute('href', '#/etf/0050')
+  })
+
+  it('可設定等權目標並把買賣估算保存到組合資料', async () => {
+    const user = userEvent.setup()
+    const second = { ...buy, id: 'b', code: '0056', price: 40 }
+    localStorage.setItem(KEY, JSON.stringify({
+      transactions: [buy, second], lastExport: null,
+    }))
+    await renderLoaded()
+    await user.click(screen.getByRole('button', { name: '設定等權目標' }))
+
+    expect(screen.getByLabelText('0050 目標配置')).toHaveValue(50)
+    expect(screen.getByLabelText('0056 目標配置')).toHaveValue(50)
+    const section = screen.getByRole('heading', { name: '持倉明細與再平衡' }).closest('section')!
+    expect(within(section).getByText('賣出')).toBeInTheDocument()
+    expect(within(section).getByText('買進')).toBeInTheDocument()
+    await waitFor(() => {
+      const stored = JSON.parse(localStorage.getItem(KEY)!)
+      expect(stored.targets).toEqual({ '0050': 0.5, '0056': 0.5 })
+    })
+  })
+
+  it('新增持倉後若缺少目標比例，明確指出尚未設定的檔數', async () => {
+    const second = { ...buy, id: 'b', code: '0056', price: 40 }
+    localStorage.setItem(KEY, JSON.stringify({
+      transactions: [buy, second], targets: { '0050': 1 }, lastExport: null,
+    }))
+    await renderLoaded()
+    expect(screen.getAllByText(/1 檔.*未設定/).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/請調整至 100%/)).not.toBeInTheDocument()
   })
 })
 

@@ -26,7 +26,11 @@ export function AllocationPie({ slices, title }: Props) {
         marker="◎"
         title="目前還沒有持股"
         description="新增第一筆買進交易後，這裡會自動整理標的與分類占比。"
-        action={<a href="#new-transaction">新增第一筆交易</a>}
+        action={<button type="button" onClick={() => {
+          document.getElementById('new-transaction')?.scrollIntoView?.({
+            behavior: 'smooth', block: 'start',
+          })
+        }}>新增第一筆交易</button>}
         compact
       />
     )

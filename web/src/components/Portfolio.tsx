@@ -6,8 +6,8 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { loadData } from '../data/loader'
-import { formatDate, formatNumber, formatPercent } from '../lib/format'
-import { buildHoldings, summarize, type Transaction } from '../lib/portfolio'
+import { formatDate, formatMoney, formatNumber, formatPercent } from '../lib/format'
+import { analyzePositions, summarize, type Transaction } from '../lib/portfolio'
 import {
   canPersist, fromExportFile, loadPortfolio, needsExportReminder, savePortfolio,
   toExportFile, type PortfolioData,
@@ -19,12 +19,13 @@ import { MetricInfo } from './MetricInfo'
 import { DividendEstimates } from './DividendEstimates'
 import { EmptyState } from './EmptyState'
 import { PageShell } from './PageShell'
+import { PortfolioPositions } from './PortfolioPositions'
 import { SplitNotice } from './SplitNotice'
 import { TransactionForm } from './TransactionForm'
 
 const TYPE_LABEL = { buy: '買進', sell: '賣出', dividend: '配息', split: '分割' } as const
 
-export function Portfolio() {
+export function Portfolio({ initialCode }: { initialCode?: string }) {
   const [data, setData] = useState<PortfolioData>(() => loadPortfolio())
   const [rows, setRows] = useState<EtfRow[]>([])
   const [pieBy, setPieBy] = useState<'code' | 'category'>('code')
@@ -34,6 +35,15 @@ export function Portfolio() {
 
   useEffect(() => { void loadData().then((r) => { if (r.ok) setRows(r.rankings.etfs) }) }, [])
   useEffect(() => { savePortfolio(data) }, [data])
+  useEffect(() => {
+    if (!initialCode) return
+    const id = window.setTimeout(() => {
+      document.getElementById('new-transaction')?.scrollIntoView?.({
+        behavior: 'auto', block: 'start',
+      })
+    }, 120)
+    return () => window.clearTimeout(id)
+  }, [initialCode])
 
   const priceMap = useMemo(
     () => new Map(rows.map((r) => [r.code, r.close])), [rows])
@@ -46,13 +56,13 @@ export function Portfolio() {
   const summary = useMemo(
     () => summarize(data.transactions, priceMap, today, dayReturns),
     [data.transactions, priceMap, today, dayReturns])
-  const holdings = useMemo(
-    () => [...buildHoldings(data.transactions).values()].filter((h) => h.shares > 0),
-    [data.transactions])
+  const positions = useMemo(
+    () => analyzePositions(data.transactions, priceMap, data.targets),
+    [data.transactions, data.targets, priceMap])
 
   const slices = useMemo(() => {
     const acc = new Map<string, number>()
-    for (const h of holdings) {
+    for (const h of positions) {
       const px = priceMap.get(h.code)
       if (px === undefined) continue
       const key = pieBy === 'code'
@@ -61,7 +71,7 @@ export function Portfolio() {
       acc.set(key, (acc.get(key) ?? 0) + h.shares * px)
     }
     return [...acc].map(([label, value]) => ({ label, value }))
-  }, [holdings, priceMap, infoMap, pieBy])
+  }, [positions, priceMap, infoMap, pieBy])
 
   function addTx(tx: Transaction) {
     setData((d) => ({ ...d, transactions: [...d.transactions, tx] }))
@@ -86,7 +96,9 @@ export function Portfolio() {
     void file.text().then((text) => {
       const r = fromExportFile(text)
       if (!r.ok) { setNotice(`匯入失敗:${r.error}`); return }
-      setData((d) => ({ ...d, transactions: r.transactions, fees: r.fees }))
+      setData((d) => ({
+        ...d, transactions: r.transactions, fees: r.fees, targets: r.targets,
+      }))
       setNotice(r.skipped > 0
         ? `已匯入 ${r.transactions.length} 筆,略過 ${r.skipped} 筆無法辨識的紀錄。`
         : `已匯入 ${r.transactions.length} 筆交易。`)
@@ -101,6 +113,14 @@ export function Portfolio() {
       description="集中查看持倉、損益、配息與交易紀錄，掌握這個投資組合現在的樣子。"
       backHref={hashFor({ name: 'rankings' })}
     >
+
+      {initialCode && (
+        <p className="portfolio-prefill" role="status">
+          <span>已從 ETF 詳情頁帶入</span>
+          <strong>{initialCode}</strong>
+          <span>請確認日期、股數與成交價格後新增交易。</span>
+        </p>
+      )}
 
       {!persistable.current && (
         <p role="alert" className="error">
@@ -153,17 +173,17 @@ export function Portfolio() {
           <span>依最新收盤價估算</span>
         </div>
         <dl className="cards">
-          <Card label="總市值" value={formatNumber(summary.marketValue, 0)} />
+          <Card label="總市值" value={formatMoney(summary.marketValue)} />
           <Card label="今日損益"
                 value={summary.todayChange === null
-                  ? '—' : formatNumber(summary.todayChange, 0)}
+                  ? '—' : formatMoney(summary.todayChange)}
                 tone={summary.todayChange} />
-          <Card label="投入成本" value={formatNumber(summary.costBasis, 0)} />
-          <Card label="未實現損益" value={formatNumber(summary.unrealized, 0)}
+          <Card label="投入成本" value={formatMoney(summary.costBasis)} />
+          <Card label="未實現損益" value={formatMoney(summary.unrealized)}
                 tone={summary.unrealized} />
-          <Card label="已實現損益" value={formatNumber(summary.realized, 0)}
+          <Card label="已實現損益" value={formatMoney(summary.realized)}
                 tone={summary.realized} />
-          <Card label="已領配息" value={formatNumber(summary.dividends, 0)} />
+          <Card label="已領配息" value={formatMoney(summary.dividends)} />
           <Card label="含息總報酬" value={formatPercent(summary.totalReturn)}
                 tone={summary.totalReturn} />
           <Card label="XIRR" term="xirr" value={formatPercent(summary.xirr)}
@@ -171,8 +191,16 @@ export function Portfolio() {
         </dl>
       </section>
 
+      {positions.length > 0 && (
+        <PortfolioPositions
+          positions={positions}
+          names={new Map(rows.map((row) => [row.code, row.name]))}
+          onTargetsChange={(targets) => setData((current) => ({ ...current, targets }))}
+        />
+      )}
+
       <div className="portfolio-grid">
-      <section className="content-panel" id="new-transaction">
+      <section className="content-panel">
         <div className="panel-heading">
           <div><p className="eyebrow">ALLOCATION</p><h2>資產配置</h2></div>
         </div>
@@ -186,11 +214,12 @@ export function Portfolio() {
                        title={pieBy === 'code' ? '依標的的資產配置' : '依分類的資產配置'} />
       </section>
 
-      <section className="content-panel">
+      <section className="content-panel" id="new-transaction">
         <div className="panel-heading">
           <div><p className="eyebrow">NEW ACTIVITY</p><h2>新增交易</h2></div>
         </div>
-        <TransactionForm fees={data.fees} rows={rows} onAdd={addTx} />
+        <TransactionForm fees={data.fees} rows={rows} onAdd={addTx}
+                         initialCode={initialCode} />
       </section>
       </div>
 
@@ -211,7 +240,11 @@ export function Portfolio() {
             marker="＋"
             title="還沒有交易紀錄"
             description="從一筆買進開始，系統會自動計算持股成本、損益與配息。"
-            action={<a href="#new-transaction">前往新增交易</a>}
+            action={<button type="button" onClick={() => {
+              document.getElementById('new-transaction')?.scrollIntoView?.({
+                behavior: 'smooth', block: 'start',
+              })
+            }}>前往新增交易</button>}
             compact
           />
         ) : (

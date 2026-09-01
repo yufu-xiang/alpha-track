@@ -19,7 +19,7 @@ describe('讀寫', () => {
   })
 
   it('存檔後讀得回來', () => {
-    savePortfolio({ transactions: [good], fees: DEFAULT_FEE_CONFIG, lastExport: null })
+    savePortfolio({ transactions: [good], fees: DEFAULT_FEE_CONFIG, targets: {}, lastExport: null })
     expect(loadPortfolio().transactions).toEqual([good])
   })
 
@@ -54,17 +54,21 @@ describe('讀寫', () => {
 describe('匯出與匯入', () => {
   it('匯出檔帶版本號 —— 日後改結構時匯入端才知道怎麼轉換', () => {
     const parsed = JSON.parse(toExportFile({
-      transactions: [good], fees: DEFAULT_FEE_CONFIG, lastExport: null }))
-    expect(parsed.version).toBe(1)
+      transactions: [good], fees: DEFAULT_FEE_CONFIG, targets: { '0050': 1 }, lastExport: null }))
+    expect(parsed.version).toBe(2)
     expect(parsed.transactions).toHaveLength(1)
+    expect(parsed.targets).toEqual({ '0050': 1 })
   })
 
   it('匯出再匯入得到相同的交易', () => {
     const text = toExportFile({
-      transactions: [good], fees: DEFAULT_FEE_CONFIG, lastExport: null })
+      transactions: [good], fees: DEFAULT_FEE_CONFIG, targets: { '0050': 1 }, lastExport: null })
     const r = fromExportFile(text)
     expect(r.ok).toBe(true)
-    if (r.ok) expect(r.transactions).toEqual([good])
+    if (r.ok) {
+      expect(r.transactions).toEqual([good])
+      expect(r.targets).toEqual({ '0050': 1 })
+    }
   })
 
   it('非 JSON 的檔案給出可讀的錯誤', () => {
@@ -87,11 +91,24 @@ describe('匯出與匯入', () => {
       expect(r.skipped).toBe(2)
     }
   })
+
+  it('舊版備份沒有目標配置時仍可匯入', () => {
+    const r = fromExportFile(JSON.stringify({ transactions: [good] }))
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.targets).toEqual({})
+  })
+
+  it('載入時略過超出 0 到 100% 的目標配置', () => {
+    localStorage.setItem('alpha-track:portfolio', JSON.stringify({
+      transactions: [], targets: { '0050': 0.6, bad: 1.2, '0056': -0.1 },
+    }))
+    expect(loadPortfolio().targets).toEqual({ '0050': 0.6 })
+  })
 })
 
 describe('匯出提醒', () => {
   const withTx = (lastExport: string | null) => ({
-    transactions: [good], fees: DEFAULT_FEE_CONFIG, lastExport,
+    transactions: [good], fees: DEFAULT_FEE_CONFIG, targets: {}, lastExport,
   })
 
   it('有交易但從未匯出就要提醒 —— 那是風險最高的狀態', () => {
