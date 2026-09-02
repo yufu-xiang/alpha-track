@@ -285,14 +285,14 @@ function Rankings() {
 
       {compare.length > 0 && (
         <div className="compare-bar">
-          <span className="compare-bar__codes">
+          <span className="compare-bar__codes compare-bar__summary">
             已選 {compare.length} / {MAX_COMPARE}:{compare.join('、')}
             {compare.length >= MAX_COMPARE && '(已達上限)'}
           </span>
           {compare.length >= 2 ? (
             <a href={hashFor({ name: 'compare', codes: compare })}>比較這 {compare.length} 檔</a>
           ) : (
-            <span className="compare-bar__codes">再選一檔即可比較</span>
+            <span className="compare-bar__codes compare-bar__hint">再選一檔即可比較</span>
           )}
           <button type="button" className="is-ghost" onClick={() => setCompare([])}>
             清除

@@ -35,12 +35,14 @@ describe('樣式表', () => {
     expect(css).toMatch(/@media[^{]*max-width/)
   })
 
-  it('凍結第二欄的位移量與第一欄寬度綁在同一個變數,不是各寫各的魔術數字', () => {
-    // 兩者只要對不上,窄螢幕的凍結欄就會疊在一起。
-    // 名次欄插到最前面之後,第二欄(代號)的位移量要跟著名次欄的寬度走。
+  it('比較、名次與代號的凍結位移共用欄寬變數,不依賴會位移的 nth-child', () => {
+    // 開啟比較功能會多一欄；若用 nth-child，實際凍結的欄位會整體錯位。
+    expect(css).toMatch(/--sticky-pick-w:/)
     expect(css).toMatch(/--sticky-rank-w:/)
     expect(css).toMatch(/left:\s*var\(--sticky-rank-w\)/)
     expect(css).toMatch(/--sticky-code-w:/)
+    expect(css).toMatch(/left:\s*calc\(var\(--sticky-pick-w\) \+ var\(--sticky-rank-w\)\)/)
+    expect(css).toContain('.ranking-table-wrap .col-code')
   })
 
   it('排序中的欄位有視覺區隔,不只靠 aria-sort', () => {

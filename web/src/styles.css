@@ -29,9 +29,10 @@
   --shadow-lg: 0 20px 55px rgb(15 23 42 / 0.12);
   /* 窄螢幕凍結第一欄的寬度。第二欄的 left 位移直接引用這個變數,
      兩者各寫各的魔術數字就會疊在一起。 */
-  --sticky-code-w: 76px;
+  --sticky-code-w: 92px;
   /* 名次欄在窄螢幕的寬度。第二欄的 left 位移引用它,兩者不可各寫各的。 */
   --sticky-rank-w: 40px;
+  --sticky-pick-w: 38px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -517,6 +518,7 @@ button:active { transform: translateY(1px); }
 .ranking-heading h2 { font-size: 1.05rem; }
 .ranking-heading > p { margin: 0; color: var(--fg-muted); font-size: 0.75rem; }
 .ranking-heading > p strong { color: var(--fg); font-size: 1rem; }
+.ranking-table-guide { display: none; }
 
 /* 表格 —— 橫向捲動,不使 body 橫捲
  *
@@ -545,11 +547,10 @@ th, td {
   border-bottom: 1px solid var(--border);
 }
 
-/* 名次靠右(數字對齊),代號/名稱/分類靠左。名次欄插在最前面,
-   所以文字欄位的序號各往後推一位。 */
-th:nth-child(2), td:nth-child(2),
-th:nth-child(3), td:nth-child(3),
-th:nth-child(4), td:nth-child(4) { text-align: left; }
+/* 用欄位 class 對齊，不依賴 nth-child；比較勾選欄出現時欄號會改變。 */
+.col-pick { text-align: center; }
+.col-rank { text-align: right; }
+.col-code, .col-name, .col-category { text-align: left; }
 
 .col-rank {
   text-align: right;
@@ -624,32 +625,102 @@ td.col-close { color: var(--fg); font-weight: 650; }
 td .gain { color: var(--gain); }
 td .loss { color: var(--loss); }
 
-/* 窄螢幕:凍結代號與名稱欄 */
+/* 窄螢幕:凍結比較、名次與代號。用欄位 class 而非 nth-child，避免開啟
+   比較功能後實際凍結成「比較、名次」，代號反而滑走。 */
 @media (max-width: 768px) {
-  /* 凍結名次與代號兩欄。名稱欄在窄螢幕不凍結 —— 三欄凍結會吃掉大半寬度,
-     反而看不到報酬數字,而排行榜的重點就是那些數字。 */
-  th:nth-child(1), td:nth-child(1) {
+  .ranking-table-wrap .col-pick,
+  .ranking-table-wrap .col-rank,
+  .ranking-table-wrap .col-code {
     position: sticky;
+    z-index: 2;
+    background: var(--surface);
+  }
+  .ranking-table-wrap .col-pick {
     left: 0;
-    z-index: 1;
+    width: var(--sticky-pick-w);
+    min-width: var(--sticky-pick-w);
+  }
+  .ranking-table-wrap .col-rank {
+    left: 0;
     width: var(--sticky-rank-w);
     min-width: var(--sticky-rank-w);
-    background: var(--surface);
   }
-  th:nth-child(2), td:nth-child(2) {
-    position: sticky;
+  .ranking-table-wrap .col-code {
     left: var(--sticky-rank-w);
-    z-index: 1;
     width: var(--sticky-code-w);
     min-width: var(--sticky-code-w);
-    background: var(--surface);
+    box-shadow: 1px 0 0 var(--border), 10px 0 16px rgb(15 23 42 / 0.06);
   }
-  thead th:nth-child(1), thead th:nth-child(2) { z-index: 4; background: var(--surface-raised); }
+  .ranking-table-wrap .is-picking .col-rank { left: var(--sticky-pick-w); }
+  .ranking-table-wrap .is-picking .col-code {
+    left: calc(var(--sticky-pick-w) + var(--sticky-rank-w));
+  }
+  .ranking-table-wrap thead .col-pick,
+  .ranking-table-wrap thead .col-rank,
+  .ranking-table-wrap thead .col-code {
+    z-index: 5;
+    background: var(--surface-raised);
+  }
   th, td { padding: 0.58rem 0.55rem; font-size: 0.78rem; }
-  tbody tr:nth-child(even) td:nth-child(1),
-  tbody tr:nth-child(even) td:nth-child(2) { background: var(--surface-soft); }
-  tbody tr:hover td:nth-child(1),
-  tbody tr:hover td:nth-child(2) { background: var(--accent-soft); }
+  .ranking-table-wrap tbody tr:nth-child(even) .col-pick,
+  .ranking-table-wrap tbody tr:nth-child(even) .col-rank,
+  .ranking-table-wrap tbody tr:nth-child(even) .col-code { background: var(--surface-soft); }
+  .ranking-table-wrap tbody tr:hover .col-pick,
+  .ranking-table-wrap tbody tr:hover .col-rank,
+  .ranking-table-wrap tbody tr:hover .col-code { background: var(--accent-soft); }
+  .ranking-table-guide {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 4.5rem auto;
+    align-items: center;
+    gap: 0.55rem;
+    margin-bottom: 0.42rem;
+    padding: 0.48rem 0.55rem;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    color: var(--fg-muted);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+  }
+  .ranking-table-guide > span {
+    display: grid;
+    min-width: 0;
+    font-size: 0.64rem;
+    line-height: 1.35;
+  }
+  .ranking-table-guide > span b { color: var(--fg); font-size: 0.68rem; }
+  .ranking-table-guide > i {
+    position: relative;
+    display: block;
+    height: 3px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--border);
+  }
+  .ranking-table-guide > i b {
+    display: block;
+    height: 100%;
+    min-width: 8%;
+    border-radius: inherit;
+    background: var(--accent);
+    transition: width 120ms ease;
+  }
+  .ranking-table-guide > div { display: flex; gap: 0.25rem; }
+  .ranking-table-guide button {
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    color: var(--fg);
+    background: var(--surface-soft);
+    cursor: pointer;
+  }
+  .ranking-table-guide button:disabled { cursor: default; opacity: 0.32; }
+  .ranking-table-wrap .col-pick input { width: 1.15rem; height: 1.15rem; }
+  .ranking-table-wrap .watchlist-mini { width: 1.9rem; height: 1.9rem; }
+  .ranking-table-wrap .rank-code { gap: 0.12rem; }
 }
 
 /* 指標說明 */
@@ -2360,6 +2431,29 @@ footer {
   .ranking-heading { margin-top: 1rem; }
   .ranking-heading h2 { font-size: 0.95rem; }
   .table-wrap { max-height: calc(100vh - 7rem); border-radius: 10px; }
+  .compare-bar {
+    z-index: 7;
+    flex-wrap: wrap;
+    bottom: 0.35rem;
+    gap: 0.45rem;
+    padding: 0.55rem;
+    box-shadow: 0 12px 30px rgb(15 23 42 / 0.16);
+  }
+  .compare-bar__summary {
+    flex: 1 1 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .compare-bar__hint { flex: 1 1 auto; }
+  .compare-bar a {
+    display: inline-flex;
+    flex: 1 1 auto;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.3rem;
+  }
+  .compare-bar button { min-height: 2.3rem; }
   .page-shell .table-wrap { max-height: none; }
   .page-shell .table-wrap.is-scrollable::before {
     content: "左右滑動查看完整資料  →";

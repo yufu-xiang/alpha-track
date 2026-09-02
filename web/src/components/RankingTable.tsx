@@ -14,7 +14,7 @@ import {
   useReactTable,
   type SortingState,
 } from '@tanstack/react-table'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { formatNumber, formatPercent } from '../lib/format'
 import { toSortable } from '../lib/sorting'
 import {
@@ -62,6 +62,12 @@ export function RankingTable({
   watchlist, onWatchlistToggle,
 }: Props) {
   const picking = compareSelected !== undefined && onCompareToggle !== undefined
+  const tableWrapRef = useRef<HTMLDivElement>(null)
+  const [horizontalNav, setHorizontalNav] = useState({
+    canLeft: false, canRight: true, progress: 0,
+  })
+  const visibleColumnsKey = visibleColumns.join(',')
+  const visibleRiskKey = visibleRisk.join(',')
   const [sorting, setSorting] = useState<SortingState>(
     sortBy ? [{ id: sortBy, desc: true }] : [],
   )
@@ -168,6 +174,33 @@ export function RankingTable({
     getSortedRowModel: getSortedRowModel(),
   })
 
+  useEffect(() => {
+    const node = tableWrapRef.current
+    if (!node) return
+    const sync = () => {
+      const max = Math.max(0, node.scrollWidth - node.clientWidth)
+      const left = Math.max(0, node.scrollLeft)
+      setHorizontalNav({
+        canLeft: left > 4,
+        canRight: max > 4 && left < max - 4,
+        progress: max > 0 ? Math.min(1, left / max) : 1,
+      })
+    }
+    sync()
+    window.addEventListener('resize', sync)
+    return () => window.removeEventListener('resize', sync)
+  }, [rows.length, visibleColumnsKey, visibleRiskKey, picking])
+
+  function scrollHorizontally(direction: -1 | 1) {
+    const node = tableWrapRef.current
+    if (!node) return
+    const max = Math.max(0, node.scrollWidth - node.clientWidth)
+    const next = Math.max(0, Math.min(max,
+      node.scrollLeft + direction * Math.max(180, node.clientWidth * 0.68)))
+    if (typeof node.scrollTo === 'function') node.scrollTo({ left: next, behavior: 'smooth' })
+    else node.scrollLeft = next
+  }
+
   if (rows.length === 0) {
     return (
       <EmptyState
@@ -195,8 +228,37 @@ export function RankingTable({
   }
 
   return (
-    <div className="table-wrap">
-      <table>
+    <div className="ranking-table-shell">
+      <div className="ranking-table-guide" role="toolbar" aria-label="排行榜水平導覽">
+        <span>
+          <b>名次與代號已固定</b>
+          {horizontalNav.canLeft
+            ? horizontalNav.canRight ? '左右滑動切換欄位' : '已到最右側'
+            : horizontalNav.canRight ? '向右滑看完整績效' : '所有欄位皆已顯示'}
+        </span>
+        <i aria-hidden="true"><b style={{ width: `${horizontalNav.progress * 100}%` }} /></i>
+        <div>
+          <button type="button" aria-label="向左瀏覽排行榜"
+                  disabled={!horizontalNav.canLeft}
+                  onClick={() => scrollHorizontally(-1)}>←</button>
+          <button type="button" aria-label="向右瀏覽排行榜"
+                  disabled={!horizontalNav.canRight}
+                  onClick={() => scrollHorizontally(1)}>→</button>
+        </div>
+      </div>
+      <div className="table-wrap ranking-table-wrap" ref={tableWrapRef}
+           onScroll={() => {
+             const node = tableWrapRef.current
+             if (!node) return
+             const max = Math.max(0, node.scrollWidth - node.clientWidth)
+             const left = Math.max(0, node.scrollLeft)
+             setHorizontalNav({
+               canLeft: left > 4,
+               canRight: max > 4 && left < max - 4,
+               progress: max > 0 ? Math.min(1, left / max) : 1,
+             })
+           }}>
+      <table className={picking ? 'is-picking' : undefined}>
         <thead>
           {table.getHeaderGroups().map((hg) => (
             <tr key={hg.id}>
@@ -275,6 +337,7 @@ export function RankingTable({
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }

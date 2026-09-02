@@ -38,6 +38,25 @@ describe('RankingTable', () => {
     expect(bodyRowCodes()).toHaveLength(ROWS.length)
   })
 
+  it('手機版提供水平欄位導覽，不必猜表格是否還能滑動', () => {
+    renderTable()
+    const guide = screen.getByRole('toolbar', { name: '排行榜水平導覽' })
+    expect(within(guide).getByText(/名次與代號已固定/)).toBeInTheDocument()
+    expect(within(guide).getByRole('button', { name: '向左瀏覽排行榜' }))
+      .toBeInTheDocument()
+    expect(within(guide).getByRole('button', { name: '向右瀏覽排行榜' }))
+      .toBeInTheDocument()
+  })
+
+  it('開啟比較功能時以欄位 class 標記固定欄，不依賴會位移的欄號', () => {
+    renderTable({ compareSelected: [], onCompareToggle: vi.fn() })
+    const table = screen.getByRole('table')
+    expect(table).toHaveClass('is-picking')
+    expect(table.querySelector('th.col-pick')).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: '名次' })).toHaveClass('col-rank')
+    expect(screen.getByRole('columnheader', { name: '代號' })).toHaveClass('col-code')
+  })
+
   it('只顯示指定的期間欄位', () => {
     renderTable({ visibleColumns: ['D1', 'Y1'] })
     expect(screen.getByRole('columnheader', { name: /當日/ })).toBeInTheDocument()

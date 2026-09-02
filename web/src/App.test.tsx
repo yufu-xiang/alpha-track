@@ -87,7 +87,7 @@ describe('App', () => {
     expect(within(tabs()).getByRole('button', { name: '一年' }))
       .toHaveAttribute('aria-pressed', 'true')
 
-    await user.click(screen.getByRole('button', { name: /欄位/ }))
+    await user.click(screen.getByRole('button', { name: /^欄位/ }))
     await user.click(screen.getByRole('checkbox', { name: '一年' }))
 
     await waitFor(() => {
@@ -195,7 +195,7 @@ describe('App 風險欄位自選', () => {
     await renderLoaded()
     expect(screen.getByRole('columnheader', { name: /夏普值/ })).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /欄位/ }))
+    await user.click(screen.getByRole('button', { name: /^欄位/ }))
     await user.click(screen.getByRole('checkbox', { name: '夏普值' }))
 
     await waitFor(() =>
@@ -206,7 +206,7 @@ describe('App 風險欄位自選', () => {
   it('勾選折溢價後該欄出現', async () => {
     const user = userEvent.setup()
     await renderLoaded()
-    await user.click(screen.getByRole('button', { name: /欄位/ }))
+    await user.click(screen.getByRole('button', { name: /^欄位/ }))
     await user.click(screen.getByRole('checkbox', { name: '折溢價' }))
     await waitFor(() =>
       expect(screen.getByRole('columnheader', { name: /折溢價/ })).toBeInTheDocument())
