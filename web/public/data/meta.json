@@ -1,1 +1,1 @@
-{"generated_at":"2026-09-03T22:20:04+08:00","data_date":"2026-08-26","is_stale":false,"etf_count":354,"unclassified":["00411A","00643K","00987D"],"anomalies":[{"code":"00715L","reason":"單日變動 +23.0% 超過門檻但當日無除息紀錄"}],"risk_free_rate":0.015,"benchmark_return_1y":0.920517307734201}
+{"generated_at":"2026-09-04T22:09:18+08:00","data_date":"2026-08-26","is_stale":false,"etf_count":355,"unclassified":["00409A","00411A","00643K","00987D"],"anomalies":[{"code":"00715L","reason":"單日變動 +20.9% 超過門檻但當日無除息紀錄"}],"risk_free_rate":0.015,"benchmark_return_1y":0.920517307734201}
