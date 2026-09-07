@@ -2,9 +2,8 @@ name: 每日資料更新
 
 on:
   schedule:
-    # 台北時間 18:17(UTC 10:17),每個交易日收盤後更新。
-    # 避開整點:GitHub 明載整點是排程尖峰,較容易延遲甚至被丟棄。
-    - cron: "17 10 * * 1-5"
+    # 台北時間 18:00(UTC 10:00),收盤後兩小時,留給交易所結算時間
+    - cron: "0 10 * * 1-5"
   workflow_dispatch:
 
 permissions:
@@ -52,22 +51,17 @@ jobs:
       # 找到最近一次的快取來還原。快取真的遺失仍是可自癒的 ——
       # update 會偵測缺歷史並回補,只有淨值補不回來。
       #
-      # v1 是 2026-08-26 的固定舊快取,不可再列入 restore-keys。
-      # 實際 Actions 日誌顯示 2026-08-31 至 09-04 每次都命中 v1,
-      # 即使每次結尾都有成功保存新的 v2,隔天仍從 08-26 重新開始。
-      #
-      # v3 把 run_attempt 納入鍵:同一次 run 人工重跑時也會保存新結果,
-      # 不會因 run_id 相同而命中不可變的舊內容。第一次 v3 執行可從
-      # 最近的 v2 接續,往後則一律從最近的 v3 接續。
+      # restore-keys 保留舊的 v1 是為了讓**第一次** v2 執行不必從零重建
+      # (完整回補要十分鐘,而且會白白丟掉已累積的淨值)。
+      # v2 存過一次之後這一行就沒有作用了,可以刪。
       - name: 還原資料庫快取
-        id: database_cache
         uses: actions/cache@v4
         with:
           path: data/alpha_track.db
-          key: alpha-track-db-v3-${{ github.run_id }}-${{ github.run_attempt }}
+          key: alpha-track-db-v2-${{ github.run_id }}
           restore-keys: |
-            alpha-track-db-v3-
             alpha-track-db-v2-
+            alpha-track-db-v1
 
       # Cache 可能被 GitHub 清除；recovery.json 跟著主分支持久保存不可回補的
       # 淨值歷史。匯入是冪等的，所以 cache 命中時照跑也不會重複資料。
