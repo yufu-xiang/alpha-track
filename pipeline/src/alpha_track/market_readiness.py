@@ -100,8 +100,17 @@ def evaluate_readiness(
 
     twse_date = latest_payload_date(twse_rows)
     tpex_date = latest_payload_date(tpex_rows)
-    if twse_date == target and tpex_date == target:
-        return Readiness("ready", target, "上市與上櫃官方資料均已到齊")
+    if twse_date == tpex_date and twse_date is not None:
+        if twse_date >= target:
+            return Readiness("ready", target, "上市與上櫃官方資料均已到齊")
+        # 網站若落後不只一天，17:00 先補上兩個市場共同擁有的最新日期，
+        # 後續整點仍會繼續等待目標日，不必讓舊資料多停留一晚。
+        if published_date is None or twse_date > published_date:
+            return Readiness(
+                "ready",
+                target,
+                f"先補上已到齊的 {twse_date.isoformat()} 資料，再繼續等待目標日",
+            )
 
     return Readiness(
         "pending",
@@ -135,7 +144,10 @@ def check(now: datetime, meta_path: Path = DEFAULT_META_PATH) -> Readiness:
     if weekend_reason:
         return Readiness("closed", target, weekend_reason)
 
-    holidays = fetch_json(HOLIDAY_URL)
+    try:
+        holidays = fetch_json(HOLIDAY_URL)
+    except Exception as error:  # 外部服務暫時失敗時，留待下一個整點重試。
+        return Readiness("pending", target, f"休市資料暫時無法讀取（{type(error).__name__}）")
     closed_reason = market_closed_reason(target, holidays)
     if closed_reason:
         return Readiness("closed", target, closed_reason)
@@ -144,12 +156,18 @@ def check(now: datetime, meta_path: Path = DEFAULT_META_PATH) -> Readiness:
     if published_date is not None and published_date >= target:
         return Readiness("already_done", target, f"網站已有 {published_date.isoformat()} 資料")
 
+    try:
+        twse_rows = fetch_json(TWSE_DAILY_URL)
+        tpex_rows = fetch_json(TPEX_DAILY_URL)
+    except Exception as error:  # 同上；不要因一次網路中斷誤觸發或留下紅燈。
+        return Readiness("pending", target, f"行情資料暫時無法完整讀取（{type(error).__name__}）")
+
     return evaluate_readiness(
         target=target,
         holiday_rows=holidays,
         published_date=published_date,
-        twse_rows=fetch_json(TWSE_DAILY_URL),
-        tpex_rows=fetch_json(TPEX_DAILY_URL),
+        twse_rows=twse_rows,
+        tpex_rows=tpex_rows,
     )
 
 

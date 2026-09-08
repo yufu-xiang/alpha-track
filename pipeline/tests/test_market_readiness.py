@@ -1,6 +1,8 @@
 from datetime import date, datetime, timezone
 
+from alpha_track import market_readiness
 from alpha_track.market_readiness import (
+    check,
     evaluate_readiness,
     market_closed_reason,
     parse_market_date,
@@ -59,6 +61,29 @@ def test_ready_only_when_both_markets_have_target_date():
     assert result.state == "ready"
 
 
+def test_stale_site_catches_up_before_target_date_is_available():
+    result = evaluate_readiness(
+        target=date(2026, 9, 8),
+        holiday_rows=[],
+        published_date=date(2026, 9, 4),
+        twse_rows=[{"Date": "1150907"}],
+        tpex_rows=[{"Date": "1150907"}],
+    )
+    assert result.state == "ready"
+    assert "2026-09-07" in result.reason
+
+
+def test_same_old_source_date_does_not_repeat_an_update():
+    result = evaluate_readiness(
+        target=date(2026, 9, 8),
+        holiday_rows=[],
+        published_date=date(2026, 9, 7),
+        twse_rows=[{"Date": "1150907"}],
+        tpex_rows=[{"Date": "1150907"}],
+    )
+    assert result.state == "pending"
+
+
 def test_existing_data_prevents_duplicate_update():
     target = date(2026, 9, 8)
     result = evaluate_readiness(
@@ -69,3 +94,17 @@ def test_existing_data_prevents_duplicate_update():
         tpex_rows=[],
     )
     assert result.state == "already_done"
+
+
+def test_api_failure_waits_for_next_hour(monkeypatch, tmp_path):
+    def fail(_url):
+        raise OSError("temporary network failure")
+
+    monkeypatch.setattr(market_readiness, "fetch_json", fail)
+    result = check(
+        datetime(2026, 9, 8, 17, 0, tzinfo=market_readiness.TAIPEI),
+        tmp_path / "missing-meta.json",
+    )
+    assert result.state == "pending"
+    assert "下一個" not in result.reason
+    assert "休市資料" in result.reason
