@@ -1,0 +1,48 @@
+name: 每小時檢查每日資料
+
+on:
+  schedule:
+    # 每個台北交易日 17:00 起，每小時檢查至隔日 16:00。
+    # 台灣沒有日光節約時間；以下兩段皆為 UTC。
+    - cron: "0 9-23 * * 1-5"
+    - cron: "0 0-8 * * 2-6"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: daily-readiness-check
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 檢查休市與官方資料日期
+        id: readiness
+        run: python pipeline/src/alpha_track/market_readiness.py
+
+      - name: 顯示檢查結果
+        run: |
+          echo "目標日期: ${{ steps.readiness.outputs.target_date }}"
+          echo "狀態: ${{ steps.readiness.outputs.state }}"
+          echo "原因: ${{ steps.readiness.outputs.reason }}"
+
+      # workflow_dispatch 是 GITHUB_TOKEN 可以觸發後續 workflow 的少數例外；
+      # 因此更新完成後，原有 deploy.yml 的 workflow_run 仍會正常部署網站。
+      - name: 啟動每日資料更新
+        if: steps.readiness.outputs.state == 'ready'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+        run: |
+          curl --fail-with-body --request POST \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$GH_REPOSITORY/actions/workflows/daily.yml/dispatches" \
+            --data '{"ref":"main"}'

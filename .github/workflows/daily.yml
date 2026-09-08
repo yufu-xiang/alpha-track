@@ -1,9 +1,8 @@
 name: 每日資料更新
 
 on:
-  schedule:
-    # 台北時間 17:00(UTC 09:00),每個交易日抓取當時已發布的最新資料
-    - cron: "0 9 * * 1-5"
+  # 排程由 daily-readiness.yml 先確認當日資料已發布後觸發。這個 workflow
+  # 保留為真正執行測試、更新、提交與部署的單一入口。
   workflow_dispatch:
 
 permissions:
