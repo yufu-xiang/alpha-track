@@ -2,8 +2,8 @@ name: 每日資料更新
 
 on:
   schedule:
-    # 台北時間 18:00(UTC 10:00),收盤後兩小時,留給交易所結算時間
-    - cron: "0 10 * * 1-5"
+    # 台北時間 17:00(UTC 09:00),每個交易日抓取當時已發布的最新資料
+    - cron: "0 9 * * 1-5"
   workflow_dispatch:
 
 permissions:
