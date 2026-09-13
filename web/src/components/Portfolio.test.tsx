@@ -41,6 +41,26 @@ describe('Portfolio', () => {
     expect(screen.queryByText(/建議現在匯出備份/)).not.toBeInTheDocument()
   })
 
+  it('空組合先顯示起步流程，不用一排零值干擾', async () => {
+    await renderLoaded()
+    expect(screen.getByRole('heading', { name: '用一筆真實交易建立你的組合' }))
+      .toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '新增第一筆交易' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '先去排行榜找 ETF' }))
+      .toHaveAttribute('href', '#/')
+    expect(screen.queryByRole('heading', { name: '組合總覽' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: '資產配置' })).not.toBeInTheDocument()
+  })
+
+  it('已有交易時收起新手起步流程並顯示分析內容', async () => {
+    localStorage.setItem(KEY, JSON.stringify({ transactions: [buy], lastExport: null }))
+    await renderLoaded()
+    expect(screen.queryByRole('heading', { name: '用一筆真實交易建立你的組合' }))
+      .not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '組合總覽' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '資產配置' })).toBeInTheDocument()
+  })
+
   it('有交易但從未匯出就提醒 —— 那是風險最高的狀態', async () => {
     localStorage.setItem(KEY, JSON.stringify({ transactions: [buy], lastExport: null }))
     await renderLoaded()

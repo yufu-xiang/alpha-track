@@ -41,6 +41,30 @@ describe('App', () => {
     expect(screen.getByText(/資料更新至/)).toBeInTheDocument()
   })
 
+  it('新用戶看到四步使用導覽與研究清單摘要', async () => {
+    await renderLoaded()
+    expect(screen.getByRole('heading', { name: '把研究變成可執行的投資流程' }))
+      .toBeInTheDocument()
+    expect(screen.getByRole('progressbar', { name: '投資流程完成度' }))
+      .toHaveAttribute('aria-valuenow', '0')
+    expect(screen.getByText('0 檔收藏')).toBeInTheDocument()
+    expect(screen.getByText('0 / 5 檔待比較')).toBeInTheDocument()
+  })
+
+  it('關閉導覽會保存偏好，仍可重新開啟', async () => {
+    const user = userEvent.setup()
+    await renderLoaded()
+    await user.click(screen.getByRole('button', { name: '關閉使用導覽' }))
+    expect(localStorage.getItem('alpha-track:journey-guide-dismissed:v1')).toBe('1')
+    expect(screen.queryByRole('progressbar', { name: '投資流程完成度' }))
+      .not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /使用導覽/ }))
+    expect(screen.getByRole('progressbar', { name: '投資流程完成度' }))
+      .toBeInTheDocument()
+    expect(localStorage.getItem('alpha-track:journey-guide-dismissed:v1')).toBeNull()
+  })
+
   it('載入失敗時顯示錯誤訊息,不顯示空表格', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500 })))
     render(<App />)
@@ -119,6 +143,8 @@ describe('App', () => {
     const code = fixtureRankings.etfs[0]!.code
     await user.click(screen.getByRole('button', { name: `加入自選 ${code}` }))
     expect(localStorage.getItem('alpha-track:watchlist')).toContain(code)
+    expect(screen.getByRole('progressbar', { name: '投資流程完成度' }))
+      .toHaveAttribute('aria-valuenow', '1')
     await user.click(screen.getByRole('button', { name: /只看自選/ }))
     await waitFor(() => {
       expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(2)

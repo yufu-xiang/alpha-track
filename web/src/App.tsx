@@ -12,6 +12,7 @@ import { Filters } from './components/Filters'
 import { HealthBar } from './components/HealthBar'
 import { PeriodTabs } from './components/PeriodTabs'
 import { RankingTable } from './components/RankingTable'
+import { JourneyGuide } from './components/JourneyGuide'
 import { PageLoading } from './components/LoadingSkeleton'
 import { ThemeToggle } from './components/ThemeToggle'
 import { loadData, type LoadResult } from './data/loader'
@@ -23,6 +24,10 @@ import {
   loadCompareBasket, loadWatchlist, saveCompareBasket, toggleWatchlist,
 } from './lib/personalLists'
 import { hashFor, useRoute } from './lib/route'
+import {
+  getJourneyProgress, loadJourneyGuideDismissed, saveJourneyGuideDismissed,
+} from './lib/journey'
+import { loadPortfolio } from './lib/portfolioStore'
 import { PERIODS, PERIOD_LABELS, type PeriodCode } from './types'
 
 // 排行榜是首屏；個股、比較、組合與工具頁依路由載入，避免使用者只看排行
@@ -61,6 +66,8 @@ function Rankings() {
   const [watchlist, setWatchlist] = useState<string[]>(() => loadWatchlist())
   const [onlyWatchlist, setOnlyWatchlist] = useState(false)
   const [query, setQuery] = useState('')
+  const [guideOpen, setGuideOpen] = useState(() => !loadJourneyGuideDismissed())
+  const [portfolioSnapshot] = useState(() => loadPortfolio())
 
   useEffect(() => {
     void loadData().then(setResult)
@@ -126,6 +133,18 @@ function Rankings() {
   )
   const activeFilters = categories.length + regions.length + (query.trim() ? 1 : 0)
     + (onlyWatchlist ? 1 : 0)
+  const journeyProgress = getJourneyProgress({
+    watchlistCount: watchlist.length,
+    compareCount: compare.length,
+    transactionCount: portfolioSnapshot.transactions.length,
+    targets: portfolioSnapshot.targets,
+  })
+
+  function scrollToRanking() {
+    document.getElementById('ranking-list')?.scrollIntoView?.({
+      behavior: 'smooth', block: 'start',
+    })
+  }
 
   function handleWatchlistToggle(code: string) {
     setWatchlist((current) => toggleWatchlist(current, code))
@@ -193,10 +212,34 @@ function Rankings() {
             <strong>{PERIOD_LABELS[sortBy]}</strong>
             <small>含息總報酬</small>
           </div>
+          <div className="market-summary__item market-summary__item--personal">
+            <span>我的研究</span>
+            <strong>{watchlist.length} 檔收藏</strong>
+            <small>{compare.length} / {MAX_COMPARE} 檔待比較</small>
+          </div>
         </div>
 
         <HealthBar meta={result.meta} />
       </header>
+
+      {guideOpen ? (
+        <JourneyGuide
+          progress={journeyProgress}
+          compareCodes={compare}
+          onExplore={scrollToRanking}
+          onDismiss={() => {
+            saveJourneyGuideDismissed(true)
+            setGuideOpen(false)
+          }}
+        />
+      ) : (
+        <button type="button" className="journey-reopen" onClick={() => {
+          saveJourneyGuideDismissed(false)
+          setGuideOpen(true)
+        }}>
+          使用導覽 <span>{journeyProgress.completed} / 4</span>
+        </button>
+      )}
 
       <section className="dashboard-controls" aria-label="排行榜控制">
         <div className="dashboard-controls__section dashboard-controls__section--period">
@@ -257,7 +300,7 @@ function Rankings() {
         </div>
       </section>
 
-      <div className="ranking-heading">
+      <div className="ranking-heading" id="ranking-list">
         <div>
           <p className="eyebrow">MARKET RANKING</p>
           <h2>{PERIOD_LABELS[sortBy]}績效排行榜</h2>

@@ -122,6 +122,32 @@ export function Portfolio({ initialCode }: { initialCode?: string }) {
         </p>
       )}
 
+      {data.transactions.length === 0 && (
+        <section className="portfolio-starter" aria-labelledby="portfolio-starter-title">
+          <div className="portfolio-starter__copy">
+            <p className="eyebrow">GET STARTED</p>
+            <h2 id="portfolio-starter-title">用一筆真實交易建立你的組合</h2>
+            <p>不必一次補完所有紀錄。先輸入最近一筆買進，就能開始看到持股成本與損益。</p>
+          </div>
+          <ol className="portfolio-starter__steps">
+            <li><span>1</span><div><strong>選擇 ETF</strong><small>可從排行榜或詳情頁帶入</small></div></li>
+            <li><span>2</span><div><strong>記錄交易</strong><small>確認日期、股數與成交價</small></div></li>
+            <li><span>3</span><div><strong>設定目標</strong><small>有持倉後即可試算再平衡</small></div></li>
+          </ol>
+          <div className="portfolio-starter__actions">
+            <button type="button" onClick={() => {
+              document.getElementById('new-transaction')?.scrollIntoView?.({
+                behavior: 'smooth', block: 'start',
+              })
+            }}>新增第一筆交易</button>
+            <a href={hashFor({ name: 'rankings' })}>先去排行榜找 ETF</a>
+            <button type="button" className="is-ghost" onClick={() => {
+              document.getElementById('portfolio-import')?.click()
+            }}>匯入既有備份</button>
+          </div>
+        </section>
+      )}
+
       {!persistable.current && (
         <p role="alert" className="error">
           這個瀏覽器無法儲存資料(可能是無痕模式)。交易紀錄在關閉分頁後會消失,
@@ -143,7 +169,7 @@ export function Portfolio({ initialCode }: { initialCode?: string }) {
                   disabled={data.transactions.length === 0}>匯出備份</button>
           <label className="portfolio__import">
             匯入備份
-            <input type="file" accept="application/json,.json"
+            <input id="portfolio-import" type="file" accept="application/json,.json"
                    onChange={(e) => { const f = e.target.files?.[0]; if (f) doImport(f) }} />
           </label>
           {notice && <span className="portfolio__notice" role="status">{notice}</span>}
@@ -167,6 +193,7 @@ export function Portfolio({ initialCode }: { initialCode?: string }) {
 
       <SplitNotice transactions={data.transactions} onAdd={addTx} />
 
+      {data.transactions.length > 0 && (
       <section className="content-panel content-panel--summary">
         <div className="panel-heading">
           <div><p className="eyebrow">AT A GLANCE</p><h2>組合總覽</h2></div>
@@ -190,6 +217,7 @@ export function Portfolio({ initialCode }: { initialCode?: string }) {
                 tone={summary.xirr} />
         </dl>
       </section>
+      )}
 
       {positions.length > 0 && (
         <PortfolioPositions
@@ -199,7 +227,8 @@ export function Portfolio({ initialCode }: { initialCode?: string }) {
         />
       )}
 
-      <div className="portfolio-grid">
+      <div className={`portfolio-grid${data.transactions.length === 0 ? ' portfolio-grid--empty' : ''}`}>
+      {data.transactions.length > 0 && (
       <section className="content-panel">
         <div className="panel-heading">
           <div><p className="eyebrow">ALLOCATION</p><h2>資產配置</h2></div>
@@ -213,6 +242,7 @@ export function Portfolio({ initialCode }: { initialCode?: string }) {
         <AllocationPie slices={slices}
                        title={pieBy === 'code' ? '依標的的資產配置' : '依分類的資產配置'} />
       </section>
+      )}
 
       <section className="content-panel" id="new-transaction">
         <div className="panel-heading">
@@ -223,12 +253,14 @@ export function Portfolio({ initialCode }: { initialCode?: string }) {
       </section>
       </div>
 
+      {data.transactions.length > 0 && (
       <section className="content-panel">
         <div className="panel-heading">
           <div><p className="eyebrow">DIVIDEND INBOX</p><h2>應領配息推估</h2></div>
         </div>
         <DividendEstimates transactions={data.transactions} onRecord={addTx} />
       </section>
+      )}
 
       <section className="content-panel">
         <div className="panel-heading">
