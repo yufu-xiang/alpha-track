@@ -8,10 +8,12 @@
 from __future__ import annotations
 
 import atexit
+import json
 import re
 import ssl
 import time
 from datetime import date
+from urllib import request
 from urllib.parse import urlsplit
 
 import certifi
@@ -20,6 +22,9 @@ import httpx
 USER_AGENT = "alpha-track/0.1 (personal ETF tracker)"
 
 _CLIENTS: dict[str, httpx.Client] = {}
+
+RANGE_FALLBACK_HOSTS = frozenset({"www.tpex.org.tw"})
+"""回應偶爾提早截斷、但支援 HTTP Range 續取的官方資料源。"""
 
 
 def close_http_clients() -> None:
@@ -70,6 +75,59 @@ def _client_for(url: str) -> httpx.Client:
     return client
 
 
+def _fetch_json_by_ranges(
+    url: str, *, retries: int, timeout: float, chunk_size: int = 10_000,
+) -> object:
+    """以小段 Range 請求重組 JSON，避開 TPEx 偶發的半截回應。
+
+    TPEx 有時宣告完整 Content-Length，卻在傳輸途中關閉連線；單純重打三次
+    仍可能全部失敗。官方端支援標準 Range，因此只在正常下載已用盡重試後，
+    對明確列入白名單的 host 使用此備援。每段都核對 Content-Range，避免把
+    缺頁或重複內容誤當成完整資料。
+    """
+    payload = bytearray()
+    total: int | None = None
+    start = 0
+    context = ssl_context_for(url)
+
+    while total is None or start < total:
+        end = start + chunk_size - 1
+        last_exc: Exception | None = None
+        for attempt in range(retries):
+            try:
+                req = request.Request(
+                    url,
+                    headers={
+                        "Accept": "application/json",
+                        "Range": f"bytes={start}-{end}",
+                        "User-Agent": USER_AGENT,
+                    },
+                )
+                with request.urlopen(req, timeout=timeout, context=context) as response:
+                    content_range = response.headers.get("Content-Range", "")
+                    match = re.fullmatch(r"bytes (\d+)-(\d+)/(\d+)", content_range)
+                    if response.status != 206 or match is None:
+                        raise RuntimeError("資料源未回傳有效的 Content-Range")
+                    actual_start, actual_end, actual_total = map(int, match.groups())
+                    body = response.read()
+                    if actual_start != start or len(body) != actual_end - actual_start + 1:
+                        raise RuntimeError("Range 回應範圍或長度不完整")
+                    if total is not None and actual_total != total:
+                        raise RuntimeError("分段下載期間資料總長度改變")
+                    total = actual_total
+                    payload.extend(body)
+                    start = actual_end + 1
+                    break
+            except Exception as exc:
+                last_exc = exc
+                if attempt < retries - 1:
+                    time.sleep(2 ** attempt)
+        else:
+            raise RuntimeError(f"分段取得 {url} 失敗") from last_exc
+
+    return json.loads(payload)
+
+
 def fetch_json(url: str, *, retries: int = 3, timeout: float = 30.0) -> object:
     """取得 JSON,失敗時指數退避重試。
 
@@ -97,6 +155,13 @@ def fetch_json(url: str, *, retries: int = 3, timeout: float = 30.0) -> object:
             if attempt < retries - 1:
                 time.sleep(delay)
                 delay *= 2
+    if urlsplit(url).hostname in RANGE_FALLBACK_HOSTS:
+        try:
+            return _fetch_json_by_ranges(url, retries=retries, timeout=timeout)
+        except Exception as range_exc:
+            raise RuntimeError(
+                f"取得 {url} 失敗,完整與分段下載皆已重試 {retries} 次"
+            ) from range_exc
     raise RuntimeError(f"取得 {url} 失敗,已重試 {retries} 次") from last_exc
 
 

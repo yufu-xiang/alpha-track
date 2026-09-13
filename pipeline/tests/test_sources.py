@@ -47,6 +47,72 @@ def test_fetch_json_reuses_a_connection_pool_per_host(monkeypatch):
     base.fetch_json("https://example.com/b")
     assert len(created) == 1
     base.close_http_clients()
+
+
+def test_fetch_json_falls_back_to_ranges_only_for_tpex(monkeypatch):
+    """TPEx 提早關閉完整回應時，以 Range 備援；其他 host 不擴大請求量。"""
+    from alpha_track.sources import base
+
+    class Client:
+        def get(self, url, timeout):
+            raise RuntimeError("incomplete body")
+
+    fallback_calls = []
+    monkeypatch.setattr(base, "_client_for", lambda url: Client())
+    monkeypatch.setattr(
+        base, "_fetch_json_by_ranges",
+        lambda url, **kwargs: fallback_calls.append((url, kwargs)) or {"ok": True},
+    )
+    url = "https://www.tpex.org.tw/openapi/v1/tpex_mainboard_quotes"
+    assert base.fetch_json(url, retries=1) == {"ok": True}
+    assert fallback_calls == [(url, {"retries": 1, "timeout": 30.0})]
+
+    with pytest.raises(RuntimeError, match="已重試 1 次"):
+        base.fetch_json("https://example.com/data", retries=1)
+    assert len(fallback_calls) == 1
+
+
+def test_range_fallback_reassembles_and_validates_all_chunks(monkeypatch):
+    """分段備援必須依 Content-Range 接續，完整重組後才解析 JSON。"""
+    from alpha_track.sources import base
+
+    payload = b'{"x":1}'
+    requested = []
+
+    class Response:
+        status = 206
+
+        def __init__(self, start, end):
+            self.body = payload[start:end + 1]
+            self.headers = {
+                "Content-Range": f"bytes {start}-{end}/{len(payload)}",
+            }
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def read(self):
+            return self.body
+
+    def urlopen(req, **kwargs):
+        value = req.headers["Range"]
+        requested.append(value)
+        start_text, end_text = value.removeprefix("bytes=").split("-")
+        start = int(start_text)
+        end = min(int(end_text), len(payload) - 1)
+        return Response(start, end)
+
+    monkeypatch.setattr(base.request, "urlopen", urlopen)
+    result = base._fetch_json_by_ranges(
+        "https://www.tpex.org.tw/data", retries=1, timeout=1, chunk_size=4,
+    )
+    assert result == {"x": 1}
+    assert requested == ["bytes=0-3", "bytes=4-7"]
+
+
 from alpha_track.sources.finmind import parse_finmind_dividends
 from alpha_track.sources.tpex import parse_tpex_daily, parse_tpex_profiles
 from alpha_track.sources.twse import (
