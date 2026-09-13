@@ -38,6 +38,51 @@ describe('RankingTable', () => {
     expect(bodyRowCodes()).toHaveLength(ROWS.length)
   })
 
+  it('可在排行榜內展開重點摘要，不必先離開列表', async () => {
+    const user = userEvent.setup()
+    renderTable({ watchlist: [], onWatchlistToggle: vi.fn(),
+      compareSelected: [], onCompareToggle: vi.fn() })
+
+    const toggle = screen.getByRole('button', { name: /快速預覽 0050/ })
+    await user.click(toggle)
+
+    expect(screen.getByRole('button', { name: /收合 0050/ }))
+      .toHaveAttribute('aria-expanded', 'true')
+    const preview = screen.getByRole('region', { name: '0050 快速預覽' })
+    expect(within(preview).getByText('一年報酬')).toBeInTheDocument()
+    expect(within(preview).getByText('最大回撤')).toBeInTheDocument()
+    expect(within(preview).getByRole('link', { name: '查看完整分析' }))
+      .toHaveAttribute('href', '#/etf/0050')
+    expect(within(preview).getByRole('link', { name: '加入我的組合' }))
+      .toHaveAttribute('href', '#/portfolio?code=0050')
+
+    await user.click(screen.getByRole('button', { name: /收合 0050/ }))
+    expect(screen.queryByRole('region', { name: '0050 快速預覽' })).not.toBeInTheDocument()
+  })
+
+  it('快速預覽可直接收藏與加入比較', async () => {
+    const user = userEvent.setup()
+    const onWatchlistToggle = vi.fn()
+    const onCompareToggle = vi.fn()
+    renderTable({ watchlist: [], onWatchlistToggle,
+      compareSelected: [], onCompareToggle })
+    await user.click(screen.getByRole('button', { name: /快速預覽 0050/ }))
+    const preview = screen.getByRole('region', { name: '0050 快速預覽' })
+    await user.click(within(preview).getByRole('button', { name: '加入自選' }))
+    await user.click(within(preview).getByRole('button', { name: '加入比較' }))
+    expect(onWatchlistToggle).toHaveBeenCalledWith('0050')
+    expect(onCompareToggle).toHaveBeenCalledWith('0050')
+  })
+
+  it('一次只展開一檔，避免長榜單被多張摘要切碎', async () => {
+    const user = userEvent.setup()
+    renderTable()
+    await user.click(screen.getByRole('button', { name: /快速預覽 0050/ }))
+    await user.click(screen.getByRole('button', { name: /快速預覽 0056/ }))
+    expect(screen.queryByRole('region', { name: '0050 快速預覽' })).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: '0056 快速預覽' })).toBeInTheDocument()
+  })
+
   it('手機版提供水平欄位導覽，不必猜表格是否還能滑動', () => {
     renderTable()
     const guide = screen.getByRole('toolbar', { name: '排行榜水平導覽' })
@@ -100,6 +145,17 @@ describe('RankingTable', () => {
     renderTable({ onSortChange })
     await user.click(screen.getByRole('columnheader', { name: /當日/ }))
     expect(onSortChange).toHaveBeenCalledWith('D1')
+  })
+
+  it('排序表頭可用鍵盤 Enter 操作', async () => {
+    const onSortChange = vi.fn()
+    const user = userEvent.setup()
+    renderTable({ onSortChange })
+    const header = screen.getByRole('columnheader', { name: /當日/ })
+    header.focus()
+    await user.keyboard('{Enter}')
+    expect(onSortChange).toHaveBeenCalledWith('D1')
+    expect(header).toHaveAttribute('aria-sort', 'descending')
   })
 
   it('風險欄位標頭附帶指標說明按鈕', () => {

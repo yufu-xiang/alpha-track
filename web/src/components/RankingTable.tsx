@@ -14,8 +14,9 @@ import {
   useReactTable,
   type SortingState,
 } from '@tanstack/react-table'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { formatNumber, formatPercent } from '../lib/format'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { formatCompactMoney, formatNumber, formatPercent } from '../lib/format'
+import { hashFor } from '../lib/route'
 import { toSortable } from '../lib/sorting'
 import {
   PERIOD_LABELS, RISK_LABELS, RISK_TERMS,
@@ -63,6 +64,7 @@ export function RankingTable({
 }: Props) {
   const picking = compareSelected !== undefined && onCompareToggle !== undefined
   const tableWrapRef = useRef<HTMLDivElement>(null)
+  const [previewCode, setPreviewCode] = useState<string | null>(null)
   const [horizontalNav, setHorizontalNav] = useState({
     canLeft: false, canRight: true, progress: 0,
   })
@@ -79,6 +81,12 @@ export function RankingTable({
   useEffect(() => {
     setSorting(sortBy ? [{ id: sortBy, desc: true }] : [])
   }, [sortBy])
+
+  useEffect(() => {
+    if (previewCode && !rows.some((row) => row.code === previewCode)) {
+      setPreviewCode(null)
+    }
+  }, [previewCode, rows])
 
   const columns = useMemo(() => {
     const base = [
@@ -219,6 +227,7 @@ export function RankingTable({
   // 不是編號 —— 依十年排序時,沒有十年資料的不是「第 300 名」,是沒有排名。
   const sortedId = sorting[0]?.id
   const displayRows = table.getRowModel().rows
+  const tableColumnCount = columns.length + 1 + (picking ? 1 : 0)
   const ranks = new Map<string, number>()
   let nextRank = 1
   for (const row of displayRows) {
@@ -284,6 +293,15 @@ export function RankingTable({
                           }
                         : undefined
                     }
+                    tabIndex={canSort ? 0 : undefined}
+                    onKeyDown={canSort ? (event) => {
+                      // 表頭內可能還有指標說明按鈕；只處理表頭本身收到的按鍵。
+                      if (event.target !== event.currentTarget) return
+                      if (event.key !== 'Enter' && event.key !== ' ') return
+                      event.preventDefault()
+                      header.column.toggleSorting()
+                      if (isPeriod) onSortChange(header.column.id as PeriodCode)
+                    } : undefined}
                     aria-sort={
                       sorted === 'asc'
                         ? 'ascending'
@@ -307,8 +325,14 @@ export function RankingTable({
           ))}
         </thead>
         <tbody>
-          {displayRows.map((row) => (
-            <tr key={row.id}>
+          {displayRows.map((row) => {
+            const item = row.original
+            const expanded = previewCode === item.code
+            const watched = watchlist?.includes(item.code) ?? false
+            const compared = compareSelected?.includes(item.code) ?? false
+            return (
+            <Fragment key={row.id}>
+            <tr className={expanded ? 'is-previewing' : undefined}>
               {picking && (
                 <td className="col-pick">
                   <input
@@ -330,11 +354,77 @@ export function RankingTable({
                     cell.column.id === sortedId ? 'is-sorted' : '',
                   ].filter(Boolean).join(' ')}
                 >
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  {cell.column.id === 'name' ? (
+                    <button
+                      type="button"
+                      className="row-preview-toggle"
+                      aria-expanded={expanded}
+                      aria-controls={`ranking-preview-${item.code}`}
+                      aria-label={`${expanded ? '收合' : '快速預覽'} ${item.code} ${item.name}`}
+                      onClick={() => setPreviewCode(expanded ? null : item.code)}
+                    >
+                      <span>{item.name}</span>
+                      <b aria-hidden="true">{expanded ? '−' : '+'}</b>
+                    </button>
+                  ) : flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </td>
               ))}
             </tr>
-          ))}
+            {expanded && (
+              <tr className="ranking-preview-row">
+                <td colSpan={tableColumnCount}>
+                  <section id={`ranking-preview-${item.code}`} className="ranking-preview"
+                           aria-label={`${item.code} 快速預覽`}>
+                    <div className="ranking-preview__heading">
+                      <div>
+                        <span>{item.code}</span>
+                        <strong>{item.name}</strong>
+                      </div>
+                      <small>
+                        {[item.category, item.region].filter(Boolean).join(' · ') || '尚未分類'}
+                      </small>
+                    </div>
+                    <dl className="ranking-preview__metrics">
+                      <div>
+                        <dt>{sortBy ? `${PERIOD_LABELS[sortBy]}報酬` : '目前報酬'}</dt>
+                        <dd><ReturnCell value={sortBy ? item.returns[sortBy] : null} /></dd>
+                      </div>
+                      <div>
+                        <dt>最大回撤</dt>
+                        <dd>{formatPercent(item.risk.mdd)}</dd>
+                      </div>
+                      <div>
+                        <dt>近一年殖利率</dt>
+                        <dd>{formatPercent(item.dividend_yield)}</dd>
+                      </div>
+                      <div>
+                        <dt>日均成交額</dt>
+                        <dd>{formatCompactMoney(item.avg_turnover)}</dd>
+                      </div>
+                    </dl>
+                    <div className="ranking-preview__actions">
+                      <a href={hashFor({ name: 'detail', code: item.code })}>查看完整分析</a>
+                      <a href={hashFor({ name: 'portfolio', code: item.code })}>加入我的組合</a>
+                      {onWatchlistToggle && (
+                        <button type="button" aria-pressed={watched}
+                                onClick={() => onWatchlistToggle(item.code)}>
+                          {watched ? '移除自選' : '加入自選'}
+                        </button>
+                      )}
+                      {picking && (
+                        <button type="button" aria-pressed={compared}
+                                onClick={() => onCompareToggle!(item.code)}>
+                          {compared ? '移出比較' : '加入比較'}
+                        </button>
+                      )}
+                    </div>
+                  </section>
+                </td>
+              </tr>
+            )}
+            </Fragment>
+            )
+          })}
         </tbody>
       </table>
       </div>

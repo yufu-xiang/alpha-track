@@ -45,7 +45,8 @@ export function JourneyGuide({ progress, compareCodes, onExplore, onDismiss }: P
   }
 
   return (
-    <section className="journey-guide" aria-labelledby="journey-title">
+    <section className={`journey-guide${next < 0 ? ' is-complete' : ''}`}
+             aria-labelledby="journey-title">
       <div className="journey-guide__heading">
         <div>
           <p className="eyebrow">QUICK START</p>

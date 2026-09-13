@@ -35,6 +35,29 @@ describe('樣式表', () => {
     expect(css).toMatch(/@media[^{]*max-width/)
   })
 
+  it('手機排行榜只保留識別欄與目前排序指標', () => {
+    expect(css).toContain('.ranking-table-wrap th.is-sorted')
+    expect(css).toContain('.ranking-table-wrap td.is-sorted { display: table-cell; }')
+    expect(css).toMatch(/\.ranking-table-wrap th,\s*\.ranking-table-wrap td\s*\{ display: none; \}/)
+  })
+
+  it('手機首頁收斂重複摘要並只展開下一個導覽步驟', () => {
+    expect(css).toContain('.market-summary__item--results,')
+    expect(css).toContain('.market-summary__item--sorting { display: none; }')
+    expect(css).toContain('.journey-steps li:not(.is-next) { display: none; }')
+  })
+
+  it('快速預覽在手機版保持完整寬度並把指標收成兩欄', () => {
+    expect(css).toContain('.ranking-table-wrap .ranking-preview-row td { display: table-cell;')
+    expect(css).toContain('.ranking-preview__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }')
+    expect(css).toContain('.ranking-preview__actions { display: grid;')
+  })
+
+  it('收藏操作有不依賴頁面位置的通知回饋', () => {
+    expect(css).toMatch(/\.action-toast\s*\{[^}]*position:\s*fixed/)
+    expect(css).toContain('@keyframes toast-in')
+  })
+
   it('比較、名次與代號的凍結位移共用欄寬變數,不依賴會位移的 nth-child', () => {
     // 開啟比較功能會多一欄；若用 nth-child，實際凍結的欄位會整體錯位。
     expect(css).toMatch(/--sticky-pick-w:/)

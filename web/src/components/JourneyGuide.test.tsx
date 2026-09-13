@@ -25,10 +25,11 @@ describe('JourneyGuide', () => {
   })
 
   it('全部完成後導向我的組合', () => {
-    render(<JourneyGuide progress={{
+    const { container } = render(<JourneyGuide progress={{
       watched: true, compared: true, recorded: true, balanced: true, completed: 4,
     }} compareCodes={['0050', '0056']} onExplore={() => {}} onDismiss={() => {}} />)
     expect(screen.getByRole('link', { name: '查看我的組合' }))
       .toHaveAttribute('href', '#/portfolio')
+    expect(container.querySelector('.journey-guide')).toHaveClass('is-complete')
   })
 })

@@ -67,6 +67,8 @@ function Rankings() {
   const [onlyWatchlist, setOnlyWatchlist] = useState(false)
   const [query, setQuery] = useState('')
   const [guideOpen, setGuideOpen] = useState(() => !loadJourneyGuideDismissed())
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
+  const [actionStatus, setActionStatus] = useState('')
   const [portfolioSnapshot] = useState(() => loadPortfolio())
 
   useEffect(() => {
@@ -80,6 +82,12 @@ function Rankings() {
   useEffect(() => {
     saveCompareBasket(compare)
   }, [compare])
+
+  useEffect(() => {
+    if (!actionStatus) return
+    const timer = window.setTimeout(() => setActionStatus(''), 2600)
+    return () => window.clearTimeout(timer)
+  }, [actionStatus])
 
   function handlePeriodSelect(period: PeriodCode) {
     setSortBy(period)
@@ -147,7 +155,9 @@ function Rankings() {
   }
 
   function handleWatchlistToggle(code: string) {
+    const adding = !watchlist.includes(code)
     setWatchlist((current) => toggleWatchlist(current, code))
+    setActionStatus(`${code} ${adding ? '已加入' : '已移出'}自選清單`)
   }
 
   if (result === null) {
@@ -202,12 +212,12 @@ function Rankings() {
             <strong>{result.meta.etf_count}</strong>
             <small>檔 ETF</small>
           </div>
-          <div className="market-summary__item">
+          <div className="market-summary__item market-summary__item--results">
             <span>目前顯示</span>
             <strong>{rows.length}</strong>
             <small>檔結果</small>
           </div>
-          <div className="market-summary__item market-summary__item--accent">
+          <div className="market-summary__item market-summary__item--accent market-summary__item--sorting">
             <span>排序依據</span>
             <strong>{PERIOD_LABELS[sortBy]}</strong>
             <small>含息總報酬</small>
@@ -253,7 +263,9 @@ function Rankings() {
           <PeriodTabs active={sortBy} onSelect={handlePeriodSelect} />
         </div>
 
-        <div className="dashboard-controls__section">
+        <div className={`dashboard-controls__section dashboard-controls__section--filters ${
+          mobileFiltersOpen ? 'is-expanded' : 'is-collapsed'
+        }`}>
           <div className="section-heading">
             <div>
               <p className="eyebrow">REFINE RESULTS</p>
@@ -269,11 +281,22 @@ function Rankings() {
                   setRegions([])
                   setQuery('')
                   setOnlyWatchlist(false)
+                  setMobileFiltersOpen(false)
                   }}
                 >
                   清除 {activeFilters} 項篩選
                 </button>
               )}
+              <button
+                type="button"
+                className="mobile-filter-toggle"
+                aria-expanded={mobileFiltersOpen}
+                aria-controls="market-filter-options"
+                aria-label={mobileFiltersOpen ? '收合進階篩選' : '展開進階篩選'}
+                onClick={() => setMobileFiltersOpen((open) => !open)}
+              >
+                篩選{activeFilters > 0 && <span>{activeFilters}</span>}
+              </button>
               <ColumnPicker
                 selected={prefs.visibleColumns}
                 onChange={handleColumnsChange}
@@ -282,6 +305,7 @@ function Rankings() {
               />
             </div>
           </div>
+          <div id="market-filter-options" className="dashboard-controls__filter-body">
           <Filters
             categories={availableCategories}
             selected={categories}
@@ -297,6 +321,7 @@ function Rankings() {
             onlyWatchlist={onlyWatchlist}
             onOnlyWatchlistChange={setOnlyWatchlist}
           />
+          </div>
         </div>
       </section>
 
@@ -323,8 +348,17 @@ function Rankings() {
           setRegions([])
           setQuery('')
           setOnlyWatchlist(false)
+          setMobileFiltersOpen(false)
         }}
       />
+
+      {actionStatus && (
+        <div className="action-toast" role="status" aria-live="polite">
+          <span aria-hidden="true">✓</span>
+          <p>{actionStatus}</p>
+          <button type="button" aria-label="關閉通知" onClick={() => setActionStatus('')}>×</button>
+        </div>
+      )}
 
       {compare.length > 0 && (
         <div className="compare-bar">

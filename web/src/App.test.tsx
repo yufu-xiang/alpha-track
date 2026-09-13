@@ -65,6 +65,21 @@ describe('App', () => {
     expect(localStorage.getItem('alpha-track:journey-guide-dismissed:v1')).toBeNull()
   })
 
+  it('手機進階篩選預設收合，並可明確展開與收回', async () => {
+    const user = userEvent.setup()
+    await renderLoaded()
+    const toggle = screen.getByRole('button', { name: '展開進階篩選' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(document.querySelector('.dashboard-controls__section--filters'))
+      .toHaveClass('is-collapsed')
+
+    await user.click(toggle)
+    expect(screen.getByRole('button', { name: '收合進階篩選' }))
+      .toHaveAttribute('aria-expanded', 'true')
+    expect(document.querySelector('.dashboard-controls__section--filters'))
+      .toHaveClass('is-expanded')
+  })
+
   it('載入失敗時顯示錯誤訊息,不顯示空表格', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500 })))
     render(<App />)
@@ -143,12 +158,22 @@ describe('App', () => {
     const code = fixtureRankings.etfs[0]!.code
     await user.click(screen.getByRole('button', { name: `加入自選 ${code}` }))
     expect(localStorage.getItem('alpha-track:watchlist')).toContain(code)
+    expect(screen.getByText(`${code} 已加入自選清單`)).toBeInTheDocument()
     expect(screen.getByRole('progressbar', { name: '投資流程完成度' }))
       .toHaveAttribute('aria-valuenow', '1')
     await user.click(screen.getByRole('button', { name: /只看自選/ }))
     await waitFor(() => {
       expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(2)
     })
+  })
+
+  it('收藏通知可由使用者立即關閉', async () => {
+    const user = userEvent.setup()
+    await renderLoaded()
+    await user.click(screen.getByRole('button', { name: '加入自選 0050' }))
+    expect(screen.getByRole('status')).toHaveTextContent('0050 已加入自選清單')
+    await user.click(screen.getByRole('button', { name: '關閉通知' }))
+    expect(screen.queryByText('0050 已加入自選清單')).not.toBeInTheDocument()
   })
 
   it('有篩選條件時可一次清除並回復全部結果', async () => {
