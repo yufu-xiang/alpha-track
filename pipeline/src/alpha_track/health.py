@@ -48,7 +48,7 @@ def check_sources(db, base_date: date) -> list[tuple[str, str]]:
     """回傳 (代號, 原因) 清單,空清單代表一切正常。
 
     `db` 需提供 count_prices_on / count_navs_on / previous_trading_day /
-    count_dividends_with_prev_close / latest_holdings_month。
+    count_dividends_with_prev_close / latest_holdings_month / holdings_month_counts。
     """
     out: list[tuple[str, str]] = []
     previous = db.previous_trading_day(base_date)
@@ -78,6 +78,14 @@ def check_sources(db, base_date: date) -> list[tuple[str, str]]:
     elif _month_age_days(month, base_date) > HOLDINGS_STALE_DAYS:
         out.append((SOURCE, f"成分股停留在 {month},已超過 "
                             f"{HOLDINGS_STALE_DAYS} 天未更新"))
+
+    months = db.holdings_month_counts()
+    if len(months) >= 2:
+        current_month, current_count = months[0]
+        _, previous_count = months[1]
+        if previous_count and current_count < previous_count * (1 - DROP_TOLERANCE):
+            out.append((SOURCE, f"成分股月報 {current_month} 只涵蓋 {current_count} 檔，"
+                                f"上期 {previous_count} 檔；疑似部分來源抓取失敗"))
 
     return out
 

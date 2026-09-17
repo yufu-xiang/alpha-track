@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS etfs (
     issuer TEXT,
     tracking_index TEXT,
     expense_ratio REAL,
+    expense_year INTEGER,
     is_leveraged INTEGER NOT NULL DEFAULT 0,
     is_inverse INTEGER NOT NULL DEFAULT 0
 );
@@ -121,6 +122,7 @@ class Database:
         """
         for table, column, decl in (
             ("dividends", "prev_close", "REAL"),
+            ("etfs", "expense_year", "INTEGER"),
         ):
             cols = {r["name"] for r in
                     self.conn.execute(f"PRAGMA table_info({table})").fetchall()}
@@ -182,15 +184,16 @@ class Database:
         rows = [(p.code, p.name,
                  p.listing_date.isoformat() if p.listing_date else None,
                  p.exchange, p.category, p.region, p.issuer, p.tracking_index,
-                 p.expense_ratio, int(p.is_leveraged), int(p.is_inverse))
+                 p.expense_ratio, p.expense_year,
+                 int(p.is_leveraged), int(p.is_inverse))
                 for p in profiles]
         if not rows:
             return
         self.conn.executemany(
             """INSERT INTO etfs (code, name, listing_date, exchange, category,
-                                 region, issuer, tracking_index, expense_ratio,
+                                 region, issuer, tracking_index, expense_ratio, expense_year,
                                  is_leveraged, is_inverse)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                ON CONFLICT(code) DO UPDATE SET
                  name=excluded.name,
                  exchange=excluded.exchange,
@@ -207,8 +210,27 @@ class Database:
                  tracking_index=COALESCE(excluded.tracking_index,
                                          etfs.tracking_index),
                  expense_ratio=COALESCE(excluded.expense_ratio,
-                                        etfs.expense_ratio)""",
+                                        etfs.expense_ratio),
+                 expense_year=COALESCE(excluded.expense_year,
+                                       etfs.expense_year)""",
             rows,
+        )
+        self.conn.commit()
+
+    def latest_expense_year(self) -> int | None:
+        row = self.conn.execute(
+            "SELECT MAX(expense_year) AS year FROM etfs"
+        ).fetchone()
+        return row["year"] if row else None
+
+    def upsert_expenses(self, records: Iterable[tuple[str, int, float]]) -> None:
+        rows = list(records)
+        if not rows:
+            return
+        self.conn.executemany(
+            """UPDATE etfs SET expense_ratio = ?, expense_year = ?
+               WHERE code = ? AND (expense_year IS NULL OR expense_year <= ?)""",
+            [(ratio, year, code, year) for code, year, ratio in rows],
         )
         self.conn.commit()
 
@@ -312,6 +334,15 @@ class Database:
         ).fetchone()
         return row["m"] if row and row["m"] else None
 
+    def holdings_month_counts(self) -> list[tuple[str, int]]:
+        """最近兩期有前十大資料的 ETF 數，供來源覆蓋率健康檢查。"""
+        rows = self.conn.execute(
+            """SELECT year_month, COUNT(DISTINCT code) AS count
+               FROM holdings GROUP BY year_month
+               ORDER BY year_month DESC LIMIT 2"""
+        ).fetchall()
+        return [(row["year_month"], row["count"]) for row in rows]
+
     def get_holdings(self, code: str) -> list[dict]:
         """某檔 ETF 最新月份的持股,依名次排序。"""
         cur = self.conn.execute(
@@ -396,7 +427,7 @@ class Database:
                               if r["listing_date"] else None),
                 exchange=r["exchange"], category=r["category"], region=r["region"],
                 issuer=r["issuer"], tracking_index=r["tracking_index"],
-                expense_ratio=r["expense_ratio"],
+                expense_ratio=r["expense_ratio"], expense_year=r["expense_year"],
                 is_leveraged=bool(r["is_leveraged"]),
                 is_inverse=bool(r["is_inverse"]))
             for r in cur.fetchall()

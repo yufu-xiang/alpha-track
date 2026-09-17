@@ -99,5 +99,6 @@ class EtfProfile:
     issuer: str | None = None
     tracking_index: str | None = None
     expense_ratio: float | None = None
+    expense_year: int | None = None
     is_leveraged: bool = False
     is_inverse: bool = False

@@ -10,8 +10,10 @@ import { formatDate, formatMoney, formatNumber, formatPercent } from '../lib/for
 import { analyzePositions, summarize, type Transaction } from '../lib/portfolio'
 import {
   canPersist, fromExportFile, loadPortfolio, needsExportReminder, savePortfolio,
-  toExportFile, type PortfolioData,
+  toPortableBackup, type PortfolioData,
 } from '../lib/portfolioStore'
+import { loadWatchlist, loadCompareBasket, saveWatchlist, saveCompareBasket } from '../lib/personalLists'
+import { loadPrefs, savePrefs } from '../lib/prefs'
 import { hashFor } from '../lib/route'
 import type { EtfRow } from '../types'
 import { AllocationPie } from './AllocationPie'
@@ -82,10 +84,12 @@ export function Portfolio({ initialCode }: { initialCode?: string }) {
   }
 
   function doExport() {
-    const blob = new Blob([toExportFile(data)], { type: 'application/json' })
+    const blob = new Blob([toPortableBackup(data, {
+      watchlist: loadWatchlist(), compare: loadCompareBasket(), prefs: loadPrefs(),
+    })], { type: 'application/json' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
-    a.download = `alpha-track-portfolio-${today}.json`
+    a.download = `alpha-track-backup-${today}.json`
     a.click()
     URL.revokeObjectURL(a.href)
     setData((d) => ({ ...d, lastExport: today }))
@@ -99,9 +103,14 @@ export function Portfolio({ initialCode }: { initialCode?: string }) {
       setData((d) => ({
         ...d, transactions: r.transactions, fees: r.fees, targets: r.targets,
       }))
+      if (r.personal) {
+        saveWatchlist(r.personal.watchlist)
+        saveCompareBasket(r.personal.compare)
+        savePrefs(r.personal.prefs)
+      }
       setNotice(r.skipped > 0
         ? `已匯入 ${r.transactions.length} 筆,略過 ${r.skipped} 筆無法辨識的紀錄。`
-        : `已匯入 ${r.transactions.length} 筆交易。`)
+        : `已匯入 ${r.transactions.length} 筆交易${r.personal ? '與個人設定' : ''}。`)
     })
   }
 
@@ -161,12 +170,12 @@ export function Portfolio({ initialCode }: { initialCode?: string }) {
           <h2>資料與備份</h2>
           <p className="portfolio-backup__copy" role="note">
             交易紀錄只存在這台裝置的瀏覽器裡。<strong>清除瀏覽器資料、換裝置、
-            換瀏覽器，紀錄就會消失</strong>。匯出 JSON 是備份的唯一方式。
+            換瀏覽器，紀錄就會消失</strong>。備份檔可在另一台裝置匯入，
+            包含交易、自選清單、比較清單與顯示偏好。
           </p>
         </div>
         <div className="portfolio__actions">
-          <button type="button" onClick={doExport}
-                  disabled={data.transactions.length === 0}>匯出備份</button>
+          <button type="button" onClick={doExport}>匯出完整備份</button>
           <label className="portfolio__import">
             匯入備份
             <input id="portfolio-import" type="file" accept="application/json,.json"

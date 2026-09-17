@@ -160,6 +160,9 @@ export interface EtfDetail {
   exchange: string
   issuer: string | null
   tracking_index: string | null
+  /** 公會最近一個已公布年度的全年總費用率；舊版資料可缺欄。 */
+  expense_ratio?: number | null
+  expense_year?: number | null
   listing_date: string | null
   data_start: string | null
   returns: Record<PeriodCode, number | null>

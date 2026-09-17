@@ -31,6 +31,7 @@ from .export import (build_benchmark_series, build_detail, build_meta,
 from .models import DividendRecord, EtfProfile, NavRecord, PriceRecord
 from .recovery import build_recovery, restore_recovery
 from .storage import Database
+from .sources.sitca_fees import ExpenseRecord, fetch_sitca_expenses
 from .validation import validate_navs, validate_price_batch
 
 logger = logging.getLogger(__name__)
@@ -247,6 +248,7 @@ def run_export(
                 issuer=base.issuer if base else None,
                 tracking_index=base.tracking_index if base else None,
                 expense_ratio=base.expense_ratio if base else None,
+                expense_year=base.expense_year if base else None,
                 category=cls.category, region=cls.region,
                 is_leveraged=cls.is_leveraged, is_inverse=cls.is_inverse,
             )
@@ -492,6 +494,7 @@ def run_backfill(
     fetch_ex_rights: Callable[[date, date], list[DividendRecord]] | None
         = fetch_twse_ex_rights,
     fetch_holdings: Callable[[str], list] | None = fetch_sitca_holdings,
+    fetch_expenses: Callable[[int], list[ExpenseRecord]] | None = None,
 ) -> None:
     """為缺歷史的代號回補完整還原股價,並補齊大盤報酬指數。
 
@@ -590,6 +593,62 @@ def run_backfill(
                         logger.warning("基金名稱正規化後撞名,已排除:%s",
                                        "、".join(collisions))
 
+        # 公會的全年費用率一年只更新一次。月比率不可直接拿來當年費率；
+        # 新年度尚未公布時維持上年度值與年份，隔天再試。
+        expense_year = date.today().year - 1
+        if fetch_expenses is not None and (db.latest_expense_year() or 0) < expense_year:
+            try:
+                expenses = fetch_expenses(expense_year)
+            except Exception as exc:
+                logger.warning("公會年度費用率取得失敗:%s", exc)
+                expenses = []
+            # 年度表通常有數百檔；若表單突然只回少量列，保留舊資料，
+            # 讓下一次排程重試，而不是把殘缺結果當成本年度已完成。
+            if len(expenses) >= 100:
+                from .sources.base import fetch_json
+
+                try:
+                    payload = fetch_json(TWSE_FUND_PROFILE_URL)
+                except Exception as exc:
+                    logger.warning("TWSE 基金統編取得失敗:%s", exc)
+                    payload = []
+                id_to_code = {
+                    str(item.get("基金統一編號", "")).strip():
+                    str(item.get("基金代號", "")).strip()
+                    for item in payload if isinstance(item, dict)
+                    and item.get("基金統一編號") and item.get("基金代號")
+                }
+                full_names = {
+                    str(item["基金代號"]): str(item["基金中文名稱"])
+                    for item in payload if isinstance(item, dict)
+                    and item.get("基金代號") and item.get("基金中文名稱")
+                }
+                profiles_by_code = db.get_profiles()
+                index, _ = build_index(
+                    full_names, {c: p.name for c, p in profiles_by_code.items()})
+                resolved = []
+                unresolved = []
+                for expense in expenses:
+                    code = id_to_code.get(expense.fund_id) or resolve(
+                        expense.fund_name, index)
+                    if code in profiles_by_code:
+                        resolved.append((code, expense.year, expense.ratio))
+                    else:
+                        unresolved.append(expense.fund_name)
+                if len(resolved) >= 100:
+                    db.upsert_expenses(resolved)
+                    logger.info("公會 %d 年費用率: %d / %d 檔對應",
+                                expense_year, len(resolved), len(expenses))
+                    if unresolved:
+                        logger.warning("公會年度費用率有 %d 檔對不上代號:%s",
+                                       len(unresolved),
+                                       "、".join(sorted(unresolved)[:10]))
+                else:
+                    logger.warning("公會年度費用率只有 %d 檔可對應，暫不寫入",
+                                   len(resolved))
+            elif expenses:
+                logger.warning("公會年度費用率僅 %d 筆，暫不寫入", len(expenses))
+
         # 大盤報酬指數:Beta 與超額報酬的基準。缺了不影響其他指標。
         #
         # 起點自資料庫既有的最後一筆之後續抓,不是每次都回頭補十年:
@@ -619,6 +678,7 @@ def run_update(
     fetch_ex_rights: Callable[[date, date], list[DividendRecord]] | None
         = fetch_twse_ex_rights,
     fetch_holdings: Callable[[str], list] | None = fetch_sitca_holdings,
+    fetch_expenses: Callable[[int], list[ExpenseRecord]] | None = None,
 ) -> None:
     """每日更新:抓取 → 篩出 ETF → 驗證 → 寫入 → 回補 → 計算 → 匯出。
 
@@ -669,7 +729,8 @@ def run_update(
     # 基準也在此更新 —— 排程只跑 update,不在這裡補的話 Beta 永遠是 null。
     run_backfill(settings, fetch_history=fetch_history,
                  fetch_benchmark=fetch_benchmark, fetch_dividends=fetch_dividends,
-                 fetch_ex_rights=fetch_ex_rights, fetch_holdings=fetch_holdings)
+                 fetch_ex_rights=fetch_ex_rights, fetch_holdings=fetch_holdings,
+                 fetch_expenses=fetch_expenses)
 
     run_export(settings, is_stale=False, anomalies=result.flagged)
 
@@ -691,10 +752,10 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "export":
         run_export(settings, is_stale=False, anomalies=[])
     elif args.command == "backfill":
-        run_backfill(settings)
+        run_backfill(settings, fetch_expenses=fetch_sitca_expenses)
         run_export(settings, is_stale=False, anomalies=[])
     else:
-        run_update(settings)
+        run_update(settings, fetch_expenses=fetch_sitca_expenses)
     return 0
 
 

@@ -146,6 +146,8 @@ def build_detail(
         "exchange": profile.exchange,
         "issuer": profile.issuer,
         "tracking_index": profile.tracking_index,
+        "expense_ratio": profile.expense_ratio,
+        "expense_year": profile.expense_year,
         "listing_date": (profile.listing_date.isoformat()
                          if profile.listing_date else None),
         "data_start": (metrics.data_start.isoformat()

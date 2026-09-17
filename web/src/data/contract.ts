@@ -153,6 +153,20 @@ export function validateDetail(v: unknown): EtfDetail {
   for (const key of ['category', 'region', 'issuer', 'tracking_index']) {
     nullableStr(value[key], `detail.${key}`)
   }
+  if (value.expense_ratio !== undefined) {
+    const ratio = nullableNum(value.expense_ratio, 'detail.expense_ratio')
+    if (ratio !== null && (ratio < 0 || ratio >= 0.5)) {
+      throw new Error('detail.expense_ratio 超出合理範圍')
+    }
+  }
+  if (value.expense_year !== undefined && value.expense_year !== null) {
+    const year = nonNegativeInteger(value.expense_year, 'detail.expense_year')
+    if (year < 2000) throw new Error('detail.expense_year 太早')
+  }
+  if (typeof value.expense_ratio === 'number'
+      && typeof value.expense_year !== 'number') {
+    throw new Error('detail.expense_ratio 缺少資料年度')
+  }
   nullableIsoDate(value.listing_date, 'detail.listing_date')
   nullableIsoDate(value.data_start, 'detail.data_start')
   periodMap(value.returns, 'detail.returns', -1)

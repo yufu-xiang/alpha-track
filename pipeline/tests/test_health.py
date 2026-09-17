@@ -21,18 +21,21 @@ class FakeDb:
 
     def __init__(self, *, prices_today=350, prices_prev=350, navs_today=350,
                  navs_prev=350, prev_day=date(2026, 8, 26),
-                 dividends_with_prev=10_000, holdings_month="202607"):
+                 dividends_with_prev=10_000, holdings_month="202607",
+                 holdings_counts=None):
         self._p = {TODAY: prices_today, prev_day: prices_prev} if prev_day else {TODAY: prices_today}
         self._n = {TODAY: navs_today, prev_day: navs_prev} if prev_day else {TODAY: navs_today}
         self._prev = prev_day
         self._div = dividends_with_prev
         self._hm = holdings_month
+        self._hc = holdings_counts or []
 
     def count_prices_on(self, d): return self._p.get(d, 0)
     def count_navs_on(self, d): return self._n.get(d, 0)
     def previous_trading_day(self, _d): return self._prev
     def count_dividends_with_prev_close(self): return self._div
     def latest_holdings_month(self): return self._hm
+    def holdings_month_counts(self): return self._hc
 
 
 def reasons(db) -> str:
@@ -97,6 +100,11 @@ def test_normal_monthly_lag_is_not_stale():
 
 def test_no_holdings_at_all_is_reported():
     assert "沒有任何成分股" in reasons(FakeDb(holdings_month=None))
+
+
+def test_partial_monthly_holdings_are_reported():
+    db = FakeDb(holdings_counts=[("202607", 100), ("202606", 180)])
+    assert "只涵蓋 100 檔" in reasons(db)
 
 
 @pytest.mark.parametrize("month", ["", "abcd", "20261"])

@@ -183,7 +183,19 @@ def test_partial_profile_does_not_erase_fields_it_does_not_know(tmp_path):
         stored = db.get_profiles()["0050"]
         assert stored.listing_date == date(2003, 6, 30), "掛牌日不得被抹掉"
         assert stored.issuer == "元大投信"
-        assert stored.tracking_index == "臺灣50指數"
+    assert stored.tracking_index == "臺灣50指數"
+
+
+def test_annual_expenses_survive_daily_profile_updates(db):
+    profile = EtfProfile(code="0050", name="元大台灣50", exchange="TWSE",
+                         listing_date=None)
+    db.upsert_profiles([profile])
+    db.upsert_expenses([("0050", 2025, 0.0022)])
+    db.upsert_profiles([profile])
+    stored = db.get_profiles()["0050"]
+    assert stored.expense_ratio == 0.0022
+    assert stored.expense_year == 2025
+    assert db.latest_expense_year() == 2025
 
 
 def test_profile_update_still_overwrites_with_a_real_new_value(tmp_path):

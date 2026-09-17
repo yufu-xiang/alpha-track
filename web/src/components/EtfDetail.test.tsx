@@ -202,9 +202,10 @@ describe('基本資料(規格 §5.2 ②)', () => {
     expect(dl.textContent).toContain('—')
   })
 
-  it('內扣費用率整欄保留,並由 ⓘ 說明去哪裡查', async () => {
-    // 沒有公開的統一來源。整欄拿掉的話,使用者不會知道這個資訊存在。
+  it('年度總費用率顯示數值與來源年度', async () => {
+    mockOk({ expense_ratio: 0.0022, expense_year: 2025 })
     await renderLoaded()
-    expect(screen.getByText('內扣費用率')).toBeInTheDocument()
+    expect(screen.getByText('年度總費用率')).toBeInTheDocument()
+    expect(screen.getByText(/0\.22%.*2025 年/)).toBeInTheDocument()
   })
 })

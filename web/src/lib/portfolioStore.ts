@@ -9,11 +9,19 @@
  */
 import type { Transaction } from './portfolio'
 import { DEFAULT_FEE_CONFIG, type FeeConfig } from './fees'
+import { PERIODS, RISK_COLUMNS, type PeriodCode, type RiskColumn } from '../types'
+import { DEFAULT_PREFS, type Prefs } from './prefs'
 
 const KEY = 'alpha-track:portfolio'
 export const EXPORT_REMINDER_DAYS = 30
 /** 匯出檔的格式版本。日後改結構時,匯入端才知道怎麼轉換。 */
 export const EXPORT_VERSION = 2
+
+export interface PersonalBackup {
+  watchlist: string[]
+  compare: string[]
+  prefs: Prefs
+}
 
 export interface PortfolioData {
   transactions: Transaction[]
@@ -110,9 +118,15 @@ export function toExportFile(data: PortfolioData): string {
     null, 2)
 }
 
+/** 單檔搬移整個個人工作區；舊版純組合備份仍可匯入。 */
+export function toPortableBackup(data: PortfolioData, personal: PersonalBackup): string {
+  const base = JSON.parse(toExportFile(data)) as Record<string, unknown>
+  return JSON.stringify({ ...base, version: 3, personal }, null, 2)
+}
+
 export type ImportResult =
   | { ok: true; transactions: Transaction[]; fees: FeeConfig;
-      targets: Record<string, number>; skipped: number }
+      targets: Record<string, number>; skipped: number; personal: PersonalBackup | null }
   | { ok: false; error: string }
 
 export function fromExportFile(text: string): ImportResult {
@@ -131,6 +145,10 @@ export function fromExportFile(text: string): ImportResult {
   }
   const all = obj.transactions
   const transactions = all.filter(isTransaction)
+  const personal = readPersonalBackup(obj.personal)
+  if (obj.version === 3 && personal === null) {
+    return { ok: false, error: '完整備份缺少有效的自選清單或顯示偏好。' }
+  }
   // 略過幾筆要說出來 —— 靜默丟掉別人的交易紀錄是不可接受的
   return {
     ok: true,
@@ -138,6 +156,34 @@ export function fromExportFile(text: string): ImportResult {
     fees: { ...DEFAULT_FEE_CONFIG, ...(obj.fees as Partial<FeeConfig> ?? {}) },
     targets: validTargets(obj.targets),
     skipped: all.length - transactions.length,
+    personal,
+  }
+}
+
+function readPersonalBackup(value: unknown): PersonalBackup | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const raw = value as Record<string, unknown>
+  if (!Array.isArray(raw.watchlist) || !Array.isArray(raw.compare)
+      || typeof raw.prefs !== 'object' || raw.prefs === null) return null
+  const prefs = raw.prefs as Record<string, unknown>
+  const codes = (items: unknown[]) => [...new Set(items.filter(
+    (code): code is string => typeof code === 'string' && /^[A-Z0-9]+$/.test(code),
+  ))]
+  const visibleColumns = Array.isArray(prefs.visibleColumns)
+    ? prefs.visibleColumns.filter((c): c is PeriodCode => PERIODS.includes(c))
+    : []
+  return {
+    watchlist: codes(raw.watchlist),
+    compare: codes(raw.compare).slice(0, 5),
+    prefs: {
+      visibleColumns: visibleColumns.length > 0
+        ? visibleColumns : DEFAULT_PREFS.visibleColumns,
+      visibleRisk: Array.isArray(prefs.visibleRisk)
+        ? prefs.visibleRisk.filter((c): c is RiskColumn => RISK_COLUMNS.includes(c))
+        : DEFAULT_PREFS.visibleRisk,
+      showLevered: typeof prefs.showLevered === 'boolean'
+        ? prefs.showLevered : DEFAULT_PREFS.showLevered,
+    },
   }
 }
 

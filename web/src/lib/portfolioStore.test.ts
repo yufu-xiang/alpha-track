@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   EMPTY_PORTFOLIO, EXPORT_REMINDER_DAYS, canPersist, daysSinceExport, fromExportFile,
-  loadPortfolio, needsExportReminder, savePortfolio, toExportFile,
+  loadPortfolio, needsExportReminder, savePortfolio, toExportFile, toPortableBackup,
 } from './portfolioStore'
 import { DEFAULT_FEE_CONFIG } from './fees'
+import { DEFAULT_PREFS } from './prefs'
 import type { Transaction, TxType } from './portfolio'
 
 const good: Transaction = {
@@ -69,6 +70,37 @@ describe('匯出與匯入', () => {
       expect(r.transactions).toEqual([good])
       expect(r.targets).toEqual({ '0050': 1 })
     }
+  })
+
+  it('完整備份可搬移交易、自選、比較與顯示偏好', () => {
+    const data = { transactions: [good], fees: DEFAULT_FEE_CONFIG,
+      targets: { '0050': 1 }, lastExport: null }
+    const personal = { watchlist: ['0050'], compare: ['0050'],
+      prefs: { ...DEFAULT_PREFS, showLevered: true } }
+    const text = toPortableBackup(data, personal)
+    expect(JSON.parse(text).version).toBe(3)
+    const result = fromExportFile(text)
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.transactions).toEqual([good])
+      expect(result.targets).toEqual({ '0050': 1 })
+      expect(result.personal).toEqual(personal)
+    }
+  })
+
+  it('完整備份缺少個人資料時拒絕匯入，避免誤以為已搬移', () => {
+    const result = fromExportFile(JSON.stringify({ version: 3, transactions: [] }))
+    expect(result.ok).toBe(false)
+  })
+
+  it('無效的期間偏好回退預設，避免匯入後沒有可見欄位', () => {
+    const result = fromExportFile(JSON.stringify({
+      version: 3, transactions: [], personal: {
+        watchlist: [], compare: [], prefs: { visibleColumns: ['invalid'], visibleRisk: [] },
+      },
+    }))
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.personal?.prefs.visibleColumns).toEqual(DEFAULT_PREFS.visibleColumns)
   })
 
   it('非 JSON 的檔案給出可讀的錯誤', () => {

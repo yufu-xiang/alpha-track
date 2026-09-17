@@ -242,11 +242,9 @@ export function EtfDetail({ code }: Props) {
           <dt>追蹤指數</dt><dd>{d.tracking_index ?? '—'}</dd>
           <dt>規模 <MetricInfo termId="fund_size" /></dt>
           <dd>{formatCompactMoney(d.fund_size ?? null)}</dd>
-          {/* 內扣費用率目前沒有任何公開的統一來源(見 docs/data-sources.md)。
-              整欄拿掉的話,使用者不會知道這個資訊存在;留著並在 ⓘ 裡
-              說明去哪裡查,比假裝它不重要誠實。 */}
-          <dt>內扣費用率 <MetricInfo termId="expense_ratio" /></dt>
-          <dd>—</dd>
+          <dt>年度總費用率 <MetricInfo termId="expense_ratio" /></dt>
+          <dd>{d.expense_ratio == null ? '—'
+            : `${formatPercent(d.expense_ratio).replace('+', '')}（${d.expense_year} 年）`}</dd>
           <dt>掛牌日</dt><dd>{formatDate(d.listing_date)}</dd>
           <dt>本站資料自</dt><dd>{formatDate(d.data_start)}</dd>
         </dl>

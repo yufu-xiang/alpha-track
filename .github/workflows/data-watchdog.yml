@@ -1,0 +1,21 @@
+name: 網站資料新鮮度監控
+
+on:
+  schedule:
+    # 台北時間每天 11:37、19:37；晚間檢查預留資料更新與部署時間。
+    - cron: "37 3,11 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: 核對官方、主分支與正式網站的資料日期
+        run: PYTHONPATH=pipeline/src python -m alpha_track.data_watchdog
