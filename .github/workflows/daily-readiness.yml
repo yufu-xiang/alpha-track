@@ -33,7 +33,7 @@ jobs:
           echo "原因: ${{ steps.readiness.outputs.reason }}"
 
       # workflow_dispatch 是 GITHUB_TOKEN 可以觸發後續 workflow 的少數例外；
-      # 因此更新完成後，原有 deploy.yml 的 workflow_run 仍會正常部署網站。
+      # daily.yml 會在更新成功後，於同一次執行中呼叫網站部署。
       - name: 啟動每日資料更新
         if: steps.readiness.outputs.state == 'ready'
         env:

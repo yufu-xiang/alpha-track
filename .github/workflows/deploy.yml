@@ -1,6 +1,7 @@
 name: 部署網站
 
 on:
+  workflow_call:
   push:
     branches: [main]
     paths:
@@ -8,15 +9,6 @@ on:
       # 後者是 daily.yml 每日提交的資料檔。
       - 'web/**'
       - '.github/workflows/deploy.yml'
-
-  # **這一段不是備援,是每日資料能上線的唯一途徑。**
-  # daily.yml 用預設的 GITHUB_TOKEN 推送資料檔,而 GitHub 刻意不讓
-  # GITHUB_TOKEN 造成的 push 觸發其他 workflow(防止遞迴)。也就是說
-  # 上面那個 paths 過濾對每日更新**不會生效** —— 少了 workflow_run,
-  # 網站會永遠停在最後一次人工程式碼變更時的資料,而且不會有任何錯誤訊息。
-  workflow_run:
-    workflows: ["每日資料更新"]
-    types: [completed]
 
   workflow_dispatch:
 
@@ -33,13 +25,11 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # 資料更新失敗時不要拿舊產物去覆蓋線上站台。
-    # 非 workflow_run 觸發(push / 手動)沒有 conclusion 可看,一律放行。
-    if: >-
-      github.event_name != 'workflow_run' ||
-      github.event.workflow_run.conclusion == 'success'
     steps:
+      # 每日更新是在觸發本 workflow 之後才提交 JSON，必須取 main 的最新版本。
       - uses: actions/checkout@v4
+        with:
+          ref: main
 
       - uses: actions/setup-node@v4
         with:
