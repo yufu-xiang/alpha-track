@@ -11,6 +11,20 @@ export interface FilterState {
   regions: string[]
   query: string
   showLevered: boolean
+  /** 以資料基準日計算，避免資料延遲時把新 ETF 誤判為老標的。 */
+  asOfDate?: string
+  minListingYears?: number
+  /** 新台幣百萬元。 */
+  minTurnoverMillions?: number | null
+  /** 最大可接受跌幅，正百分數（例如 30 代表最大回撤不超過 30%）。 */
+  maxDrawdownPercent?: number | null
+}
+
+function cutoffDate(asOfDate: string, years: number): string | null {
+  const day = new Date(`${asOfDate}T00:00:00Z`)
+  if (!Number.isFinite(day.getTime())) return null
+  day.setUTCFullYear(day.getUTCFullYear() - years)
+  return day.toISOString().slice(0, 10)
 }
 
 /** 複合地區以頓號分隔(「台灣、美國」)。拆成單一地區的清單。 */
@@ -49,11 +63,21 @@ const CATEGORY_ORDER = [
 
 export function applyFilters(rows: EtfRow[], state: FilterState): EtfRow[] {
   const q = state.query.trim().toLowerCase()
+  const listingCutoff = state.minListingYears && state.asOfDate
+    ? cutoffDate(state.asOfDate, state.minListingYears) : null
 
   return rows.filter((row) => {
     // 這一條放最前面,因此即使使用者選了「槓桿型」分類,開關關著時
     // 結果仍是空的 —— 否則預設隱藏的保護形同虛設。
     if (!state.showLevered && (row.is_leveraged || row.is_inverse)) return false
+    if (listingCutoff && (!row.listing_date || row.listing_date > listingCutoff)) return false
+    if (state.minTurnoverMillions != null && state.minTurnoverMillions > 0) {
+      if (row.avg_turnover == null
+        || row.avg_turnover < state.minTurnoverMillions * 1_000_000) return false
+    }
+    if (state.maxDrawdownPercent != null) {
+      if (row.risk.mdd == null || row.risk.mdd < -state.maxDrawdownPercent / 100) return false
+    }
 
     if (state.categories.length > 0) {
       if (!row.category || !state.categories.includes(row.category)) return false

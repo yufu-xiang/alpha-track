@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   EMPTY_PORTFOLIO, EXPORT_REMINDER_DAYS, canPersist, daysSinceExport, fromExportFile,
   loadPortfolio, needsExportReminder, savePortfolio, toExportFile, toPortableBackup,
+  mergeTransactions,
 } from './portfolioStore'
 import { DEFAULT_FEE_CONFIG } from './fees'
 import { DEFAULT_PREFS } from './prefs'
@@ -53,6 +54,12 @@ describe('讀寫', () => {
 })
 
 describe('匯出與匯入', () => {
+  it('合併備份以交易 ID 去重，保留本機已修改的紀錄', () => {
+    const local = { ...good, price: 101 }
+    const incoming = { ...good, price: 100 }
+    const second = { ...good, id: 'b' }
+    expect(mergeTransactions([local], [incoming, second])).toEqual([local, second])
+  })
   it('匯出檔帶版本號 —— 日後改結構時匯入端才知道怎麼轉換', () => {
     const parsed = JSON.parse(toExportFile({
       transactions: [good], fees: DEFAULT_FEE_CONFIG, targets: { '0050': 1 }, lastExport: null }))
@@ -86,6 +93,36 @@ describe('匯出與匯入', () => {
       expect(result.targets).toEqual({ '0050': 1 })
       expect(result.personal).toEqual(personal)
     }
+  })
+
+  it('完整備份也可搬移已儲存的篩選組合', () => {
+    const presets = [{ name: '長期', filters: {
+      categories: ['市值型'], regions: ['台灣'], query: '',
+      showLevered: false, onlyWatchlist: false,
+      minListingYears: 5, minTurnoverMillions: 100,
+      maxDrawdownPercent: 35, sortBy: 'Y3' as const,
+    } }]
+    const text = toPortableBackup(EMPTY_PORTFOLIO, {
+      watchlist: [], compare: [], prefs: DEFAULT_PREFS, filterPresets: presets,
+    })
+    const result = fromExportFile(text)
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.personal?.filterPresets).toEqual(presets)
+  })
+
+  it('完整備份保留自選標的上次查看的資料日', () => {
+    const watchHistory = {
+      current: { date: '2026-08-21', values: {
+        '0050': { oneYearReturn: 0.2, premium: null },
+      }, anomalyCodes: [] },
+      previous: null,
+    }
+    const text = toPortableBackup(EMPTY_PORTFOLIO, {
+      watchlist: ['0050'], compare: [], prefs: DEFAULT_PREFS, watchHistory,
+    })
+    const result = fromExportFile(text)
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.personal?.watchHistory).toEqual(watchHistory)
   })
 
   it('完整備份缺少個人資料時拒絕匯入，避免誤以為已搬移', () => {

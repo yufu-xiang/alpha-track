@@ -16,6 +16,7 @@ import {
 } from '@tanstack/react-table'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { formatCompactMoney, formatNumber, formatPercent } from '../lib/format'
+import { hasRelevantTaiwanBenchmark } from '../lib/benchmark'
 import { hashFor } from '../lib/route'
 import { toSortable } from '../lib/sorting'
 import {
@@ -149,10 +150,13 @@ export function RankingTable({
     const riskCols = visibleRisk.flatMap((c) => {
       if (c === 'excess') {
         if (!sortBy) return []   // 沒有選期間就沒有對應的超額報酬
-        return [helper.accessor((row) => toSortable(row.excess[sortBy]), {
+        return [helper.accessor((row) => toSortable(
+          hasRelevantTaiwanBenchmark(row) ? row.excess[sortBy] : null,
+        ), {
           id: 'excess',
           header: riskHeader('excess', `(${PERIOD_LABELS[sortBy]})`),
-          cell: (v) => <ReturnCell value={v.getValue() ?? null} />,
+          cell: (v) => hasRelevantTaiwanBenchmark(v.row.original)
+            ? <ReturnCell value={v.getValue() ?? null} /> : '不適用',
           sortUndefined: 'last',
         })]
       }

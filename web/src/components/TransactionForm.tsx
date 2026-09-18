@@ -15,17 +15,18 @@ interface Props {
   rows: EtfRow[]
   onAdd: (tx: Transaction) => void
   initialCode?: string
+  editingTransaction?: Transaction
 }
 
-export function TransactionForm({ fees, rows, onAdd, initialCode }: Props) {
-  const [type, setType] = useState<TxType>('buy')
-  const [code, setCode] = useState(() => initialCode?.toUpperCase() ?? '')
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
-  const [shares, setShares] = useState('')
-  const [price, setPrice] = useState('')
-  const [fee, setFee] = useState('')
-  const [tax, setTax] = useState('')
-  const [touched, setTouched] = useState({ fee: false, tax: false })
+export function TransactionForm({ fees, rows, onAdd, initialCode, editingTransaction }: Props) {
+  const [type, setType] = useState<TxType>(editingTransaction?.type ?? 'buy')
+  const [code, setCode] = useState(() => editingTransaction?.code ?? initialCode?.toUpperCase() ?? '')
+  const [date, setDate] = useState(() => editingTransaction?.date ?? new Date().toISOString().slice(0, 10))
+  const [shares, setShares] = useState(() => editingTransaction ? String(editingTransaction.shares) : '')
+  const [price, setPrice] = useState(() => editingTransaction ? String(editingTransaction.price) : '')
+  const [fee, setFee] = useState(() => editingTransaction ? String(editingTransaction.fee) : '')
+  const [tax, setTax] = useState(() => editingTransaction ? String(editingTransaction.tax) : '')
+  const [touched, setTouched] = useState({ fee: !!editingTransaction, tax: !!editingTransaction })
 
   const nShares = Number(shares) || 0
   const nPrice = Number(price) || 0
@@ -61,19 +62,25 @@ export function TransactionForm({ fees, rows, onAdd, initialCode }: Props) {
     e.preventDefault()
     if (!valid) return
     onAdd({
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      ...editingTransaction,
+      id: editingTransaction?.id ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       type, code: code.toUpperCase().trim(), date,
       shares: type === 'split' ? 0 : nShares, price: nPrice,
       fee: Number(fee) || 0, tax: Number(tax) || 0,
     })
-    setShares(''); setPrice('')
-    setTouched({ fee: false, tax: false })
+    if (!editingTransaction) {
+      setShares(''); setPrice('')
+      setTouched({ fee: false, tax: false })
+    }
   }
 
   return (
     <form className="tx-form" onSubmit={submit}>
       <label>類型
-        <select value={type} onChange={(e) => setType(e.target.value as TxType)}>
+        <select value={type} onChange={(e) => {
+          setType(e.target.value as TxType)
+          setTouched({ fee: false, tax: false })
+        }}>
           <option value="buy">買進</option>
           <option value="sell">賣出</option>
           <option value="dividend">配息</option>
@@ -114,7 +121,7 @@ export function TransactionForm({ fees, rows, onAdd, initialCode }: Props) {
         <input type="number" min="0" step="1" value={tax}
                onChange={(e) => { setTax(e.target.value); setTouched((t) => ({ ...t, tax: true })) }} />
       </label>
-      <button type="submit" disabled={!valid}>新增</button>
+      <button type="submit" disabled={!valid}>{editingTransaction ? '儲存修改' : '新增'}</button>
     </form>
   )
 }

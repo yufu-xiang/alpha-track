@@ -152,6 +152,42 @@ describe('App', () => {
     })
   })
 
+  it('量化條件可交集篩選，並儲存與重新套用', async () => {
+    const user = userEvent.setup()
+    await renderLoaded()
+    await user.selectOptions(screen.getByLabelText('掛牌至少'), '5')
+    await user.type(screen.getByLabelText('日均成交額至少（百萬元）'), '1000')
+    await user.type(screen.getByLabelText('最大回撤不超過（%）'), '35')
+    await user.click(within(tabs()).getByRole('button', { name: '三年' }))
+    expect(within(screen.getByRole('table')).getAllByRole('row')).toHaveLength(3)
+
+    await user.click(screen.getByText(/我的篩選組合/))
+    await user.type(screen.getByLabelText('組合名稱'), '長期 ETF')
+    await user.click(screen.getByRole('button', { name: '儲存組合' }))
+    expect(localStorage.getItem('alpha-track:filter-presets')).toContain('長期 ETF')
+
+    await user.click(screen.getByRole('button', { name: /清除 3 項篩選/ }))
+    await user.click(within(tabs()).getByRole('button', { name: '一年' }))
+    await user.click(screen.getByRole('button', { name: '長期 ETF' }))
+    expect(screen.getByLabelText('掛牌至少')).toHaveValue('5')
+    expect(screen.getByLabelText('日均成交額至少（百萬元）')).toHaveValue(1000)
+    expect(within(tabs()).getByRole('button', { name: '三年' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('自選標的顯示相較上次資料日的指標變化', async () => {
+    localStorage.setItem('alpha-track:watchlist', JSON.stringify(['0050']))
+    localStorage.setItem('alpha-track:watch-history:v1', JSON.stringify({
+      current: { date: '2026-08-20', values: {
+        '0050': { oneYearReturn: 0.1734, premium: 0.0002 },
+      }, anomalyCodes: [] },
+      previous: null,
+    }))
+    await renderLoaded()
+    expect(await screen.findByRole('heading', { name: '自選標的變化' })).toBeInTheDocument()
+    expect(screen.getByText('+1.00 個百分點')).toBeInTheDocument()
+    expect(screen.getByText(/比較 2026\/08\/20 與 2026\/08\/21/)).toBeInTheDocument()
+  })
+
   it('可收藏 ETF 並切換為只看自選', async () => {
     const user = userEvent.setup()
     await renderLoaded()

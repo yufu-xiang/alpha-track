@@ -57,6 +57,26 @@ describe('applyFilters', () => {
     expect(out.map((r) => r.code)).toEqual(['00929'])
   })
 
+  it('依資料基準日判斷掛牌年限，缺掛牌日者不混入結果', () => {
+    const out = applyFilters(ROWS, {
+      ...NONE, asOfDate: '2026-08-21', minListingYears: 5,
+    })
+    expect(out.map((r) => r.code)).toEqual(['0050', '0056', '00679B'])
+    expect(applyFilters([{ ...ROWS[0]!, listing_date: null }], {
+      ...NONE, asOfDate: '2026-08-21', minListingYears: 1,
+    })).toEqual([])
+  })
+
+  it('成交額與最大回撤門檻取交集，缺值不視為達標', () => {
+    const out = applyFilters(ROWS, {
+      ...NONE, minTurnoverMillions: 1000, maxDrawdownPercent: 35,
+    })
+    expect(out.map((r) => r.code)).toEqual(['0050', '0056'])
+    expect(applyFilters([{ ...ROWS[0]!, avg_turnover: null }], {
+      ...NONE, minTurnoverMillions: 1,
+    })).toEqual([])
+  })
+
   it('槓桿篩選優先於分類篩選 —— 選了槓桿型分類但開關關著,結果仍是空的', () => {
     // 兩個條件互相矛盾時不該顯示槓桿標的,否則預設隱藏的保護等於形同虛設。
     const out = applyFilters(ROWS, { ...NONE, categories: ['槓桿型'] })

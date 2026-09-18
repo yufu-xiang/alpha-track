@@ -13,12 +13,20 @@ interface Props {
   watchlistCount?: number
   onlyWatchlist?: boolean
   onOnlyWatchlistChange?: (next: boolean) => void
+  minListingYears?: number
+  minTurnoverMillions?: number | null
+  maxDrawdownPercent?: number | null
+  onMinListingYearsChange?: (next: number) => void
+  onMinTurnoverMillionsChange?: (next: number | null) => void
+  onMaxDrawdownPercentChange?: (next: number | null) => void
 }
 
 export function Filters({
   categories, selected, regions, selectedRegions, query, showLevered,
   onCategoriesChange, onRegionsChange, onQueryChange, onShowLeveredChange,
   watchlistCount = 0, onlyWatchlist = false, onOnlyWatchlistChange,
+  minListingYears = 0, minTurnoverMillions = null, maxDrawdownPercent = null,
+  onMinListingYearsChange, onMinTurnoverMillionsChange, onMaxDrawdownPercentChange,
 }: Props) {
   function toggle(category: string) {
     onCategoriesChange(
@@ -73,6 +81,39 @@ export function Filters({
           </div>
         </div>
       )}
+
+      <div className="filters__criteria" role="group" aria-label="量化篩選條件">
+        <label>
+          <span>掛牌至少</span>
+          <select value={minListingYears}
+                  onChange={(event) => onMinListingYearsChange?.(Number(event.target.value))}>
+            <option value={0}>不限</option>
+            <option value={1}>1 年</option>
+            <option value={3}>3 年</option>
+            <option value={5}>5 年</option>
+          </select>
+        </label>
+        <label>
+          <span>日均成交額至少（百萬元）</span>
+          <input type="number" min="0" step="1" placeholder="不限"
+                 value={minTurnoverMillions ?? ''}
+                 onChange={(event) => {
+                   const raw = event.target.value
+                   onMinTurnoverMillionsChange?.(raw === '' ? null : Math.max(0, Number(raw)))
+                 }} />
+        </label>
+        <label>
+          <span>最大回撤不超過（%）</span>
+          <input type="number" min="0" max="100" step="1" placeholder="不限"
+                 value={maxDrawdownPercent ?? ''}
+                 onChange={(event) => {
+                   const raw = event.target.value
+                   onMaxDrawdownPercentChange?.(raw === '' ? null
+                     : Math.min(100, Math.max(0, Number(raw))))
+                 }} />
+        </label>
+        <p>資料不足的標的不會通過對應門檻；掛牌年限以本次資料日期計算。</p>
+      </div>
 
       <div className="filters__utility">
         {onOnlyWatchlistChange && (

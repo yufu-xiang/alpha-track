@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { loadData, loadDetail } from '../data/loader'
 import { MAX_COMPARE } from '../lib/compare'
-import { formatNumber, formatPercent } from '../lib/format'
+import { formatCompactMoney, formatDate, formatNumber, formatPercent } from '../lib/format'
 import { saveCompareBasket } from '../lib/personalLists'
 import { hashFor } from '../lib/route'
 import { PERIOD_LABELS, type EtfDetail, type EtfRow, type PeriodCode } from '../types'
@@ -28,6 +28,7 @@ export function Compare({ codes }: Props) {
   const [failed, setFailed] = useState<string[]>([])
   const [catalog, setCatalog] = useState<EtfRow[] | null>(null)
   const [catalogError, setCatalogError] = useState(false)
+  const [dataDate, setDataDate] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [builderStatus, setBuilderStatus] = useState('')
   const codesKey = codes.join(',')
@@ -40,7 +41,10 @@ export function Compare({ codes }: Props) {
     let live = true
     void loadData().then((result) => {
       if (!live) return
-      if (result.ok) setCatalog(result.rankings.etfs)
+      if (result.ok) {
+        setCatalog(result.rankings.etfs)
+        setDataDate(result.meta.data_date)
+      }
       else setCatalogError(true)
     })
     return () => { live = false }
@@ -69,6 +73,9 @@ export function Compare({ codes }: Props) {
         || row.name.toLocaleLowerCase('zh-Hant').includes(needle))
       .slice(0, 6)
   }, [catalog, query, selectedCodes])
+  const catalogByCode = useMemo(
+    () => new Map(catalog?.map((row) => [row.code, row]) ?? []), [catalog],
+  )
 
   function updateSelection(next: string[], message: string) {
     setSelectedCodes(next)
@@ -223,6 +230,7 @@ export function Compare({ codes }: Props) {
           <section className="content-panel">
             <div className="panel-heading">
               <div><p className="eyebrow">SIDE BY SIDE</p><h2>指標對照</h2></div>
+              <span>{dataDate ? `收盤資料至 ${formatDate(dataDate)}` : '收盤資料日期暫不可用'}</span>
             </div>
             <div className="table-wrap">
               <table>
@@ -249,9 +257,31 @@ export function Compare({ codes }: Props) {
                              pick={(d) => d.risk.sharpe} asNumber />
                   <MetricRow label="貝他值" term="beta" items={items}
                              pick={(d) => d.risk.beta} asNumber />
+                  <tr>
+                    <td>年度總費用率 <MetricInfo termId="expense_ratio" /></td>
+                    {items.map((d) => <td key={d.code}>
+                      {d.expense_ratio == null ? '—'
+                        : `${formatPercent(d.expense_ratio).replace('+', '')}（${d.expense_year ? `${d.expense_year} 年` : '年度不明'}）`}
+                    </td>)}
+                  </tr>
+                  <tr>
+                    <td>近 20 日平均成交額</td>
+                    {items.map((d) => <td key={d.code}>
+                      {formatCompactMoney(catalogByCode.get(d.code)?.avg_turnover ?? null)}
+                    </td>)}
+                  </tr>
+                  <tr>
+                    <td>近一年實配殖利率</td>
+                    {items.map((d) => <td key={d.code}>
+                      {formatPercent(catalogByCode.get(d.code)?.dividend_yield ?? null)}
+                    </td>)}
+                  </tr>
+                  <MetricRow label="當日折溢價（預估淨值）" term="premium_discount"
+                             items={items} pick={(d) => d.premium_discount} />
                 </tbody>
               </table>
             </div>
+            <p className="detail__caveat">「—」代表資料不足；殖利率為近一年實配紀錄，不代表未來配息。費用率括號內為資料年度。</p>
           </section>
         </>
       )}

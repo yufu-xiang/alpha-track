@@ -9,11 +9,13 @@ import { loadData } from '../data/loader'
 import { formatDate, formatMoney, formatNumber, formatPercent } from '../lib/format'
 import { analyzePositions, summarize, type Transaction } from '../lib/portfolio'
 import {
-  canPersist, fromExportFile, loadPortfolio, needsExportReminder, savePortfolio,
-  toPortableBackup, type PortfolioData,
+  canPersist, fromExportFile, loadPortfolio, mergeTransactions, needsExportReminder,
+  savePortfolio, toPortableBackup, type ImportResult, type PortfolioData,
 } from '../lib/portfolioStore'
 import { loadWatchlist, loadCompareBasket, saveWatchlist, saveCompareBasket } from '../lib/personalLists'
 import { loadPrefs, savePrefs } from '../lib/prefs'
+import { loadFilterPresets, saveFilterPresets } from '../lib/filterPresets'
+import { loadWatchHistory, saveWatchHistory } from '../lib/watchChanges'
 import { hashFor } from '../lib/route'
 import type { EtfRow } from '../types'
 import { AllocationPie } from './AllocationPie'
@@ -30,12 +32,21 @@ const TYPE_LABEL = { buy: '買進', sell: '賣出', dividend: '配息', split: '
 export function Portfolio({ initialCode }: { initialCode?: string }) {
   const [data, setData] = useState<PortfolioData>(() => loadPortfolio())
   const [rows, setRows] = useState<EtfRow[]>([])
+  const [dataDate, setDataDate] = useState<string | null>(null)
   const [pieBy, setPieBy] = useState<'code' | 'category'>('code')
   const [notice, setNotice] = useState<string | null>(null)
+  const [pendingImport, setPendingImport] = useState<Extract<ImportResult, { ok: true }> | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [lastDeleted, setLastDeleted] = useState<{ tx: Transaction; index: number } | null>(null)
   const persistable = useRef(canPersist())
   const today = new Date().toISOString().slice(0, 10)
 
-  useEffect(() => { void loadData().then((r) => { if (r.ok) setRows(r.rankings.etfs) }) }, [])
+  useEffect(() => { void loadData().then((r) => {
+    if (r.ok) {
+      setRows(r.rankings.etfs)
+      setDataDate(r.meta.data_date)
+    }
+  }) }, [])
   useEffect(() => { savePortfolio(data) }, [data])
   useEffect(() => {
     if (!initialCode) return
@@ -80,12 +91,36 @@ export function Portfolio({ initialCode }: { initialCode?: string }) {
   }
 
   function removeTx(id: string) {
+    const index = data.transactions.findIndex((tx) => tx.id === id)
+    if (index < 0) return
+    setLastDeleted({ tx: data.transactions[index]!, index })
+    if (editingId === id) setEditingId(null)
     setData((d) => ({ ...d, transactions: d.transactions.filter((t) => t.id !== id) }))
+  }
+
+  function undoDelete() {
+    if (!lastDeleted) return
+    const { tx, index } = lastDeleted
+    setData((d) => {
+      if (d.transactions.some((item) => item.id === tx.id)) return d
+      const transactions = [...d.transactions]
+      transactions.splice(Math.min(index, transactions.length), 0, tx)
+      return { ...d, transactions }
+    })
+    setLastDeleted(null)
+  }
+
+  function saveEditedTx(tx: Transaction) {
+    setData((d) => ({ ...d, transactions: d.transactions.map((old) => old.id === tx.id ? tx : old) }))
+    setEditingId(null)
+    setNotice('交易紀錄已更新。')
   }
 
   function doExport() {
     const blob = new Blob([toPortableBackup(data, {
       watchlist: loadWatchlist(), compare: loadCompareBasket(), prefs: loadPrefs(),
+      filterPresets: loadFilterPresets(),
+      watchHistory: loadWatchHistory(),
     })], { type: 'application/json' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
@@ -97,21 +132,37 @@ export function Portfolio({ initialCode }: { initialCode?: string }) {
   }
 
   function doImport(file: File) {
+    setPendingImport(null)
     void file.text().then((text) => {
       const r = fromExportFile(text)
       if (!r.ok) { setNotice(`匯入失敗:${r.error}`); return }
-      setData((d) => ({
-        ...d, transactions: r.transactions, fees: r.fees, targets: r.targets,
-      }))
+      setPendingImport(r)
+      setNotice(null)
+    }).catch(() => setNotice('無法讀取備份檔，請重新選擇。'))
+  }
+
+  function applyImport(mode: 'merge' | 'replace') {
+    if (!pendingImport) return
+    const r = pendingImport
+    if (mode === 'replace') {
+      setData({ transactions: r.transactions, fees: r.fees, targets: r.targets, lastExport: null })
       if (r.personal) {
         saveWatchlist(r.personal.watchlist)
         saveCompareBasket(r.personal.compare)
         savePrefs(r.personal.prefs)
+        if (r.personal.filterPresets) saveFilterPresets(r.personal.filterPresets)
+        if ('watchHistory' in r.personal) saveWatchHistory(r.personal.watchHistory ?? null)
       }
-      setNotice(r.skipped > 0
-        ? `已匯入 ${r.transactions.length} 筆,略過 ${r.skipped} 筆無法辨識的紀錄。`
-        : `已匯入 ${r.transactions.length} 筆交易${r.personal ? '與個人設定' : ''}。`)
-    })
+    } else {
+      setData((d) => ({ ...d,
+        transactions: mergeTransactions(d.transactions, r.transactions),
+        lastExport: null,
+      }))
+    }
+    setEditingId(null)
+    setLastDeleted(null)
+    setPendingImport(null)
+    setNotice(mode === 'replace' ? '已用備份取代本機資料。' : '已合併交易紀錄；本機設定維持原樣。')
   }
 
   return (
@@ -171,7 +222,7 @@ export function Portfolio({ initialCode }: { initialCode?: string }) {
           <p className="portfolio-backup__copy" role="note">
             交易紀錄只存在這台裝置的瀏覽器裡。<strong>清除瀏覽器資料、換裝置、
             換瀏覽器，紀錄就會消失</strong>。備份檔可在另一台裝置匯入，
-            包含交易、自選清單、比較清單與顯示偏好。
+            包含交易、自選清單、比較清單、篩選組合、上次自選資料與顯示偏好。
           </p>
         </div>
         <div className="portfolio__actions">
@@ -179,11 +230,31 @@ export function Portfolio({ initialCode }: { initialCode?: string }) {
           <label className="portfolio__import">
             匯入備份
             <input id="portfolio-import" type="file" accept="application/json,.json"
-                   onChange={(e) => { const f = e.target.files?.[0]; if (f) doImport(f) }} />
+                   onChange={(e) => {
+                     const f = e.target.files?.[0]
+                     if (f) doImport(f)
+                     e.currentTarget.value = ''
+                   }} />
           </label>
           {notice && <span className="portfolio__notice" role="status">{notice}</span>}
         </div>
       </div>
+
+      {pendingImport && (
+        <section className="content-panel portfolio-import-preview" aria-label="匯入預覽">
+          <h2>檢查備份後再匯入</h2>
+          <p>備份含 {pendingImport.transactions.length} 筆有效交易，
+            {pendingImport.skipped > 0 ? `另有 ${pendingImport.skipped} 筆無法辨識，匯入時會略過。` : '沒有略過的紀錄。'}
+            本機目前有 {data.transactions.length} 筆交易。</p>
+          <p>「合併交易」依交易 ID 去重，保留本機費率、目標配置與個人設定；
+            「取代全部」會用備份的交易與費率、目標配置覆蓋本機資料，若備份含個人設定也會一併取代。</p>
+          <div className="portfolio__actions">
+            <button type="button" onClick={() => applyImport('merge')}>合併交易</button>
+            <button type="button" onClick={() => applyImport('replace')}>取代全部</button>
+            <button type="button" className="is-ghost" onClick={() => setPendingImport(null)}>取消</button>
+          </div>
+        </section>
+      )}
 
       {needsExportReminder(data, today) && (
         <p role="alert" className="portfolio__remind">
@@ -206,11 +277,11 @@ export function Portfolio({ initialCode }: { initialCode?: string }) {
       <section className="content-panel content-panel--summary">
         <div className="panel-heading">
           <div><p className="eyebrow">AT A GLANCE</p><h2>組合總覽</h2></div>
-          <span>依最新收盤價估算</span>
+          <span>{dataDate ? `依 ${formatDate(dataDate)} 收盤價估算` : '收盤資料日期暫不可用'}</span>
         </div>
         <dl className="cards">
           <Card label="總市值" value={formatMoney(summary.marketValue)} />
-          <Card label="今日損益"
+          <Card label="當日損益"
                 value={summary.todayChange === null
                   ? '—' : formatMoney(summary.todayChange)}
                 tone={summary.todayChange} />
@@ -276,6 +347,23 @@ export function Portfolio({ initialCode }: { initialCode?: string }) {
           <div><p className="eyebrow">ACTIVITY</p><h2>交易紀錄</h2></div>
           <span>{data.transactions.length} 筆</span>
         </div>
+        {lastDeleted && (
+          <p role="status" className="portfolio__notice">
+            已刪除 {lastDeleted.tx.code} 的交易。
+            <button type="button" onClick={undoDelete}>復原刪除</button>
+          </p>
+        )}
+        {editingId && (() => {
+          const editing = data.transactions.find((tx) => tx.id === editingId)
+          return editing && (
+            <div className="portfolio-edit">
+              <h3>編輯 {editing.code} 交易</h3>
+              <TransactionForm key={editing.id} fees={data.fees} rows={rows}
+                               editingTransaction={editing} onAdd={saveEditedTx} />
+              <button type="button" className="is-ghost" onClick={() => setEditingId(null)}>取消編輯</button>
+            </div>
+          )
+        })()}
         {data.transactions.length === 0 ? (
           <EmptyState
             marker="＋"
@@ -321,6 +409,9 @@ export function Portfolio({ initialCode }: { initialCode?: string }) {
                       <td>{formatNumber(t.fee, 0)}</td>
                       <td>{formatNumber(t.tax, 0)}</td>
                       <td>
+                        <button type="button" className="is-ghost"
+                                aria-label={`編輯 ${formatDate(t.date)} 的 ${t.code}`}
+                                onClick={() => setEditingId(t.id)}>編輯</button>
                         <button type="button" className="tx-del"
                                 aria-label={`刪除 ${formatDate(t.date)} 的 ${t.code}`}
                                 onClick={() => removeTx(t.id)}>刪除</button>

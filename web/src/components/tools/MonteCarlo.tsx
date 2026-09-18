@@ -122,7 +122,7 @@ export function MonteCarlo() {
             <Pct label="年化波動" value={stdev} onChange={setStdev} />
           </>
         ) : (
-          <label>調整為某檔 ETF 的特性(可留空)
+          <label className="tool-form__wide">調整為某檔 ETF 的特性(可留空)
             <input value={code} list="mc-codes" placeholder="例如 0050"
                    onChange={(e) => setCode(e.target.value.toUpperCase())} />
           </label>

@@ -11,6 +11,8 @@ import type { Transaction } from './portfolio'
 import { DEFAULT_FEE_CONFIG, type FeeConfig } from './fees'
 import { PERIODS, RISK_COLUMNS, type PeriodCode, type RiskColumn } from '../types'
 import { DEFAULT_PREFS, type Prefs } from './prefs'
+import { normalizeFilterPresets, type FilterPreset } from './filterPresets'
+import { normalizeWatchHistory, type WatchHistory } from './watchChanges'
 
 const KEY = 'alpha-track:portfolio'
 export const EXPORT_REMINDER_DAYS = 30
@@ -21,6 +23,8 @@ export interface PersonalBackup {
   watchlist: string[]
   compare: string[]
   prefs: Prefs
+  filterPresets?: FilterPreset[]
+  watchHistory?: WatchHistory | null
 }
 
 export interface PortfolioData {
@@ -129,6 +133,16 @@ export type ImportResult =
       targets: Record<string, number>; skipped: number; personal: PersonalBackup | null }
   | { ok: false; error: string }
 
+/** 合併備份時以交易 ID 去重；相同 ID 保留本機版本。 */
+export function mergeTransactions(current: Transaction[], incoming: Transaction[]): Transaction[] {
+  const ids = new Set(current.map((tx) => tx.id))
+  return [...current, ...incoming.filter((tx) => {
+    if (ids.has(tx.id)) return false
+    ids.add(tx.id)
+    return true
+  })]
+}
+
 export function fromExportFile(text: string): ImportResult {
   let parsed: unknown
   try {
@@ -175,6 +189,10 @@ function readPersonalBackup(value: unknown): PersonalBackup | null {
   return {
     watchlist: codes(raw.watchlist),
     compare: codes(raw.compare).slice(0, 5),
+    ...(Array.isArray(raw.filterPresets)
+      ? { filterPresets: normalizeFilterPresets(raw.filterPresets) } : {}),
+    ...('watchHistory' in raw
+      ? { watchHistory: normalizeWatchHistory(raw.watchHistory) } : {}),
     prefs: {
       visibleColumns: visibleColumns.length > 0
         ? visibleColumns : DEFAULT_PREFS.visibleColumns,

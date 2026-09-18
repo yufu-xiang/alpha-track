@@ -9,14 +9,19 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { ColumnPicker } from './components/ColumnPicker'
 import { Filters } from './components/Filters'
+import { FilterPresets } from './components/FilterPresets'
 import { HealthBar } from './components/HealthBar'
 import { PeriodTabs } from './components/PeriodTabs'
 import { RankingTable } from './components/RankingTable'
 import { JourneyGuide } from './components/JourneyGuide'
 import { PageLoading } from './components/LoadingSkeleton'
 import { ThemeToggle } from './components/ThemeToggle'
+import { WatchlistChanges } from './components/WatchlistChanges'
 import { loadData, type LoadResult } from './data/loader'
 import { applyFilters, collectCategories, collectRegions } from './lib/filtering'
+import {
+  loadFilterPresets, saveFilterPresets, upsertFilterPreset, type FilterPreset,
+} from './lib/filterPresets'
 import { formatPercent } from './lib/format'
 import { loadPrefs, savePrefs } from './lib/prefs'
 import { MAX_COMPARE, toggleCompare } from './lib/compare'
@@ -28,6 +33,10 @@ import {
   getJourneyProgress, loadJourneyGuideDismissed, saveJourneyGuideDismissed,
 } from './lib/journey'
 import { loadPortfolio } from './lib/portfolioStore'
+import {
+  advanceWatchHistory, buildWatchSnapshot, getWatchChanges, loadWatchHistory,
+  saveWatchHistory,
+} from './lib/watchChanges'
 import { PERIODS, PERIOD_LABELS, type PeriodCode } from './types'
 
 // 排行榜是首屏；個股、比較、組合與工具頁依路由載入，避免使用者只看排行
@@ -66,6 +75,11 @@ function Rankings() {
   const [watchlist, setWatchlist] = useState<string[]>(() => loadWatchlist())
   const [onlyWatchlist, setOnlyWatchlist] = useState(false)
   const [query, setQuery] = useState('')
+  const [minListingYears, setMinListingYears] = useState(0)
+  const [minTurnoverMillions, setMinTurnoverMillions] = useState<number | null>(null)
+  const [maxDrawdownPercent, setMaxDrawdownPercent] = useState<number | null>(null)
+  const [filterPresets, setFilterPresets] = useState(() => loadFilterPresets())
+  const [watchHistory, setWatchHistory] = useState(() => loadWatchHistory())
   const [guideOpen, setGuideOpen] = useState(() => !loadJourneyGuideDismissed())
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [actionStatus, setActionStatus] = useState('')
@@ -82,6 +96,16 @@ function Rankings() {
   useEffect(() => {
     saveCompareBasket(compare)
   }, [compare])
+
+  useEffect(() => {
+    if (!result?.ok || watchlist.length === 0) return
+    const snapshot = buildWatchSnapshot(
+      result.meta.data_date, result.rankings.etfs, watchlist, result.meta.anomalies,
+    )
+    const next = advanceWatchHistory(loadWatchHistory(), snapshot)
+    saveWatchHistory(next)
+    setWatchHistory(next)
+  }, [result, watchlist])
 
   useEffect(() => {
     if (!actionStatus) return
@@ -110,6 +134,42 @@ function Rankings() {
     if (!next.includes(sortBy) && next[0]) setSortBy(next[0])
   }
 
+  function clearAllFilters() {
+    setCategories([])
+    setRegions([])
+    setQuery('')
+    setOnlyWatchlist(false)
+    setMinListingYears(0)
+    setMinTurnoverMillions(null)
+    setMaxDrawdownPercent(null)
+    setMobileFiltersOpen(false)
+  }
+
+  function saveCurrentFilterPreset(name: string) {
+    const next = upsertFilterPreset(filterPresets, { name, filters: {
+      categories, regions, query, showLevered: prefs.showLevered,
+      onlyWatchlist, minListingYears, minTurnoverMillions, maxDrawdownPercent, sortBy,
+    } })
+    setFilterPresets(next)
+    setActionStatus(`已儲存篩選組合「${name}」`)
+  }
+
+  function applyFilterPreset(preset: FilterPreset) {
+    const f = preset.filters
+    const currentCategories = new Set(collectCategories(allRows))
+    const currentRegions = new Set(collectRegions(allRows))
+    setCategories(f.categories.filter((item) => currentCategories.has(item)))
+    setRegions(f.regions.filter((item) => currentRegions.has(item)))
+    setQuery(f.query)
+    setOnlyWatchlist(f.onlyWatchlist && watchlist.length > 0)
+    setMinListingYears(f.minListingYears)
+    setMinTurnoverMillions(f.minTurnoverMillions)
+    setMaxDrawdownPercent(f.maxDrawdownPercent)
+    setPrefs((current) => ({ ...current, showLevered: f.showLevered }))
+    handlePeriodSelect(f.sortBy)
+    setActionStatus(`已套用篩選組合「${preset.name}」`)
+  }
+
   const allRows = result?.ok ? result.rankings.etfs : []
 
   // 分類清單只從「當前開關下看得到的列」推導。否則開關關著時仍會出現
@@ -130,8 +190,11 @@ function Rankings() {
   const filteredRows = useMemo(
     () => applyFilters(allRows, {
       categories, regions, query, showLevered: prefs.showLevered,
+      asOfDate: result?.ok ? result.meta.data_date : undefined,
+      minListingYears, minTurnoverMillions, maxDrawdownPercent,
     }),
-    [allRows, categories, regions, query, prefs.showLevered],
+    [allRows, categories, regions, query, prefs.showLevered,
+      result, minListingYears, minTurnoverMillions, maxDrawdownPercent],
   )
   const rows = useMemo(
     () => onlyWatchlist
@@ -140,7 +203,12 @@ function Rankings() {
     [filteredRows, onlyWatchlist, watchlist],
   )
   const activeFilters = categories.length + regions.length + (query.trim() ? 1 : 0)
-    + (onlyWatchlist ? 1 : 0)
+    + (onlyWatchlist ? 1 : 0) + (minListingYears > 0 ? 1 : 0)
+    + (minTurnoverMillions !== null ? 1 : 0) + (maxDrawdownPercent !== null ? 1 : 0)
+  const watchChanges = result?.ok ? getWatchChanges(
+    watchHistory, result.meta.data_date, result.rankings.etfs,
+    watchlist, result.meta.anomalies,
+  ) : []
   const journeyProgress = getJourneyProgress({
     watchlistCount: watchlist.length,
     compareCount: compare.length,
@@ -251,6 +319,12 @@ function Rankings() {
         </button>
       )}
 
+      {watchlist.length > 0 && result.ok && (
+        <WatchlistChanges changes={watchChanges}
+                          previousDate={watchHistory?.previous?.date ?? null}
+                          currentDate={result.meta.data_date} />
+      )}
+
       <section className="dashboard-controls" aria-label="排行榜控制">
         <div className="dashboard-controls__section dashboard-controls__section--period">
           <div className="section-heading">
@@ -276,13 +350,7 @@ function Rankings() {
                 <button
                   type="button"
                   className="clear-filters"
-                  onClick={() => {
-                  setCategories([])
-                  setRegions([])
-                  setQuery('')
-                  setOnlyWatchlist(false)
-                  setMobileFiltersOpen(false)
-                  }}
+                  onClick={clearAllFilters}
                 >
                   清除 {activeFilters} 項篩選
                 </button>
@@ -320,7 +388,20 @@ function Rankings() {
             watchlistCount={watchlist.length}
             onlyWatchlist={onlyWatchlist}
             onOnlyWatchlistChange={setOnlyWatchlist}
+            minListingYears={minListingYears}
+            minTurnoverMillions={minTurnoverMillions}
+            maxDrawdownPercent={maxDrawdownPercent}
+            onMinListingYearsChange={setMinListingYears}
+            onMinTurnoverMillionsChange={setMinTurnoverMillions}
+            onMaxDrawdownPercentChange={setMaxDrawdownPercent}
           />
+          <FilterPresets presets={filterPresets}
+            onSave={saveCurrentFilterPreset}
+            onApply={applyFilterPreset}
+            onDelete={(name) => {
+              setFilterPresets(saveFilterPresets(filterPresets.filter((item) => item.name !== name)))
+              setActionStatus(`已刪除篩選組合「${name}」`)
+            }} />
           </div>
         </div>
       </section>
@@ -343,13 +424,7 @@ function Rankings() {
         onCompareToggle={(code) => setCompare((s) => toggleCompare(s, code))}
         watchlist={watchlist}
         onWatchlistToggle={handleWatchlistToggle}
-        onClearFilters={() => {
-          setCategories([])
-          setRegions([])
-          setQuery('')
-          setOnlyWatchlist(false)
-          setMobileFiltersOpen(false)
-        }}
+        onClearFilters={clearAllFilters}
       />
 
       {actionStatus && (

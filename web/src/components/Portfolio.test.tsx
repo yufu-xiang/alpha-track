@@ -80,6 +80,7 @@ describe('Portfolio', () => {
     // fixture 的 0050 現價 195.5,持股 1000 -> 市值 195,500
     const summary = screen.getByRole('heading', { name: '組合總覽' }).closest('section')!
     expect(within(summary).getByText('195,500')).toBeInTheDocument()
+    expect(within(summary).getByText(/依 2026\/08\/21 收盤價估算/)).toBeInTheDocument()
   })
 
   it('新增交易後立即反映並寫入 localStorage', async () => {
@@ -129,6 +130,51 @@ describe('Portfolio', () => {
     await renderLoaded()
     await user.click(screen.getByRole('button', { name: /刪除/ }))
     await waitFor(() => expect(screen.getByText(/還沒有交易紀錄/)).toBeInTheDocument())
+  })
+
+  it('刪除交易後可以復原，並寫回本機儲存', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem(KEY, JSON.stringify({ transactions: [buy], lastExport: null }))
+    await renderLoaded()
+    await user.click(screen.getByRole('button', { name: /刪除 2025\/01\/01 的 0050/ }))
+    await user.click(screen.getByRole('button', { name: '復原刪除' }))
+    expect(screen.getByRole('row', { name: /2025\/01\/01/ })).toBeInTheDocument()
+    await waitFor(() => expect(JSON.parse(localStorage.getItem(KEY)!).transactions).toEqual([buy]))
+  })
+
+  it('可編輯既有交易並保留交易 ID', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem(KEY, JSON.stringify({ transactions: [buy], lastExport: null }))
+    await renderLoaded()
+    await user.click(screen.getByRole('button', { name: /編輯 2025\/01\/01 的 0050/ }))
+    const form = screen.getByRole('heading', { name: '編輯 0050 交易' }).parentElement!
+    await user.clear(within(form).getByLabelText('價格'))
+    await user.type(within(form).getByLabelText('價格'), '110')
+    await user.click(within(form).getByRole('button', { name: '儲存修改' }))
+    await waitFor(() => {
+      const transactions = JSON.parse(localStorage.getItem(KEY)!).transactions
+      expect(transactions).toHaveLength(1)
+      expect(transactions[0]).toMatchObject({ id: 'a', price: 110 })
+    })
+  })
+
+  it('匯入先預覽，取消不更動紀錄，確認後才取代', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem(KEY, JSON.stringify({ transactions: [buy], lastExport: null }))
+    await renderLoaded()
+    const incoming = { ...buy, id: 'b', code: '0056' }
+    const file = new File([JSON.stringify({ transactions: [incoming] })], 'backup.json',
+      { type: 'application/json' })
+    Object.defineProperty(file, 'text', { value: async () => JSON.stringify({ transactions: [incoming] }) })
+    const input = document.getElementById('portfolio-import') as HTMLInputElement
+    await user.upload(input, file)
+    expect(await screen.findByRole('region', { name: '匯入預覽' })).toHaveTextContent('本機目前有 1 筆交易')
+    expect(JSON.parse(localStorage.getItem(KEY)!).transactions).toEqual([buy])
+    await user.click(screen.getByRole('button', { name: '取消' }))
+    expect(JSON.parse(localStorage.getItem(KEY)!).transactions).toEqual([buy])
+    await user.upload(input, file)
+    await user.click(await screen.findByRole('button', { name: '取代全部' }))
+    await waitFor(() => expect(JSON.parse(localStorage.getItem(KEY)!).transactions).toEqual([incoming]))
   })
 
   it('配置圓餅可切換依標的或依分類', async () => {

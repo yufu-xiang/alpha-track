@@ -90,6 +90,14 @@ describe('EtfDetail', () => {
     expect(within(table).getAllByRole('row')).toHaveLength(12)   // 表頭 + 11
   })
 
+  it('債券標的不把台股大盤當作超額報酬基準', async () => {
+    mockOk({ category: '債券型', region: '美國' })
+    await renderLoaded()
+    expect(screen.getByText(/沒有合適的本站基準指數/)).toBeInTheDocument()
+    const table = screen.getAllByRole('table')[0]!
+    expect(within(table).getAllByText('不適用')).toHaveLength(11)
+  })
+
   it('資料起點晚於掛牌日時說明原因 —— 否則沒人知道「成立以來」為何空白', async () => {
     await renderLoaded()
     expect(screen.getByRole('note')).toHaveTextContent(/2014\/01\/02/)

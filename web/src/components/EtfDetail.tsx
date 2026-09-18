@@ -5,7 +5,8 @@
  * 不可能隨排行榜一起載入。
  */
 import { useEffect, useState } from 'react'
-import { loadDetail, type DetailResult } from '../data/loader'
+import { loadDetail, loadMeta, type DetailResult } from '../data/loader'
+import { hasRelevantTaiwanBenchmark } from '../lib/benchmark'
 import {
   formatCompactMoney, formatDate, formatNumber, formatPercent,
 } from '../lib/format'
@@ -29,11 +30,13 @@ export function EtfDetail({ code }: Props) {
   const [result, setResult] = useState<DetailResult | null>(null)
   const [watchlist, setWatchlist] = useState<string[]>(() => loadWatchlist())
   const [actionStatus, setActionStatus] = useState<string | null>(null)
+  const [dataDate, setDataDate] = useState<string | null>(null)
 
   useEffect(() => {
     setResult(null)
     void loadDetail(code).then(setResult)
   }, [code])
+  useEffect(() => { void loadMeta().then((meta) => setDataDate(meta?.data_date ?? null)) }, [])
 
   if (result === null) {
     return <PageLoading />
@@ -50,6 +53,7 @@ export function EtfDetail({ code }: Props) {
   }
 
   const d = result.detail
+  const hasBenchmark = hasRelevantTaiwanBenchmark(d)
   const watched = watchlist.includes(d.code)
   // 掛牌日與資料起點不同時要說明,否則「成立以來」為什麼空白沒人知道
   const coverageGap = d.listing_date && d.data_start && d.data_start > d.listing_date
@@ -110,9 +114,17 @@ export function EtfDetail({ code }: Props) {
       <section className="content-panel content-panel--chart">
         <div className="panel-heading">
           <div><p className="eyebrow">TOTAL RETURN</p><h2>價格與含息走勢</h2></div>
-          <span>基準：臺灣加權報酬指數</span>
+          <span>{dataDate ? `收盤資料至 ${formatDate(dataDate)}` : '收盤資料日期暫不可用'}</span>
         </div>
-        <PriceChart series={d.series} benchmark={result.benchmark} name={d.name} />
+        <PriceChart series={d.series}
+                    benchmark={hasBenchmark ? result.benchmark : null} name={d.name} />
+        <p className="detail__caveat">
+          {hasBenchmark
+            ? result.benchmark
+              ? '參考基準：臺灣加權報酬指數。'
+              : '臺灣加權報酬指數走勢暫時無法載入；超額報酬仍依已匯出資料顯示。'
+            : '此檔標的沒有合適的本站基準指數，因此不顯示台股大盤比較與超額報酬。'}
+        </p>
       </section>
 
       {coverageGap && (
@@ -136,7 +148,7 @@ export function EtfDetail({ code }: Props) {
                 <th>期間</th>
                 <th>含息報酬 <MetricInfo termId="total_return" /></th>
                 <th>年化 <MetricInfo termId="annualized" /></th>
-                <th>超額報酬 <MetricInfo termId="excess" /></th>
+                <th>相對台股大盤 <MetricInfo termId="excess" /></th>
               </tr>
             </thead>
             <tbody>
@@ -145,7 +157,7 @@ export function EtfDetail({ code }: Props) {
                   <td>{PERIOD_LABELS[p]}</td>
                   <td><Tone v={d.returns[p]} /></td>
                   <td>{formatPercent(d.annualized[p])}</td>
-                  <td><Tone v={d.excess[p]} /></td>
+                  <td>{hasBenchmark ? <Tone v={d.excess[p]} /> : '不適用'}</td>
                 </tr>
               ))}
             </tbody>

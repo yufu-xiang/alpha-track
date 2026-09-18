@@ -77,6 +77,20 @@ describe('Compare', () => {
     expect(within(table).getByText('+98.00%')).toBeInTheDocument()
   })
 
+  it('比較頁同時顯示費用、流動性、殖利率與折溢價', async () => {
+    mockFor({
+      '0050': { ...detailFor('0050', '元大台灣50', 0.98),
+        expense_ratio: 0.0022, expense_year: 2025, premium_discount: 0.0012 },
+    })
+    render(<Compare codes={['0050']} />)
+    const table = await screen.findByRole('table')
+    expect(screen.getByText(/收盤資料至 2026\/08\/21/)).toBeInTheDocument()
+    expect(within(table).getByRole('row', { name: /年度總費用率/ })).toHaveTextContent('0.22%（2025 年）')
+    expect(within(table).getByRole('row', { name: /近 20 日平均成交額/ })).not.toHaveTextContent('—')
+    expect(within(table).getByRole('row', { name: /近一年實配殖利率/ })).toHaveTextContent('2.31%')
+    expect(within(table).getByRole('row', { name: /當日折溢價/ })).toHaveTextContent('0.12%')
+  })
+
   it('部分代號抓不到時略過並說明,不讓整頁失敗', async () => {
     render(<Compare codes={['0050', '00999']} />)
     await waitFor(() => expect(screen.getByRole('note')).toHaveTextContent('00999'))

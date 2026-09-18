@@ -50,6 +50,14 @@ export type DetailResult =
   | { ok: true; detail: EtfDetail; benchmark: BenchmarkSeries | null }
   | { ok: false; error: string }
 
+export async function loadMeta(): Promise<MetaData | null> {
+  try {
+    return validateMeta(await fetchJson<unknown>('meta.json'))
+  } catch {
+    return null
+  }
+}
+
 /**
  * 個股頁資料。基準線失敗不影響主體 —— 少一條疊加線,不是少一頁。
  */
