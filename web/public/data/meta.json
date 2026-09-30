@@ -1,1 +1,1 @@
-{"generated_at":"2026-09-25T06:25:59+08:00","data_date":"2026-09-24","is_stale":false,"etf_count":359,"unclassified":[],"anomalies":[],"risk_free_rate":0.015,"benchmark_return_1y":0.8658851278783894}
+{"generated_at":"2026-09-30T08:30:09+08:00","data_date":"2026-09-29","is_stale":false,"etf_count":359,"unclassified":[],"anomalies":[{"code":"*","reason":"淨值自 358 筆降為 242 筆,減幅超過 10%,疑似來源改版"}],"risk_free_rate":0.015,"benchmark_return_1y":0.8950672904982229}
