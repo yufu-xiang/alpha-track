@@ -1,1 +1,1 @@
-{"generated_at":"2026-10-23T06:22:25+08:00","data_date":"2026-10-22","is_stale":false,"etf_count":362,"unclassified":["00412A","00415A"],"anomalies":[],"risk_free_rate":0.015,"benchmark_return_1y":0.6947156526655731}
+{"generated_at":"2026-10-28T08:32:32+08:00","data_date":"2026-10-27","is_stale":false,"etf_count":362,"unclassified":["00412A","00415A"],"anomalies":[{"code":"*","reason":"今日完全沒有淨值資料,折溢價無法計算,而淨值來源沒有歷史、這一天補不回來"}],"risk_free_rate":0.015,"benchmark_return_1y":0.675828832798971}
